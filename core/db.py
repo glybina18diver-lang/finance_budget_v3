@@ -2,25 +2,27 @@
 import sqlite3
 import logging
 from typing import List, Dict, Any, Optional
-from config import DB_PATH
 
 logger = logging.getLogger(__name__)
 
+
 class Database:
-    """Фасад для работы с SQLite (полная схема V2)."""
-    
+    """Фасад для работы с SQLite (полная схема как в V2)."""
+
     def __init__(self, db_path: str):
         self.db_path = db_path
         self._conn: Optional[sqlite3.Connection] = None
         self._connect()
         self._init_tables()
+        self._migrate_schema()  # ← миграция сразу после создания таблиц
 
     def _connect(self):
         try:
             self._conn = sqlite3.connect(self.db_path)
             self._conn.row_factory = sqlite3.Row
             self._conn.execute("PRAGMA foreign_keys = ON")
-            logger.info(f"БД подключена: {self.db_path}")
+            # Закоментирован так как в main.py тоже самое
+            #logger.info(f"БД подключена: {self.db_path}") 
         except sqlite3.Error as e:
             logger.error(f"Ошибка подключения к БД: {e}")
             raise
@@ -31,7 +33,7 @@ class Database:
             return
 
         cursor = self._conn.cursor()
-        
+
         # 1. Accounts (Счета)
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS accounts (
@@ -68,7 +70,6 @@ class Database:
         """)
 
         # 3. Transactions (Транзакции)
-        # Включает GENERATED COLUMN для unit_price, как в V2
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS transactions (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -168,23 +169,56 @@ class Database:
         self._conn.commit()
         logger.info("Все таблицы схемы V2 успешно созданы/проверены")
 
+    def _migrate_schema(self):
+        """Применяет миграции для совместимости с V3-моделями."""
+        if not self._conn:
+            return
+
+        cursor = self._conn.cursor()
+
+        # --- accounts: type → account_type ---
+        cursor.execute("PRAGMA table_info(accounts)")
+        cols = {row[1] for row in cursor.fetchall()}
+        if "type" in cols and "account_type" not in cols:
+            cursor.execute("ALTER TABLE accounts RENAME COLUMN type TO account_type")
+            logger.info("Миграция: accounts.type → account_type")
+
+        # --- categories: type → cat_type ---
+        cursor.execute("PRAGMA table_info(categories)")
+        cols = {row[1] for row in cursor.fetchall()}
+        if "type" in cols and "cat_type" not in cols:
+            cursor.execute("ALTER TABLE categories RENAME COLUMN type TO cat_type")
+            logger.info("Миграция: categories.type → cat_type")
+
+        # --- transactions: type → trans_type ---
+        cursor.execute("PRAGMA table_info(transactions)")
+        cols = {row[1] for row in cursor.fetchall()}
+        if "type" in cols and "trans_type" not in cols:
+            cursor.execute("ALTER TABLE transactions RENAME COLUMN type TO trans_type")
+            logger.info("Миграция: transactions.type → trans_type")
+
+        self._conn.commit()
+
     # --- Методы доступа к данным ---
 
     def execute(self, query: str, params: tuple = ()) -> int:
-        if not self._conn: raise RuntimeError("Нет подключения к БД")
+        if not self._conn:
+            raise RuntimeError("Нет подключения к БД")
         cursor = self._conn.cursor()
         cursor.execute(query, params)
         self._conn.commit()
         return cursor.lastrowid
 
     def fetchall(self, query: str, params: tuple = ()) -> List[Dict[str, Any]]:
-        if not self._conn: raise RuntimeError("Нет подключения к БД")
+        if not self._conn:
+            raise RuntimeError("Нет подключения к БД")
         cursor = self._conn.cursor()
         cursor.execute(query, params)
         return [dict(row) for row in cursor.fetchall()]
 
     def fetchone(self, query: str, params: tuple = ()) -> Optional[Dict[str, Any]]:
-        if not self._conn: raise RuntimeError("Нет подключения к БД")
+        if not self._conn:
+            raise RuntimeError("Нет подключения к БД")
         cursor = self._conn.cursor()
         cursor.execute(query, params)
         row = cursor.fetchone()

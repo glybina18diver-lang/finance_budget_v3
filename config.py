@@ -2,10 +2,13 @@ import sys
 import os
 from pathlib import Path
 
+# UI Настройки
+APP_NAME = "Finance Budget (beta)"
+APP_VERSION = "3.0.0"
+WINDOW_TITLE = f"{APP_NAME} (PySide6 v{APP_VERSION}) - SQLite"
+
 # Пути
-BASE_DIR = Path(__file__).resolve().parent
-DB_PATH = BASE_DIR / "budget.db"
-LOGS_DIR = BASE_DIR / "logs"
+#LOGS_DIR = BASE_DIR / "logs" #TODO также как и для БД та и для логов сделать верный путь
 
 # ========== БАЗА ДАННЫХ ==========
 DB_FILENAME = "budget.db"
@@ -13,25 +16,34 @@ DB_FILENAME = "budget.db"
 def get_db_path() -> str:
     """
     Возвращает путь к БД.
-    - В разработке: рядом с main.py (для удобства отладки и бэкапов)
+    - В разработке: в корне проекта (ищет .git вверх по дереву)
     - В собранной версии: в системной папке пользователя (стандарт ОС)
     """
-    # 1. Признак "сборки" (PyInstaller, cx_Freeze и т.д.)
     is_compiled = getattr(sys, "frozen", False)
     
-    # 2. Режим разработки: если в папке проекта есть маркер (например, .git или requirements.txt)
-    project_root = Path(__file__).parent
-    is_dev_mode = not is_compiled and (project_root / ".git").exists()
+    # 1. Ищем маркер проекта (.git) в текущей папке или до 3 уровней выше
+    project_root = Path(__file__).resolve().parent
+    is_dev_mode = False
+    for _ in range(4):
+        if (project_root / ".git").exists():
+            is_dev_mode = True
+            break
+        if project_root.parent == project_root:  # Достигли корня диска
+            break
+        project_root = project_root.parent
 
-    if is_dev_mode:
-        # 🐍 Разработка: БД в корне проекта
+    # 2. Принудительное управление через переменные окружения
+    if os.environ.get("FORCE_PROD_DB") == "1":
+        is_dev_mode = False
+    elif os.environ.get("FORCE_DEV_DB") == "1":
+        is_dev_mode = True
+
+    # 3. Возвращаем путь разработки, если не скомпилировано и режим dev активен
+    if not is_compiled and is_dev_mode:
         dev_path = project_root / DB_FILENAME
-        # Можно принудительно включить режим пользователя через переменную окружения:
-        # os.environ.get("USE_SYSTEM_DB") == "1"
-        if dev_path.exists() or os.environ.get("FORCE_DEV_DB"):
-            return str(dev_path)
+        return str(dev_path)
 
-    # 📦 Готовая версия: стандартный путь ОС
+    # 4. Системный путь для готовой сборки
     if sys.platform == "win32":
         base = Path(os.getenv("APPDATA", Path.home() / "AppData" / "Roaming"))
     elif sys.platform == "darwin":
@@ -42,9 +54,3 @@ def get_db_path() -> str:
     data_dir = base / APP_NAME
     data_dir.mkdir(parents=True, exist_ok=True)
     return str(data_dir / DB_FILENAME)
-
-
-# UI Настройки
-APP_NAME = "Finance Budget (beta)"
-APP_VERSION = "3.0.0"
-WINDOW_TITLE = f"{APP_NAME} (PySide6 v{APP_VERSION}) - SQLite"

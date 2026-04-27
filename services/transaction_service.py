@@ -1,102 +1,160 @@
 # services/transaction_service.py
-import logging
-from typing import Tuple, Any, Dict
-from core.db.repositories.transaction_repository import TransactionRepository
-from core.db.repositories.account_repository import AccountRepository
-from core.db.models import Transaction
-from utils.validators import validate_transaction_amount, validate_required_fields
-from utils.converters import safe_float, safe_int, safe_str
-
-logger = logging.getLogger(__name__)
+from core.repositories.transaction_repository import TransactionRepository
+from core.repositories.account_repository import AccountRepository
+from core.models import Transaction, Account
+from typing import Tuple
+import re
 
 class TransactionService:
-    def __init__(self, transaction_repo: TransactionRepository, account_repo: AccountRepository):
-        self.repo = transaction_repo
-        self.account_repo = account_repo
+    """Сервис управления транзакциями: валидация, расчёты, обновление балансов."""
 
-    def create_transaction(self, data: Dict[str, Any]) -> Tuple[bool, Any]:
+    def __init__(self, tx_repo: TransactionRepository, acc_repo: AccountRepository):
         """
-        Создает новую транзакцию.
+        Инициализация сервиса.
         
         Args:
-            data: Словарь из UI. 'amount' всегда положительный!
+            tx_repo: репозиторий транзакций для CRUD-операций
+            acc_repo: репозиторий счетов для проверки и обновления баланса
+        """
+        self.tx_repo = tx_repo
+        self.acc_repo = acc_repo
+
+    def create_transaction(self, raw_amount: str, trans_type: str, account_id: int, 
+                           category_id: int, description: str, date_str: str) -> Transaction:
+        """
+        Создаёт транзакцию с парсингом суммы, валидацией и обновлением баланса счёта.
+        
+        Args:
+            raw_amount: строка суммы из UI (например, "100*3" или "10,50")
+            trans_type: тип операции ("income", "expense", "correct")
+            account_id: ID счёта
+            category_id: ID категории
+            description: описание операции
+            date_str: дата в формате YYYY-MM-DD
             
         Returns:
-            (True, Transaction) или (False, ErrorMsg)
+            Сохранённый объект Transaction с присвоенным ID
+            
+        Raises:
+            ValueError: при некорректном формате суммы или данных
         """
-        # 1. Валидация
-        is_valid, error_msg = self._validate_data(data)
-        if not is_valid:
-            return False, error_msg
-
-        try:
-            # 2. Подготовка данных (простановка знака)
-            prepared_data = self._prepare_data(data)
-            
-            # 3. Сохранение в БД
-            tx_id = self.repo.create(prepared_data)
-            
-            # 4. Получаем полный объект транзакции
-            new_tx = self.repo.get_by_id(tx_id)
-            
-            # 5. Обновляем баланс счета
-            self._update_account_balance(new_tx)
-            
-            logger.info(f"Транзакция создана: ID {tx_id}, Тип {new_tx.trans_type}, Сумма {new_tx.amount}")
-            return True, new_tx
-            
-        except Exception as e:
-            logger.error(f"Ошибка создания транзакции: {e}")
-            return False, str(e)
-
-    def _validate_data(self, data: Dict) -> Tuple[bool, str]:
-        required = ['date', 'amount', 'trans_type', 'account_id']
-        is_valid, msg = validate_required_fields(data, required)
-        if not is_valid:
-            return False, msg
-            
-        amount = safe_float(data['amount'])
-        is_valid, msg = validate_transaction_amount(amount) # Проверяет > 0
-        if not is_valid:
-            return False, msg
-            
-        return True, ""
-
-    def _prepare_data(self, data: Dict) -> Dict:
-        """Проставляет знак суммы в зависимости от типа."""
-        prepared = {}
-        prepared['date'] = safe_str(data['date'])
-        prepared['description'] = safe_str(data.get('description', ''))
-        prepared['account_id'] = safe_int(data['account_id'])
-        prepared['category_id'] = safe_int(data.get('category_id'))
-        prepared['quantity'] = safe_float(data.get('quantity', 1.0))
+        # 1. Парсинг суммы и количества
+        amount_positive, quantity = self._parse_amount(raw_amount)
         
-        raw_amount = safe_float(data['amount'])
-        tx_type = safe_str(data['trans_type']).lower()
+        # 2. Бизнес-валидация
+        self._validate_inputs(trans_type, account_id, category_id, amount_positive)
         
-        # Логика знака: Доход (+), Расход (-)
-        if tx_type == 'income':
-            prepared['amount'] = abs(raw_amount)
-            prepared['trans_type'] = 'income'
-        elif tx_type == 'expense':
-            prepared['amount'] = -abs(raw_amount)
-            prepared['trans_type'] = 'expense'
-        else:
-            # Для возвратов и прочего оставляем как есть или обрабатываем отдельно
-            prepared['amount'] = raw_amount
-            prepared['trans_type'] = tx_type
+        # 3. Применение знака по типу
+        signed_amount = amount_positive if trans_type == "income" else -amount_positive
+        
+        # 4. Сборка объекта
+        transaction = Transaction(
+            date=date_str,
+            amount=signed_amount,
+            trans_type=trans_type,
+            account_id=account_id,
+            category_id=category_id,
+            description=description.strip(),
+            quantity=quantity
+        )
+        
+        # 5. Сохранение в БД
+        saved_tx = self.tx_repo.create(transaction)
+        
+        # 6. Обновление баланса счёта
+        self._update_account_balance(account_id, signed_amount)
+        
+        return saved_tx
+    
+    def delete_transaction(self, tx_id: int) -> bool:
+        """
+        Удаляет транзакцию и коррекцией баланса счёта.
+        
+        Args:
+            tx_id: ID транзакции для удаления
             
-        return prepared
+        Returns:
+            True при успешном удалении
+        """
+        # Получаем транзакцию, чтобы вернуть баланс на место
+        tx = self.tx_repo.get_by_id(tx_id)
+        if not tx:
+            raise ValueError(f"Транзакция #{tx_id} не найдена")
+            
+        # Удаляем запись
+        self.tx_repo.delete(tx_id)
+        
+        # Возвращаем баланс: вычитаем сумму (т.к. она уже со знаком)
+        self._update_account_balance(tx.account_id, -tx.amount)
+        return True
 
-    def _update_account_balance(self, tx: Transaction):
-        """Обновляет баланс счета. Работает только с объектами."""
-        account = self.account_repo.get_by_id(tx.account_id)
+    def _parse_amount(self, raw: str) -> Tuple[float, float]:
+        """
+        Разбирает строку суммы: поддерживает "100*3", "10,50", "1000".
+        
+        Args:
+            raw: исходная строка из поля ввода
+            
+        Returns:
+            Кортеж (общая_сумма, количество)
+            
+        Raises:
+            ValueError: при недопустимом формате
+        """
+        normalized = raw.replace(",", ".").strip()
+        
+        # Формат "сумма*количество"
+        if "*" in normalized:
+            parts = normalized.split("*", maxsplit=1)
+            if len(parts) != 2:
+                raise ValueError("Некорректный формат умножения. Используйте: сумма*количество")
+            unit_price = float(parts[0])
+            quantity = float(parts[1])
+            if quantity <= 0:
+                raise ValueError("Количество должно быть больше 0")
+            return round(unit_price * quantity, 2), quantity
+            
+        # Обычное число
+        total = float(normalized)
+        if total <= 0:
+            raise ValueError("Сумма должна быть положительным числом")
+        return total, 1.0
+
+    def _validate_inputs(self, trans_type: str, account_id: int, category_id: int, amount: float):
+        """
+        Проверяет бизнес-правила перед сохранением транзакции.
+        
+        Args:
+            trans_type: тип операции
+            account_id: ID счёта
+            category_id: ID категории
+            amount: итоговая сумма операции
+        """
+        if trans_type not in ("income", "expense", "correct"):
+            raise ValueError(f"Недопустимый тип транзакции: {trans_type}")
+            
+        if amount <= 0:
+            raise ValueError("Сумма операции должна быть больше нуля")
+            
+        account = self.acc_repo.get_by_id(account_id)
         if not account:
-            raise ValueError(f"Счет {tx.account_id} не найден")
+            raise ValueError(f"Счёт #{account_id} не найден")
+        if not account.is_active:
+            raise ValueError(f"Счёт '{account.name}' деактивирован")
             
-        # Просто прибавляем сумму транзакции к балансу
-        # Так как расход уже отрицательный, баланс уменьшится сам собой
-        account.current_balance += tx.amount
+        # Корректировка может быть без категории, остальные требуют
+        if trans_type != "correct" and not category_id:
+            raise ValueError("Для доходов/расходов необходимо указать категорию")
+
+    def _update_account_balance(self, account_id: int, amount: float):
+        """
+        Обновляет текущий баланс счёта на указанную сумму.
         
-        self.account_repo.update(account.id, {'current_balance': account.current_balance})
-        logger.debug(f"Баланс счета {account.id} обновлен: {account.current_balance}")
+        Args:
+            account_id: ID счёта для обновления
+            amount: сумма с учётом знака (+ для дохода, - для расхода)
+        """
+        account = self.acc_repo.get_by_id(account_id)
+        if account:
+            account.current_balance = round(account.current_balance + amount, 2)
+            self.acc_repo.update(account)

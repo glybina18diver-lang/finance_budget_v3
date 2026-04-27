@@ -1,0 +1,262 @@
+/* ui/styles/buttons.qss - стили для всех типов кнопок */
+
+/* ========== БАЗОВЫЕ СТИЛИ КНОПОК ========== */
+
+/* Виджеты с фиксированной высотой 26px */
+QLineEdit,
+QComboBox,
+QDateEdit,
+QDateTimeEdit,
+QPushButton,
+QSpinBox,
+QDoubleSpinBox {
+    min-height: 26px;
+    max-height: 26px;
+    height: 26px;
+    padding: 0 var(--padding-medium);
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius-small);
+    background-color: var(--surface-color);
+}
+
+/* Специфичные стили для QPushButton */
+QPushButton {
+    background-color: var(--secondary-color);
+    color: white;
+    border: 1px solid var(--secondary-dark);
+    border-radius: var(--border-radius-small);
+    padding: var(--padding-small) var(--padding-medium);
+    font-weight: 500;
+}
+
+QPushButton:hover {
+    background-color: var(--secondary-light);
+    border-color: var(--secondary-color);
+}
+
+QPushButton:pressed {
+    background-color: var(--secondary-dark);
+}
+
+QPushButton:disabled {
+    background-color: var(--disabled-color);
+    color: var(--text-secondary);
+    border-color: var(--border-color);
+}
+
+/* ========== КОМПАКТНЫЕ КНОПКИ (CompactButton) ========== */
+
+QPushButton.compact {
+    background-color: #4CAF50;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    padding: 5px 10px;
+    font-weight: 500;
+    font-size: 12px;
+    margin: 1px;
+    min-height: 26px;
+    max-height: 26px;
+    height: 26px;
+}
+
+QPushButton.compact:hover {
+    background-color: #45a049;
+}
+
+QPushButton.compact:pressed {
+    background-color: #3d8b40;
+}
+
+QPushButton.compact:disabled {
+    background-color: #cccccc;
+    color: #666666;
+}
+
+/* Специальные кнопки с цветовыми вариантами */
+QPushButton.compact.recalc {
+    background-color: #17a2b8;
+}
+
+QPushButton.compact.recalc:hover {
+    background-color: #138496;
+}
+
+QPushButton.compact.recalc:pressed {
+    background-color: #0c5460;
+}
+
+/* ========== КНОПКИ ФИЛЬТРОВ (FilterButton) ========== */
+
+QPushButton.filter {
+    background-color: #2196F3;
+    color: white;
+    border: none;
+    border-radius: 3px;
+    padding: 4px 8px;
+    font-size: 11px;
+    margin: 1px;
+    min-height: 26px;
+    max-height: 26px;
+    height: 26px;
+}
+
+QPushButton.filter:hover {
+    background-color: #1976D2;
+}
+
+QPushButton.filter:pressed {
+    background-color: #0D47A1;
+}
+
+/* ========== ЦВЕТНЫЕ КНОПКИ ОПЕРАЦИЙ (ColoredButton) ========== */
+
+/* Базовый стиль для цветных кнопок */
+ColoredButton {
+    min-height: 26px;
+    max-height: 26px;
+    height: 26px;
+    padding: 4px 12px;
+    border: none;
+    border-radius: 3px;
+    font-weight: 500;
+    font-size: 11px;
+    margin: 0px;
+    min-width: 80px;
+}
+
+/* Стандартные цвета для операций */
+.operation-button-accounts {
+    background-color: #2196F3;
+}
+
+.operation-button-categories {
+    background-color: #9C27B0;
+}
+
+.operation-button-transfers {
+    background-color: #FF9800;
+}
+
+.operation-button-reconciliation {
+    background-color: #607D8B;
+}
+
+.operation-button-loans {
+    background-color: #795548;
+}
+
+.operation-button-credit-cards {
+    background-color: #E91E63;
+}
+
+/* ========== ЦВЕТНЫЕ КНОПКИ ДИАЛОГОВ (QDialogButtonBox) ========== */
+
+/* Базовый стиль для контейнера QDialogButtonBox */
+QDialogButtonBox {
+    spacing: 8px;
+    margin: 0;
+    padding: 0;
+}
+
+/* Стили для кнопок внутри QDialogButtonBox */
+QDialogButtonBox QPushButton {
+    min-height: 26px;
+    max-height: 26px;
+    height: 26px;
+    padding: 4px 12px;
+    border: none;
+    border-radius: var(--border-radius-small);
+    font-weight: 500;
+    font-size: 11px;
+    margin: 0px;
+    min-width: 80px;
+    color: white;
+}
+
+/* Цветовые схемы через классы */
+QDialogButtonBox QPushButton.primary {
+    background-color: var(--primary-color);
+}
+
+QDialogButtonBox QPushButton.primary:hover {
+    background-color: var(--primary-light);
+}
+
+QDialogButtonBox QPushButton.primary:pressed {
+    background-color: var(--primary-dark);
+}
+
+QDialogButtonBox QPushButton.secondary {
+    background-color: var(--secondary-color);
+}
+
+QDialogButtonBox QPushButton.secondary:hover {
+    background-color: var(--secondary-light);
+}
+
+QDialogButtonBox QPushButton.secondary:pressed {
+    background-color: var(--secondary-dark);
+}
+
+QDialogButtonBox QPushButton.success {
+    background-color: var(--success-color);
+}
+
+QDialogButtonBox QPushButton.success:hover {
+    background-color: var(--success-light);
+}
+
+QDialogButtonBox QPushButton.success:pressed {
+    background-color: var(--success-dark);
+}
+
+QDialogButtonBox QPushButton.warning {
+    background-color: var(--warning-color);
+}
+
+QDialogButtonBox QPushButton.warning:hover {
+    background-color: var(--warning-light);
+}
+
+QDialogButtonBox QPushButton.warning:pressed {
+    background-color: var(--warning-dark);
+}
+
+QDialogButtonBox QPushButton.danger {
+    background-color: var(--danger-color);
+}
+
+QDialogButtonBox QPushButton.danger:hover {
+    background-color: var(--danger-light);
+}
+
+QDialogButtonBox QPushButton.danger:pressed {
+    background-color: var(--danger-dark);
+}
+
+/* Цветовые схемы через свойство color-scheme (альтернативный способ) */
+QDialogButtonBox QPushButton[color-scheme="primary"] {
+    background-color: var(--primary-color);
+}
+
+QDialogButtonBox QPushButton[color-scheme="primary"]:hover {
+    background-color: var(--primary-light);
+}
+
+QDialogButtonBox QPushButton[color-scheme="primary"]:pressed {
+    background-color: var(--primary-dark);
+}
+
+/* Затемнение для цветных кнопок (применяется через ThemeManager) */
+QPushButton[color-scheme="primary"] {
+    background-color: var(--primary-color);
+}
+
+QPushButton[color-scheme="primary"]:hover {
+    background-color: var(--primary-light);
+}
+
+QPushButton[color-scheme="primary"]:pressed {
+    background-color: var(--primary-dark);
+}
