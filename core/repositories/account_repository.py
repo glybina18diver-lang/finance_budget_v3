@@ -1,5 +1,5 @@
 # core/repositories/account_repository.py
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 from core.db import Database
 from core.models import Account
 
@@ -79,3 +79,18 @@ class AccountRepository:
         )
         self.db.execute(query, params)
         return True
+    
+    def get_all_active(self) -> List[Account]:
+        """
+        Возвращает список всех активных счетов, отсортированных по имени.
+        
+        Returns:
+            Список объектов Account
+        """
+        query = """
+            SELECT * FROM accounts 
+            WHERE is_active = 1 
+            ORDER BY name
+        """
+        rows = self.db.fetchall(query)
+        return [self._row_to_account(row) for row in rows]

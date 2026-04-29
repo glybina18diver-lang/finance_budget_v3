@@ -7,6 +7,7 @@ from core.db import Database
 from ui.main_window import MainWindow
 from core.repositories.transaction_repository import TransactionRepository
 from core.repositories.account_repository import AccountRepository
+from core.repositories.category_repository import CategoryRepository
 from services.transaction_service import TransactionService
 from ui.presenters.transaction_presenter import TransactionPresenter
 
@@ -33,9 +34,10 @@ def main():
     # Создаём репозитории
     tx_repo = TransactionRepository(db)
     acc_repo = AccountRepository(db)
+    cat_repo = CategoryRepository(db)
 
     # Создаём сервис
-    tx_service = TransactionService(tx_repo, acc_repo)
+    tx_service = TransactionService(tx_repo, acc_repo, cat_repo)
 
     # Создаём презентер с готовым сервисом
     tx_presenter = TransactionPresenter(tx_service)

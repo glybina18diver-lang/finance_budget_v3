@@ -1,14 +1,15 @@
 # services/transaction_service.py
 from core.repositories.transaction_repository import TransactionRepository
 from core.repositories.account_repository import AccountRepository
-from core.models import Transaction, Account
-from typing import Tuple
+from core.repositories.category_repository import CategoryRepository
+from core.models import Transaction, Account, Category
+from typing import Tuple, List
 import re
 
 class TransactionService:
     """Сервис управления транзакциями: валидация, расчёты, обновление балансов."""
 
-    def __init__(self, tx_repo: TransactionRepository, acc_repo: AccountRepository):
+    def __init__(self, tx_repo: TransactionRepository, acc_repo: AccountRepository, cat_repo: CategoryRepository):
         """
         Инициализация сервиса.
         
@@ -18,7 +19,9 @@ class TransactionService:
         """
         self.tx_repo = tx_repo
         self.acc_repo = acc_repo
+        self.cat_repo = cat_repo
 
+    #------Работа с транзакциями------
     def create_transaction(self, raw_amount: str, trans_type: str, account_id: int, 
                            category_id: int, description: str, date_str: str) -> Transaction:
         """
@@ -38,12 +41,18 @@ class TransactionService:
         Raises:
             ValueError: при некорректном формате суммы или данных
         """
+        # В начале create_transaction
+        if not isinstance(account_id, int) or account_id <= 0:
+            raise ValueError("Некорректный ID счёта")
+        if not isinstance(category_id, int) or category_id <= 0:
+            raise ValueError("Некорректный ID категории")
+            
         # 1. Парсинг суммы и количества
         amount_positive, quantity = self._parse_amount(raw_amount)
         
         # 2. Бизнес-валидация
         self._validate_inputs(trans_type, account_id, category_id, amount_positive)
-        
+
         # 3. Применение знака по типу
         signed_amount = amount_positive if trans_type == "income" else -amount_positive
         
@@ -88,6 +97,7 @@ class TransactionService:
         self._update_account_balance(tx.account_id, -tx.amount)
         return True
 
+    #------Проверки, валидация, преобразавание------
     def _parse_amount(self, raw: str) -> Tuple[float, float]:
         """
         Разбирает строку суммы: поддерживает "100*3", "10,50", "1000".
@@ -146,6 +156,7 @@ class TransactionService:
         if trans_type != "correct" and not category_id:
             raise ValueError("Для доходов/расходов необходимо указать категорию")
 
+    #------Обработчики UI------
     def _update_account_balance(self, account_id: int, amount: float):
         """
         Обновляет текущий баланс счёта на указанную сумму.
@@ -158,3 +169,42 @@ class TransactionService:
         if account:
             account.current_balance = round(account.current_balance + amount, 2)
             self.acc_repo.update(account)
+
+    def get_accounts_for_ui(self) -> List[Account]:
+        """
+        Возвращает список активных счетов для заполнения комбобокса.
+        
+        Returns:
+            Список объектов Account
+        """
+        return self.acc_repo.get_all_active()
+    
+    def get_categories_by_type(self, ui_type: str) -> List[Category]:
+        """
+        Возвращает категории для указанного типа операции из UI.
+        
+        Args:
+            ui_type: строка из UI ("Доход" или "Расход")
+            
+        Returns:
+            Список объектов Category
+        """
+        # Маппинг UI -> БД
+        db_type = "income" if ui_type == "Доход" else "expense"
+        return self.cat_repo.get_all_by_type(db_type)
+    
+    def get_latest_transactions(self, limit: int = 300) -> List[Transaction]:
+        """
+        Возвращает последние N транзакций для отображения в UI.
+        
+        Args:
+            limit: максимальное количество записей (по умолчанию 300)
+            
+        Returns:
+            Список объектов Transaction, отсортированный по дате (новые первыми)
+        """
+        return self.tx_repo.get_latest(limit)
+    
+    def get_all_categories(self) -> List[Category]:
+        """Возвращает все категории для UI (без фильтрации)."""
+        return self.cat_repo.get_all_categories()

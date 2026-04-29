@@ -117,3 +117,22 @@ class TransactionRepository:
         query = "DELETE FROM transactions WHERE id = ?"
         self.db.execute(query, (transaction_id,))
         return True
+    
+    def get_latest(self, limit: int = 300) -> List[Transaction]:
+        """
+        Возвращает последние N транзакций, отсортированные по дате (новые первыми).
+        Используется для инициализации таблицы при открытии диалога.
+        
+        Args:
+            limit: максимальное количество записей (по умолчанию 300)
+            
+        Returns:
+            Список объектов Transaction, отсортированный по дате (новые первыми)
+        """
+        query = """
+            SELECT * FROM transactions 
+            ORDER BY date DESC, created_at DESC 
+            LIMIT ?
+        """
+        rows = self.db.fetchall(query, (limit,))
+        return [self._row_to_transaction(row) for row in rows]

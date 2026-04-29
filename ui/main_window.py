@@ -198,9 +198,6 @@ class MainWindow(QMainWindow):
             presenter=self.tx_presenter  # ← тот самый экземпляр из main.py
         )
         
-        # Обязательно: сказать презентеру, какой у него View
-        self.tx_presenter.set_view(self.operations_dialog)
-        
         self.operations_dialog.show()
     
     def _open_dashboard(self):
