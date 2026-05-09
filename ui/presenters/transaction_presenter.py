@@ -139,3 +139,11 @@ class TransactionPresenter:
         transactions = self.service.get_latest_transactions(limit)
         if self.view:
             self.view.initial_load_transactions(transactions)
+
+    #========== Открытие диалогов =========
+    def open_account_dialog(self):
+        """Заглушка: открытие диалога счетов (реализуется в основном презентере)."""
+        from ui.dialogs.account_dialog import AccountDialog
+        # TODO: Заменить на DI через фабрику или контекст
+        dialog = AccountDialog(parent=self.view.parent)
+        dialog.exec()

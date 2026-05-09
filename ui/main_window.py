@@ -16,13 +16,12 @@ from PySide6.QtGui import QAction, QFont, QIcon
 from config import WINDOW_TITLE
 from core.db import Database
 from ui.widgets.colored_button import ColoredButton
-from ui.dialogs.operation_dialog import OperationDialog
+from services.navigation_service import NavigationService
 
 class MainWindow(QMainWindow):
-    def __init__(self, database: Database, tx_presenter):
+    def __init__(self, navigation_service):
         super().__init__()
-        self.database = database
-        self.tx_presenter = tx_presenter
+        self.navigation_service = navigation_service
         self.operations_dialog = None  
 
         self.setWindowTitle(WINDOW_TITLE)
@@ -188,17 +187,19 @@ class MainWindow(QMainWindow):
         self._stub_method()
     
     def _open_operations_dialog(self):
-        if self.operations_dialog and self.operations_dialog.isVisible():
-            self.operations_dialog.raise_()
+        """
+        Открывает диалог операций через навигационный сервис.
+        """
+        if hasattr(self, '_operations_dialog') and self._operations_dialog and self._operations_dialog.isVisible():
+            self._operations_dialog.raise_()
             return
 
-        # Создаём диалог и передаём ему УЖЕ СУЩЕСТВУЮЩИЙ презентер
-        self.operations_dialog = OperationDialog(
-            parent=self,
-            presenter=self.tx_presenter  # ← тот самый экземпляр из main.py
-        )
+        # Просим навигатор открыть диалог
+        # Он сам создаст нужные зависимости и покажет окно
+        dialog = self.navigation_service.open_operation_dialog(parent=self)
         
-        self.operations_dialog.show()
+        # Сохраняем ссылку, чтобы поднять окно при повторном вызове
+        self._operations_dialog = dialog
     
     def _open_dashboard(self):
         """Открывает дашборд."""

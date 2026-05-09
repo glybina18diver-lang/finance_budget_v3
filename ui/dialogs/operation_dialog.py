@@ -59,15 +59,20 @@ class OperationDialog(QDialog):
         layout.setContentsMargins(0, 0, 0, 0)
 
         buttons = [
-            ("🏦 Счета", "#2196F3"), ("📊 Категории", "#9C27B0"),
-            ("📤 Переводы", "#FF9800"), ("🔍 Сверка", "#607D8B"),
-            ("💰 Займы", "#795548"), ("💳 Кредитки", "#E91E63")
+            ("🏦 Счета", self._open_account_management, "#2196F3"), 
+            ("📊 Категории", self._stub_method, "#9C27B0"),
+            ("📤 Переводы", self._stub_method, "#FF9800"), 
+            ("🔍 Сверка", self._stub_method, "#607D8B"),
+            ("💰 Займы", self._stub_method, "#795548"), 
+            ("💳 Кредитки", self._stub_method, "#E91E63")
         ]
 
-        for text, color in buttons:
+        for text, callback, color in buttons:
             btn = ColoredButton(text, color)
-            btn.clicked.connect(self._stub_method)
+            btn.clicked.connect(callback)
             layout.addWidget(btn)
+
+            
 
         layout.addStretch()
         panel.setLayout(layout)
@@ -458,6 +463,16 @@ class OperationDialog(QDialog):
             item.setData(0, Qt.UserRole, row['transaction_id'])
             self.transactions_tree.addTopLevelItem(item)
 
+    #========== Открытие диалогов ==========
+    def _open_account_management(self):
+        """
+        Открывает диалог управления счетами через навигационный сервис.
+        """
+        if hasattr(self.parent, 'navigation_service'):
+            self.parent.navigation_service.open_account_dialog(self.parent)
+        else:
+            self.show_status("Навигация недоступна", message_type="error")
+    
     #========== Функции (прочие) ==========
     def _stub_method(self):
         """Заглушка для функций, находящихся в разработке."""

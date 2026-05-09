@@ -53,7 +53,108 @@ class AccountRepository:
         query = "SELECT * FROM accounts WHERE id = ?"
         row = self.db.fetchone(query, (account_id,))
         return self._row_to_account(row) if row else None
+   
+    def get_all_active(self) -> List[Account]:
+        """
+        Возвращает список всех активных счетов, отсортированных по имени.
+        
+        Returns:
+            Список объектов Account
+        """
+        query = """
+            SELECT * FROM accounts 
+            WHERE is_active = 1 
+            ORDER BY name
+        """
+        rows = self.db.fetchall(query)
+        return [self._row_to_account(row) for row in rows]
+    
+    def get_by_name(self, name: str) -> Optional[Account]:
+        """
+        Возвращает счёт по имени.
+        
+        Args:
+            name: имя счёта
+            
+        Returns:
+            Объект Account или None
+        """
+        query = "SELECT * FROM accounts WHERE name = ?"
+        row = self.db.fetchone(query, (name,))
+        return self._row_to_account(row) if row else None
+    
+    def create(self, account: Account) -> Account:
+        """
+        Создаёт новую запись счёта в базе данных.
+        
+        Args:
+            account: объект Account с данными для создания (ID игнорируется, генерируется БД)
+            
+        Returns:
+            Объект Account с присвоенным ID из базы данных
+            
+        Raises:
+            sqlite3.IntegrityError: если нарушены ограничения уникальности или внешние ключи
+        """
+        query = """
+            INSERT INTO accounts (
+                name, 
+                account_type, 
+                initial_balance, 
+                current_balance, 
+                credit_limit, 
+                payment_due_day, 
+                min_payment_percent, 
+                currency, 
+                is_active, 
+                is_system
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """
+        
+        params = (
+            account.name,
+            account.account_type,
+            account.initial_balance,
+            account.current_balance,
+            account.credit_limit or 0.0,
+            account.payment_due_day or 1,
+            account.min_payment_percent or 5.0,
+            account.currency or "RUB",
+            1 if account.is_active else 0,
+            1 if account.is_system else 0
+        )
+        
+        # Выполняем запрос и получаем cursor
+        new_id = self.db.execute(query, params)
+        
+        # Получаем lastrowid СРАЗУ из курсора
+        #new_id = cursor.lastrowid
 
+        # Возвращаем обновлённый объект с реальным ID
+        account.id = new_id
+        return account
+    
+    def delete(self, account_id: int) -> bool:
+        """
+        Удаляет счёт из базы данных по ID.
+        
+        Args:
+            account_id: ID удаляемого счёта
+            
+        Returns:
+            True если запись была найдена и удалена, False если счёт не существовал
+            
+        Raises:
+            sqlite3.IntegrityError: если на счёт есть ссылки в других таблицах (транзакции)
+        """
+        # Сначала проверяем, существует ли счёт (опционально, но полезно для логики сервиса)
+        if not self.get_by_id(account_id):
+            return False
+            
+        query = "DELETE FROM accounts WHERE id = ?"
+        self.db.execute(query, (account_id,))
+        return True
+    
     def update(self, account: Account) -> bool:
         """
         Обновляет существующий счёт в БД.
@@ -80,17 +181,3 @@ class AccountRepository:
         self.db.execute(query, params)
         return True
     
-    def get_all_active(self) -> List[Account]:
-        """
-        Возвращает список всех активных счетов, отсортированных по имени.
-        
-        Returns:
-            Список объектов Account
-        """
-        query = """
-            SELECT * FROM accounts 
-            WHERE is_active = 1 
-            ORDER BY name
-        """
-        rows = self.db.fetchall(query)
-        return [self._row_to_account(row) for row in rows]
