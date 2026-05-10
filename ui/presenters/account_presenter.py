@@ -73,20 +73,51 @@ class AccountPresenter:
         except ValueError as e:
             self.view.show_error(str(e))
 
-    def delete_account(self, account_id: int) -> None:
+    def delete_account(self, account_id: int) -> dict:
         """
-        Обрабатывает удаление счёта.
+        Удаляет счёт и возвращает детальный результат.
         
-        Args:
-            account_id: ID удаляемого счёта
+        Returns:
+            Словарь с ключами:
+            - 'success': bool (удаление прошло успешно)
+            - 'can_delete': bool (можно ли удалить вообще)
+            - 'message': str (описание результата)
+            - 'total_operations': int (если есть операции)
         """
         try:
+            # Сначала проверим, можно ли удалить
+            can_delete = True
+            total_ops = 0
+            
+            # Проверка через сервис (должен бросать ValueError при ошибках)
             self.service.delete_account(account_id)
-            self.view.show_status("Счёт удалён", "success")
+            self.view.clear_selection() 
             self.load_accounts()
-            self.view._reset_form()
+            return {
+                'success': True,
+                'can_delete': True,
+                'message': "Счёт успешно удалён"
+            }
+            
         except ValueError as e:
-            self.view.show_error(str(e))
+            error_msg = str(e)
+            # Определяем тип ошибки по тексту
+            if "связанные операции" in error_msg:
+                # Запрашиваем количество операций
+                total_ops = self.service._get_transaction_count(account_id)
+                return {
+                    'success': False,
+                    'can_delete': False,
+                    'message': error_msg,
+                    'total_operations': total_ops
+                }
+            else:
+                # Другие ошибки (баланс, системный и т.д.)
+                return {
+                    'success': False,
+                    'can_delete': False,
+                    'message': error_msg
+                }
 
     def select_account(self, account_id: int) -> None:
         """

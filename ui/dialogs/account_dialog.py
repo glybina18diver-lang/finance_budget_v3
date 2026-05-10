@@ -6,6 +6,19 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QKeyEvent
+import logging
+from datetime import datetime, date
+
+from PySide6.QtWidgets import (
+    QDialog, QVBoxLayout, QHBoxLayout, QTreeWidget, QTreeWidgetItem,
+    QLabel, QLineEdit, QComboBox, QPushButton, QFrame, QMessageBox,
+    QScrollArea, QTextEdit, QProgressBar, QGroupBox, QGridLayout,
+    QHeaderView, QSplitter, QMenu, QApplication, QWidget,
+    QDialogButtonBox, QStatusBar, QProgressDialog, QRadioButton
+)
+from PySide6.QtCore import Qt, Signal, QTimer, QDate, QThread
+from PySide6.QtGui import QFont, QColor, QAction
+
 from ui.widgets.colored_button import CompactButton, ColoredDialogButtonBox
 from core.models import Account
 
@@ -176,8 +189,253 @@ class AccountDialog(QDialog):
             self.presenter.select_account(account_id)
 
     def _show_context_menu(self, position):
-        """Показывает контекстное меню для выбранного счёта."""
-        self._stub_method()
+        """
+        Показывает контекстное меню при нажатии ПКМ по элементу дерева.
+        
+        Args:
+            position: координаты курсора относительно виджета QTreeWidget
+        """
+        # Получаем элемент под курсором
+        item = self.accounts_tree.itemAt(position)
+        if not item:
+            return
+
+        account_id = item.data(0, Qt.UserRole)
+        is_system = item.data(0, Qt.UserRole + 1)
+
+        menu = QMenu(self)
+
+        # 1. Редактировать
+        edit_action = menu.addAction("✏️ Редактировать")
+        edit_action.triggered.connect(lambda: self._on_context_edit(account_id))
+
+        # 2. Удалить (скрыто для системных счетов)
+        if not is_system:
+            delete_action = menu.addAction("🗑️ Удалить")
+            delete_action.triggered.connect(lambda: self._on_context_delete(account_id))
+
+        menu.addSeparator()
+
+        # 3. Статистика
+        stats_action = menu.addAction("📊 Статистика")
+        stats_action.triggered.connect(self._stub_method)
+
+        menu.addSeparator()
+
+        # 4. Обновить список
+        refresh_action = menu.addAction("🔄 Обновить список")
+        refresh_action.triggered.connect(self._stub_method)
+
+        # Показываем меню в глобальных координатах
+        menu.exec(self.accounts_tree.viewport().mapToGlobal(position))
+
+    def _on_context_edit(self, account_id: int):
+        """
+        Выбирает счёт по ID и переводит форму в режим редактирования.
+        
+        Args:
+            account_id: ID счёта, по которому кликнули ПКМ
+        """
+        # Находим и выделяем элемент в дереве
+        for i in range(self.accounts_tree.topLevelItemCount()):
+            item = self.accounts_tree.topLevelItem(i)
+            if item.data(0, Qt.UserRole) == account_id:
+                self.accounts_tree.setCurrentItem(item)
+                self._on_account_select()  # Вызываем существующую логику заполнения формы
+                break
+
+    def _on_context_delete_old(self, account_id: int):#TODO старый метод оставлен для справки
+        """
+        Запрашивает удаление счёта через презентер.
+        Презентер выполнит проверку на связанные операции и удалит счёт или вернёт ошибку.
+        
+        Args:
+            account_id: ID удаляемого счёта
+        """
+        if self.presenter:
+            try:
+                self.presenter.delete_account(account_id)
+            except ValueError as e:
+                # Презентер пробросит ошибку, если есть операции или другие ограничения
+                self.show_status(str(e), "error")
+        else:
+            self.show_status("Презентер не подключен", "error")
+
+    def _on_context_delete(self, account_id: int):
+        """Удаляет ОДИН счёт по ID с подтверждением.
+        
+        Args:
+            account_id: ID удаляемого счёта
+        """
+        # Находим элемент по account_id для получения имени
+        account_name = "Неизвестный"
+        for i in range(self.accounts_tree.topLevelItemCount()):
+            item = self.accounts_tree.topLevelItem(i)
+            if item.data(0, Qt.UserRole) == account_id:
+                account_name = item.text(0)
+                break
+        
+        # Подтверждение для одного счёта
+        reply = QMessageBox.question(
+            self,
+            "Подтверждение",
+            f"Удалить счёт '{account_name}'?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No
+        )
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+        
+        if self.presenter:
+            # Удаление одного счёта
+            result = self.presenter.delete_account(account_id)
+            if result.get('success'):
+                self.show_status(f"Удалён: {account_name}", "success")
+            else:
+                if not result.get('can_delete', True):
+                    self._show_cannot_delete_message({
+                        'account_name': account_name,
+                        'total_operations': result.get('total_operations', 0)
+                    })
+                else:
+                    self.show_status(
+                        f"Ошибка удаления '{account_name}': {result.get('message', 'Неизвестная ошибка')}",
+                        "error"
+                    )
+        else:
+            self.show_status("Презентер не подключен", "error")
+        
+    def _show_cannot_delete_message(self, result_info):
+        """
+        Показывает диалог с причиной невозможности удаления счёта.
+        
+        Args:
+            result_info: словарь с ключами 'account_name', 'total_operations'
+        """
+        account_name = result_info.get('account_name', 'Счёт')
+        total_ops = result_info.get('total_operations', 0)
+        
+        html_text = f"""
+            <h3 style='color: #dc3545; margin-top: 0;'>❌ Счёт нельзя удалить</h3>
+            <p>Счёт <b>{account_name.replace('<', '&lt;').replace('>', '&gt;')}</b> имеет связанные операции.</p>
+            <p><b>Всего операций:</b> {total_ops}</p>
+            <p style='color: #6c757d; margin-bottom: 0;'>
+                Для удаления счёта необходимо сначала удалить все связанные операции 
+                или перенести их на другие счета.
+            </p>
+        """
+        
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Невозможно удалить счёт")
+        dialog.resize(450, 220)
+        
+        layout = QVBoxLayout(dialog)
+        text_edit = QTextEdit()
+        text_edit.setReadOnly(True)
+        text_edit.setHtml(html_text)
+        layout.addWidget(text_edit)
+        
+        button_box = QDialogButtonBox(QDialogButtonBox.Ok)
+        button_box.accepted.connect(dialog.accept)
+        layout.addWidget(button_box)
+        
+        dialog.exec()
+
+    def _show_account_stats(self): #TODO не рабочий (скопирован из V2)
+        """Показывает статистику по выбранному счету"""
+        selected_items = self.accounts_tree.selectedItems()
+        if not selected_items:
+            self.show_status("Выберите счет для статистики", "warning")
+            return
+        
+        item = selected_items[0]
+        account_id = item.data(0, Qt.UserRole)
+        account_name = item.text(0)
+        
+        try:
+            # Получаем данные счета
+            account_obj = self.database.accounts.get_by_id(account_id)
+            if account_obj is None:
+                self.show_status("Данные счета не найдены", "error")
+                return
+            account_data = account_obj.to_dict()
+            
+            # Получаем транзакции
+            transactions = self.database.transactions.get_transactions(filters={'account_id': account_id, 'exclude_corrections': True})
+            
+            # Получаем переводы
+            transfers = self.database.transfers.get_transfers(filters={'account_id': account_id})
+            
+            # Вычисляем статистику
+            total_income = 0.0
+            total_expense = 0.0
+            transaction_count = len(transactions)
+            
+            for t in transactions:
+                amount = t['amount']
+                if t['type'] == 'income':
+                    total_income += amount
+                elif t['type'] == 'expense':
+                    total_expense += abs(amount)
+            
+            transfers_in = 0
+            transfers_out = 0
+            
+            for t in transfers:
+                if t['to_account_id'] == account_id:
+                    transfers_in += 1
+                elif t['from_account_id'] == account_id:
+                    transfers_out += 1
+            
+            # Формируем сообщение
+            stats_text = f"📊 Статистика счета: {account_data['name']}\n\n"
+            stats_text += f"💰 Текущий баланс: {account_data['current_balance']:.2f} {account_data['currency']}\n"
+            stats_text += f"📈 Всего доходов: {total_income:.2f} {account_data['currency']}\n"
+            stats_text += f"📉 Всего расходов: {total_expense:.2f} {account_data['currency']}\n"
+            stats_text += f"🔄 Чистый поток: {total_income - total_expense:.2f} {account_data['currency']}\n\n"
+            
+            stats_text += f"📋 Количество операций:\n"
+            stats_text += f"   • Транзакций: {transaction_count}\n"
+            stats_text += f"   • Входящих переводов: {transfers_in}\n"
+            stats_text += f"   • Исходящих переводов: {transfers_out}\n"
+            stats_text += f"   • Всего: {transaction_count + transfers_in + transfers_out}\n\n"
+            
+            stats_text += f"🗓️ Тип счета: {account_data['type']}\n"
+            
+            if account_data['type'] == 'Credit Card':
+                stats_text += f"💳 Кредитный лимит: {account_data.get('credit_limit', 0.0):.2f} {account_data['currency']}\n"
+                stats_text += f"📅 День платежа: {account_data.get('payment_due_day', 1)}\n"
+                stats_text += f"📊 Мин. платеж: {account_data.get('min_payment_percent', 5.0):.1f}%\n"
+            
+            # Дата создания
+            created_at = account_data.get('created_at', '')
+            if created_at:
+                if isinstance(created_at, str):
+                    stats_text += f"📅 Создан: {created_at[:10]}\n"
+            
+            # Показываем диалог
+            stats_dialog = QDialog(self)
+            stats_dialog.setWindowTitle(f"Статистика: {account_data['name']}")
+            stats_dialog.resize(400, 400)
+            
+            layout = QVBoxLayout(stats_dialog)
+            
+            text_edit = QTextEdit()
+            text_edit.setReadOnly(True)
+            text_edit.setPlainText(stats_text)
+            text_edit.setFont(QFont("Consolas", 10))
+            
+            layout.addWidget(text_edit)
+            
+            button_box = QDialogButtonBox(QDialogButtonBox.Ok)
+            button_box.accepted.connect(stats_dialog.accept)
+            layout.addWidget(button_box)
+            
+            stats_dialog.exec()
+            
+        except Exception as e:
+            self.show_status(f"Ошибка статистики: {str(e)[:50]}", "error")
+    
 
     def _on_type_change(self):
         """Показывает/скрывает поля кредитной карты."""
@@ -235,7 +493,6 @@ class AccountDialog(QDialog):
         self.add_button.setEnabled(True)
         self.edit_button.setEnabled(False)
         self.cancel_button.setEnabled(False)
-        self.show_status("Форма очищена", "info")
 
     def _stub_method(self):
         """Заглушка для нереализованных функций."""
@@ -296,6 +553,17 @@ class AccountDialog(QDialog):
         self.status_bar.setText(message)
         QTimer.singleShot(2000, lambda: self.status_bar.setText("Готово"))
 
+    def show_error(self, message: str):
+        """
+        Показывает критическое сообщение об ошибке.
+        
+        Args:
+            message: текст ошибки
+        """
+        QMessageBox.critical(self, "Ошибка", message)
+        #self.show_status(message, "error")
+
     def clear_selection(self):
         """Очищает выделение в таблице."""
         self.accounts_tree.clearSelection()
+        self._reset_form()

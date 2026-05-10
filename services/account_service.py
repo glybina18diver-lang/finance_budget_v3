@@ -68,7 +68,7 @@ class AccountService:
 
     def delete_account(self, account_id: int) -> bool:
         """
-        Удаляет счёт (с проверкой на системные записи и баланс).
+        Удаляет счёт с проверкой на системность, баланс и связанные операции.
         
         Args:
             account_id: ID удаляемого счёта
@@ -77,17 +77,44 @@ class AccountService:
             True если удаление успешно
             
         Raises:
-            ValueError: если счёт не найден, системный или имеет ненулевой баланс
+            ValueError: если счёт не найден, системный, имеет ненулевой баланс или к нему привязаны операции
         """
         account = self.acc_repo.get_by_id(account_id)
         if not account:
             raise ValueError("Счёт не найден")
         if account.is_system:
             raise ValueError("Системные счета нельзя удалить")
-        if abs(account.current_balance) > 0.001:
-            raise ValueError("Нельзя удалить счёт с ненулевым балансом")
+
+        # Проверка на наличие связанных транзакций
+        if self._has_transactions(account_id):
+            raise ValueError("Невозможно удалить: у счёта есть связанные операции")
             
         return self.acc_repo.delete(account_id)
+
+    def _has_transactions(self, account_id: int) -> bool:
+        """
+        Проверяет наличие транзакций, связанных со счётом.
+        
+        Returns:
+            True если к счёту привязаны операции
+        """
+        query = "SELECT COUNT(*) AS cnt FROM transactions WHERE account_id = ?"
+        result = self.acc_repo.db.fetchone(query, (account_id,))
+        return result["cnt"] > 0 if result else False
+    
+    def _get_transaction_count(self, account_id: int) -> int:
+        """
+        Вспомогательный метод для получения количества операций по счёту.
+        
+        Args:
+            account_id: ID счёта
+            
+        Returns:
+            Количество связанных транзакций
+        """
+        query = "SELECT COUNT(*) AS cnt FROM transactions WHERE account_id = ?"
+        result = self.acc_repo.db.fetchone(query, (account_id,))
+        return result["cnt"] if result else 0
 
     def get_all_accounts(self) -> List[Account]:
         """
