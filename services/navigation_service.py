@@ -12,14 +12,18 @@ from core.db import Database
 # Диалоги
 from ui.dialogs.operation_dialog import OperationDialog
 from ui.dialogs.account_dialog import AccountDialog
+from ui.dialogs.category_dialog import CategoryDialog
 
 # Презентеры
 from ui.presenters.transaction_presenter import TransactionPresenter
 from ui.presenters.account_presenter import AccountPresenter
+from ui.presenters.category_presenter import CategoryPresenter
+
 
 # Сервисы
 from services.transaction_service import TransactionService
 from services.account_service import AccountService
+from services.category_service import CategoryService
 
 # Репозитории
 from core.repositories.account_repository import AccountRepository
@@ -82,3 +86,25 @@ class NavigationService:
         dialog = AccountDialog(parent=parent, presenter=presenter)
         dialog.exec()  # Modal
         return dialog # Возвращаем диалог
+    
+    def open_category_dialog(self, parent: QWidget) -> CategoryDialog:
+        """
+        Открывает диалог управления категориями (немодальный).
+        
+        Args:
+            parent: родительское окно (обычно MainWindow)
+            
+        Returns:
+            Экземпляр CategoryDialog
+        """
+        # 1. Создаём сервис для КАТЕГОРИЙ (не счетов!)
+        cat_service = CategoryService(cat_repo=self.cat_repo)
+        
+        # 2. Создаём презентер для КАТЕГОРИЙ
+        presenter = CategoryPresenter(service=cat_service)
+        
+        # 3. Создаём и показываем диалог
+        dialog = CategoryDialog(parent=parent, presenter=presenter)
+        dialog.show()  # Немодальный
+        
+        return dialog

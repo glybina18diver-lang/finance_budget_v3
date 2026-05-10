@@ -50,6 +50,8 @@ class Category(BaseModel):
     
     # Системные
     is_system: bool = False
+    is_active: bool = True
+
 
 @dataclass
 class Transaction(BaseModel):

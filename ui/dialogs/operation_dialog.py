@@ -7,10 +7,11 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Qt, QTimer, QDate
 from ui.widgets.colored_button import ColoredButton
+from ui.dialogs.base_dialog import BaseDialog
 from core.models import Transaction, Account, Category
 
 
-class OperationDialog(QDialog):
+class OperationDialog(BaseDialog):
     """Диалог управления операциями (чистый UI слой, без бизнес-логики)."""
 
     def __init__(self, parent=None, presenter=None):
@@ -35,19 +36,17 @@ class OperationDialog(QDialog):
     # ================= Создание интерфейса =================
     def _init_ui(self):
         """Инициализация интерфейса и компоновки элементов."""
-        main_layout = QVBoxLayout()
-        main_layout.setSpacing(8)
-        main_layout.setContentsMargins(10, 10, 10, 10)
+        layout = self._main_layout
+        layout.setSpacing(8)
+        layout.setContentsMargins(10, 10, 10, 10)
 
-        main_layout.addWidget(self._create_top_panel())
-        main_layout.addWidget(self._create_filter_panel())
-        main_layout.addWidget(self._create_input_panel())
-        main_layout.addWidget(self._create_table(), stretch=1)
-        main_layout.addWidget(self._create_bottom_panel())
-        main_layout.addWidget(self._create_status_bar())
+        layout.addWidget(self._create_top_panel())
+        layout.addWidget(self._create_filter_panel())
+        layout.addWidget(self._create_input_panel())
+        layout.addWidget(self._create_table(), stretch=1)
+        layout.addWidget(self._create_bottom_panel())
+        layout.addWidget(self.status_bar)
 
-        self.setLayout(main_layout)
-        
         # Фокус на поле суммы при открытии
         QTimer.singleShot(100, lambda: self.amount_input.setFocus())
 
@@ -60,7 +59,7 @@ class OperationDialog(QDialog):
 
         buttons = [
             ("🏦 Счета", self._open_account_management, "#2196F3"), 
-            ("📊 Категории", self._stub_method, "#9C27B0"),
+            ("📊 Категории", self._open_category_management, "#9C27B0"),
             ("📤 Переводы", self._stub_method, "#FF9800"), 
             ("🔍 Сверка", self._stub_method, "#607D8B"),
             ("💰 Займы", self._stub_method, "#795548"), 
@@ -164,7 +163,7 @@ class OperationDialog(QDialog):
 
         # Кнопка добавления
         add_btn = ColoredButton("✅ Добавить", "#28a745")
-        add_btn.clicked.connect(self._on_add_transaction)
+        add_btn.clicked.connect(self._get_form_data)
         layout.addWidget(add_btn)
 
         layout.addStretch()
@@ -184,7 +183,7 @@ class OperationDialog(QDialog):
         return date_edit
 
     def _create_table(self) -> QTreeWidget:
-        """Таблица транзакций (пока без данных, сортировка включена)."""
+        """Таблица транзакций (сортировка включена)."""
         self.transactions_tree = QTreeWidget()
         self.transactions_tree.setHeaderLabels(["Дата", "Тип", "Сумма", "Кол-во", "Категория", "Счет", "Описание"])
         self.transactions_tree.setSortingEnabled(True)
@@ -223,42 +222,7 @@ class OperationDialog(QDialog):
         panel.setLayout(layout)
         return panel
 
-    def _create_status_bar(self) -> QLabel:
-        """Строка статуса с авто-сбросом через 2 секунды."""
-        self.status_bar = QLabel("Готово")
-        self.status_bar.setFixedHeight(26)
-        self.status_bar.setStyleSheet("QLabel { padding: 2px 6px; border-top: 1px solid #ddd; }")
-        return self.status_bar
-
     # ================= Контракт View <-> Presenter =================
-
-    def show_status(self, message: str, message_type: str = "info"):
-        """
-        Выводит сообщение в статус-бар с цветовой индикацией и авто-сбросом.
-        
-        Args:
-            message: текст сообщения
-            message_type: тип (info, success, error, warning)
-        """
-        colors = {"info": "#6c757d", "success": "#28a745", "warning": "#fd7e14", "error": "#dc3545"}
-        color = colors.get(message_type, "#6c757d")
-        
-        self.status_bar.setText(message)
-        self.status_bar.setStyleSheet(f"""
-            QLabel {{ color: {color}; font-weight: bold; background-color: #f8f9fa; 
-                       padding: 2px 6px; border-top: 1px solid #ddd; }}
-        """)
-        QTimer.singleShot(2000, self._reset_status_bar)
-
-    def show_error(self, message: str):
-        """
-        Показывает критическое сообщение об ошибке.
-        
-        Args:
-            message: текст ошибки
-        """
-        QMessageBox.critical(self, "Ошибка", message)
-        self.show_status(message, "error")
 
     def clear_form(self):
         """Сбрасывает поля ввода формы к значениям по умолчанию."""
@@ -293,7 +257,7 @@ class OperationDialog(QDialog):
 
     # ================= Обработчики событий =================
 
-    def _on_add_transaction(self):
+    def _get_form_data(self):
         """Собирает данные из формы и передает их презентеру. (добовляет операцию)"""
         raw_amount = self.amount_input.text().strip()
         if not raw_amount:
@@ -472,15 +436,14 @@ class OperationDialog(QDialog):
             self.parent.navigation_service.open_account_dialog(self.parent)
         else:
             self.show_status("Навигация недоступна", message_type="error")
+
+    def _open_category_management(self):
+        """
+        Открывает диалог управления категориями через навигационный сервис.
+        """
+        if hasattr(self.parent, 'navigation_service'):
+            self.parent.navigation_service.open_category_dialog(self.parent)
+        else:
+            self.show_status("Навигация недоступна", message_type="error")
     
     #========== Функции (прочие) ==========
-    def _stub_method(self):
-        """Заглушка для функций, находящихся в разработке."""
-        self.show_status("Функция в разработке", "warning")
-
-    def _reset_status_bar(self):
-        """Возвращает статус-бар в состояние 'Готово'."""
-        self.status_bar.setText("Готово")
-        self.status_bar.setStyleSheet("QLabel { padding: 2px 6px; border-top: 1px solid #ddd; }")
-
-    

@@ -21,8 +21,6 @@ class Database:
             self._conn = sqlite3.connect(self.db_path)
             self._conn.row_factory = sqlite3.Row
             self._conn.execute("PRAGMA foreign_keys = ON")
-            # Закоментирован так как в main.py тоже самое
-            #logger.info(f"БД подключена: {self.db_path}") 
         except sqlite3.Error as e:
             logger.error(f"Ошибка подключения к БД: {e}")
             raise
@@ -63,6 +61,7 @@ class Database:
                 parent_id INTEGER DEFAULT NULL,
                 color TEXT DEFAULT '#3498db',
                 icon TEXT DEFAULT '',
+                is_active INTEGER DEFAULT 1,
                 is_system BOOLEAN DEFAULT 0,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (parent_id) REFERENCES categories(id) ON DELETE CASCADE
@@ -189,6 +188,16 @@ class Database:
         if "type" in cols and "cat_type" not in cols:
             cursor.execute("ALTER TABLE categories RENAME COLUMN type TO cat_type")
             logger.info("Миграция: categories.type → cat_type")
+
+        # --- categories: добавление is_active и is_system (если отсутствуют) ---
+        cursor.execute("PRAGMA table_info(categories)")
+        cols = {row[1] for row in cursor.fetchall()}
+        if "is_active" not in cols:
+            cursor.execute("ALTER TABLE categories ADD COLUMN is_active INTEGER DEFAULT 1")
+            logger.info("Миграция: добавлена колонка categories.is_active")
+        if "is_system" not in cols:
+            cursor.execute("ALTER TABLE categories ADD COLUMN is_system INTEGER DEFAULT 0")
+            logger.info("Миграция: добавлена колонка categories.is_system")
 
         # --- transactions: type → trans_type ---
         cursor.execute("PRAGMA table_info(transactions)")

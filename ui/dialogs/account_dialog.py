@@ -5,7 +5,7 @@ from PySide6.QtWidgets import (
     QLabel, QLineEdit, QComboBox, QGridLayout, QHBoxLayout, QDialogButtonBox
 )
 from PySide6.QtCore import Qt, QTimer
-from PySide6.QtGui import QKeyEvent
+from PySide6.QtGui import QKeyEvent, QDoubleValidator
 import logging
 from datetime import datetime, date
 
@@ -16,14 +16,14 @@ from PySide6.QtWidgets import (
     QHeaderView, QSplitter, QMenu, QApplication, QWidget,
     QDialogButtonBox, QStatusBar, QProgressDialog, QRadioButton
 )
-from PySide6.QtCore import Qt, Signal, QTimer, QDate, QThread
 from PySide6.QtGui import QFont, QColor, QAction
 
 from ui.widgets.colored_button import CompactButton, ColoredDialogButtonBox
+from ui.dialogs.base_dialog import BaseDialog
 from core.models import Account
 
 
-class AccountDialog(QDialog):
+class AccountDialog(BaseDialog):
     """Диалог управления счетами (чистый UI-слой)."""
 
     def __init__(self, parent=None, presenter=None):
@@ -47,9 +47,9 @@ class AccountDialog(QDialog):
 
     def _init_ui(self):
         """Инициализация интерфейса диалога."""
-        main_layout = QVBoxLayout()
-        main_layout.setSpacing(8)
-        main_layout.setContentsMargins(10, 10, 10, 10)
+        layout = self._main_layout
+        layout.setSpacing(8)
+        layout.setContentsMargins(10, 10, 10, 10)
 
         # 1. Таблица счетов
         tree_group = QGroupBox("Счета")
@@ -61,7 +61,7 @@ class AccountDialog(QDialog):
         self.accounts_tree.setContextMenuPolicy(Qt.CustomContextMenu)
         self.accounts_tree.customContextMenuRequested.connect(self._show_context_menu)
         tree_layout.addWidget(self.accounts_tree)
-        main_layout.addWidget(tree_group)
+        layout.addWidget(tree_group)
 
         # 2. Форма редактирования
         form_group = QGroupBox("Добавить/Редактировать счёт")
@@ -87,6 +87,9 @@ class AccountDialog(QDialog):
         self.initial_balance_input.setFixedHeight(26)
         form_layout.addWidget(self.initial_balance_input, row, 1)
         row += 1
+        validator = QDoubleValidator(0.0, 999999999.0, 2)  # min=0, max=999M, 2 знака после запятой
+        validator.setNotation(QDoubleValidator.StandardNotation)
+        self.initial_balance_input.setValidator(validator)
 
         # 🔑 Основное изменение: создаем отдельный виджет для полей кредитной карты
         self.credit_card_group = QGroupBox("Параметры кредитной карты")
@@ -137,20 +140,17 @@ class AccountDialog(QDialog):
         button_layout.addWidget(self.cancel_button)
 
         form_layout.addLayout(button_layout, row, 0, 1, 2)
-        main_layout.addWidget(form_group)
+        layout.addWidget(form_group)
 
         # 3. Кнопки диалога
         dialog_buttons = ColoredDialogButtonBox(color="#4CAF50")
         close_btn = dialog_buttons.addButton("Закрыть", QDialogButtonBox.RejectRole)
         close_btn.clicked.connect(self.accept)
-        main_layout.addWidget(dialog_buttons)
+        layout.addWidget(dialog_buttons)
 
         # 4. Строка статуса
-        self.status_bar = QLabel("Готово")
-        self.status_bar.setFixedHeight(26)
-        main_layout.addWidget(self.status_bar)
+        layout.addWidget(self.status_bar)
 
-        self.setLayout(main_layout)
         self._on_type_change()  # Инициализация видимости полей
 
     # =================== Методы-обработчики UI ===================
@@ -453,8 +453,6 @@ class AccountDialog(QDialog):
             ValueError: если данные некорректны
         """
         name = self.name_input.text().strip()
-        if not name:
-            raise ValueError("Название счёта не может быть пустым")
 
         acc_type = self.type_combo.currentText()
         try:
@@ -487,7 +485,7 @@ class AccountDialog(QDialog):
         """Сбрасывает форму ввода к состоянию 'новый счёт'."""
         self.name_input.clear()
         self.initial_balance_input.setText("0.00")
-        self.type_combo.setCurrentIndex(0)
+        #self.type_combo.setCurrentIndex(0)
         self.currency_combo.setCurrentIndex(0)
         self.editing_account_id = None
         self.add_button.setEnabled(True)
@@ -538,30 +536,6 @@ class AccountDialog(QDialog):
         self.edit_button.setEnabled(True)
         self.cancel_button.setEnabled(True)
         self.show_status(f"Редактирование: {account.name}", "info")
-
-    def show_status(self, message: str, message_type: str = "info"):
-        """
-        Отображает сообщение в строке статуса.
-        
-        Args:
-            message: текст сообщения
-            message_type: тип сообщения ("info", "success", "warning", "error")
-        """
-        colors = {"info": "#6c757d", "success": "#28a745", "warning": "#fd7e14", "error": "#dc3545"}
-        color = colors.get(message_type, "#6c757d")
-        self.status_bar.setStyleSheet(f"color: {color}; font-weight: bold;")
-        self.status_bar.setText(message)
-        QTimer.singleShot(2000, lambda: self.status_bar.setText("Готово"))
-
-    def show_error(self, message: str):
-        """
-        Показывает критическое сообщение об ошибке.
-        
-        Args:
-            message: текст ошибки
-        """
-        QMessageBox.critical(self, "Ошибка", message)
-        #self.show_status(message, "error")
 
     def clear_selection(self):
         """Очищает выделение в таблице."""

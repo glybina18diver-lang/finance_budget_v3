@@ -126,9 +126,6 @@ class AccountRepository:
         
         # Выполняем запрос и получаем cursor
         new_id = self.db.execute(query, params)
-        
-        # Получаем lastrowid СРАЗУ из курсора
-        #new_id = cursor.lastrowid
 
         # Возвращаем обновлённый объект с реальным ID
         account.id = new_id
