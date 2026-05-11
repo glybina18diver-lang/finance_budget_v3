@@ -51,7 +51,7 @@ class AccountPresenter:
             self.load_accounts()
             self.view._reset_form()
         except ValueError as e:
-            self.view.show_error(str(e))
+            self.view.show_status(str(e), "error")
 
     def update_account(self, account_data: Dict) -> None:
         """
@@ -71,7 +71,7 @@ class AccountPresenter:
             self.load_accounts()
             self.view._reset_form()
         except ValueError as e:
-            self.view.show_error(str(e))
+            self.view.show_status(str(e), "error")
 
     def delete_account(self, account_id: int) -> dict:
         """

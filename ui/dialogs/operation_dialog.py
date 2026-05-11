@@ -6,6 +6,8 @@ from PySide6.QtWidgets import (
     QLabel, QLineEdit, QComboBox, QFrame, QMessageBox, QWidget, QHeaderView, QDateEdit
 )
 from PySide6.QtCore import Qt, QTimer, QDate
+from PySide6.QtGui import QFont, QDoubleValidator
+
 from ui.widgets.colored_button import ColoredButton
 from ui.dialogs.base_dialog import BaseDialog
 from core.models import Transaction, Account, Category
@@ -60,7 +62,7 @@ class OperationDialog(BaseDialog):
         buttons = [
             ("🏦 Счета", self._open_account_management, "#2196F3"), 
             ("📊 Категории", self._open_category_management, "#9C27B0"),
-            ("📤 Переводы", self._stub_method, "#FF9800"), 
+            ("📤 Переводы", self._open_transfer_dialog, "#FF9800"), 
             ("🔍 Сверка", self._stub_method, "#607D8B"),
             ("💰 Займы", self._stub_method, "#795548"), 
             ("💳 Кредитки", self._stub_method, "#E91E63")
@@ -127,6 +129,9 @@ class OperationDialog(BaseDialog):
         self.amount_input.setFixedHeight(26)
         self.amount_input.setMinimumWidth(120)
         layout.addWidget(self.amount_input)
+        validator = QDoubleValidator(0.0, 999999999.0, 2)  # min=0, max=999M, 2 знака после запятой
+        validator.setNotation(QDoubleValidator.StandardNotation)
+        self.amount_input.setValidator(validator)
 
         # Тип операции
         self.type_combo = QComboBox()
@@ -230,7 +235,7 @@ class OperationDialog(BaseDialog):
         self.description_input.clear()
         self.date_input.setDate(QDate.currentDate())
         self.type_combo.setCurrentIndex(0)  # Расход
-        self.show_status("Форма очищена", "info")
+        #self.show_status("Форма очищена", "info")
 
     def create_caches(self, accounts: List[Account], categories: List[Category]):
         """
@@ -251,7 +256,7 @@ class OperationDialog(BaseDialog):
         if self.presenter:
             # Просим презентер перезагрузить последние 300 записей
             self.presenter.initial_load_transactions(limit=300)
-            self.show_status("Таблица обновлена", message_type="success")
+            #self.show_status("Таблица обновлена", message_type="success")
         else:
             self.show_error("Презентер не подключен или ошибка метода")
 
@@ -443,6 +448,15 @@ class OperationDialog(BaseDialog):
         """
         if hasattr(self.parent, 'navigation_service'):
             self.parent.navigation_service.open_category_dialog(self.parent)
+        else:
+            self.show_status("Навигация недоступна", message_type="error")
+
+    def _open_transfer_dialog(self):
+        """
+        Открывает диалог переводов через навигационный сервис.
+        """
+        if hasattr(self.parent, 'navigation_service'):
+            self.parent.navigation_service.open_transfer_dialog(self.parent)
         else:
             self.show_status("Навигация недоступна", message_type="error")
     

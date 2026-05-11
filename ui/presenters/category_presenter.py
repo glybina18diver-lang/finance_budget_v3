@@ -37,6 +37,7 @@ class CategoryPresenter:
             return
         categories = self.service.get_all_categories()
         self.view.load_categories(categories)
+        self.view.load_parent_categories(categories)
 
     def add_category(self, category_data: dict):
         """
@@ -51,7 +52,7 @@ class CategoryPresenter:
             self.load_categories()  # обновить список.
             self.view._reset_form()
         except ValueError as e:
-            self.view.show_error(str(e))
+            self.view.show_status(str(e), "error")
 
     def update_category(self, data: dict):
         """
@@ -66,7 +67,7 @@ class CategoryPresenter:
             self.load_categories()
             self.view._reset_form()
         except ValueError as e:
-            self.view.show_error(str(e))
+            self.view.show_status(str(e), "error")
 
     def delete_category(self, category_id: int):
         """
@@ -81,10 +82,8 @@ class CategoryPresenter:
             self.view.clear_selection() 
             self.load_categories()
         except ValueError as e:
-            self.view.show_error(str(e))
-
-
-
+            self.view.show_status(str(e), "error")
+            
     def select_category(self, category_id: int) -> None:
         """
         Загружает данные выбранной категории в форму редактирования.

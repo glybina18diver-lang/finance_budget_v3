@@ -2,7 +2,9 @@
 """
 Базовый диалог с общими функциями: статус-бар, сообщения, заглушки.
 """
-from PySide6.QtWidgets import QDialog, QLabel, QVBoxLayout, QHBoxLayout, QMessageBox
+from PySide6.QtWidgets import (
+    QDialog, QLabel, QVBoxLayout, QHBoxLayout, QMessageBox, QTextEdit, QDialogButtonBox
+)
 from PySide6.QtCore import QTimer
 
 
@@ -63,3 +65,39 @@ class BaseDialog(QDialog):
     def _stub_method(self):
         """Заглушка для функций, находящихся в разработке."""
         self.show_status("Функция в разработке", "warning")
+
+    def _show_cannot_delete_message(self, result_info):
+        """
+        Показывает диалог с причиной невозможности удаления счёта.
+        
+        Args:
+            result_info: словарь с ключами 'account_name', 'total_operations'
+        """
+        account_name = result_info.get('account_name', 'Счёт')
+        total_ops = result_info.get('total_operations', 0)
+        
+        html_text = f"""
+            <h3 style='color: #dc3545; margin-top: 0;'>❌ Счёт нельзя удалить</h3>
+            <p>Счёт <b>{account_name.replace('<', '&lt;').replace('>', '&gt;')}</b> имеет связанные операции.</p>
+            <p><b>Всего операций:</b> {total_ops}</p>
+            <p style='color: #6c757d; margin-bottom: 0;'>
+                Для удаления счёта необходимо сначала удалить все связанные операции 
+                или перенести их на другие счета.
+            </p>
+        """
+        
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Невозможно удалить счёт")
+        dialog.resize(450, 220)
+        
+        layout = QVBoxLayout(dialog)
+        text_edit = QTextEdit()
+        text_edit.setReadOnly(True)
+        text_edit.setHtml(html_text)
+        layout.addWidget(text_edit)
+        
+        button_box = QDialogButtonBox(QDialogButtonBox.Ok)
+        button_box.accepted.connect(dialog.accept)
+        layout.addWidget(button_box)
+        
+        dialog.exec()

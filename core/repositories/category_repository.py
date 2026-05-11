@@ -43,7 +43,7 @@ class CategoryRepository:
         # Фильтруем is_system = 0, чтобы не показывать служебные категории.
         query = """
             SELECT * FROM categories 
-            WHERE cat_type = ? AND is_system = 0 
+            WHERE cat_type = ?
             ORDER BY name
         """
         rows = self.db.fetchall(query, (cat_type,))
@@ -57,8 +57,8 @@ class CategoryRepository:
             Список объектов Category
         """
         query = """
-            SELECT * FROM categories 
-            WHERE is_system = 0 
+            SELECT * FROM categories
+            WHERE is_active = 1 
             ORDER BY cat_type, name
         """
         rows = self.db.fetchall(query)

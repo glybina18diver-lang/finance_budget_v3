@@ -5,7 +5,7 @@ from PySide6.QtWidgets import (
     QLabel, QLineEdit, QComboBox, QGridLayout, QHBoxLayout, QDialogButtonBox
 )
 from PySide6.QtCore import Qt, QTimer
-from PySide6.QtGui import QKeyEvent, QDoubleValidator
+from PySide6.QtGui import QKeyEvent
 import logging
 from datetime import datetime, date
 
@@ -16,7 +16,7 @@ from PySide6.QtWidgets import (
     QHeaderView, QSplitter, QMenu, QApplication, QWidget,
     QDialogButtonBox, QStatusBar, QProgressDialog, QRadioButton
 )
-from PySide6.QtGui import QFont, QColor, QAction
+from PySide6.QtGui import QFont, QDoubleValidator
 
 from ui.widgets.colored_button import CompactButton, ColoredDialogButtonBox
 from ui.dialogs.base_dialog import BaseDialog
@@ -83,7 +83,8 @@ class AccountDialog(BaseDialog):
         row += 1
 
         form_layout.addWidget(QLabel("Начальный баланс:"), row, 0)
-        self.initial_balance_input = QLineEdit("0.00")
+        self.initial_balance_input = QLineEdit()
+        self.initial_balance_input.setPlaceholderText("0.00")
         self.initial_balance_input.setFixedHeight(26)
         form_layout.addWidget(self.initial_balance_input, row, 1)
         row += 1
@@ -97,17 +98,20 @@ class AccountDialog(BaseDialog):
         
         # Поля кредитной карты (теперь в отдельном контейнере)
         credit_card_layout.addWidget(QLabel("Кредитный лимит:"), 0, 0)
-        self.credit_limit_input = QLineEdit("0.00")
+        self.credit_limit_input = QLineEdit()
+        self.credit_limit_input.setPlaceholderText("0.00")
         self.credit_limit_input.setFixedHeight(26)
         credit_card_layout.addWidget(self.credit_limit_input, 0, 1)
         
         credit_card_layout.addWidget(QLabel("День платежа (1-31):"), 1, 0)
-        self.payment_day_input = QLineEdit("1")
+        self.payment_day_input = QLineEdit()
+        self.payment_day_input.setPlaceholderText("1")
         self.payment_day_input.setFixedHeight(26)
         credit_card_layout.addWidget(self.payment_day_input, 1, 1)
         
         credit_card_layout.addWidget(QLabel("Мин. платёж (%):"), 2, 0)
-        self.min_payment_input = QLineEdit("5.0")
+        self.min_payment_input = QLineEdit()
+        self.min_payment_input.setPlaceholderText("5.0")
         self.min_payment_input.setFixedHeight(26)
         credit_card_layout.addWidget(self.min_payment_input, 2, 1)
         
@@ -304,42 +308,6 @@ class AccountDialog(BaseDialog):
                     )
         else:
             self.show_status("Презентер не подключен", "error")
-        
-    def _show_cannot_delete_message(self, result_info):
-        """
-        Показывает диалог с причиной невозможности удаления счёта.
-        
-        Args:
-            result_info: словарь с ключами 'account_name', 'total_operations'
-        """
-        account_name = result_info.get('account_name', 'Счёт')
-        total_ops = result_info.get('total_operations', 0)
-        
-        html_text = f"""
-            <h3 style='color: #dc3545; margin-top: 0;'>❌ Счёт нельзя удалить</h3>
-            <p>Счёт <b>{account_name.replace('<', '&lt;').replace('>', '&gt;')}</b> имеет связанные операции.</p>
-            <p><b>Всего операций:</b> {total_ops}</p>
-            <p style='color: #6c757d; margin-bottom: 0;'>
-                Для удаления счёта необходимо сначала удалить все связанные операции 
-                или перенести их на другие счета.
-            </p>
-        """
-        
-        dialog = QDialog(self)
-        dialog.setWindowTitle("Невозможно удалить счёт")
-        dialog.resize(450, 220)
-        
-        layout = QVBoxLayout(dialog)
-        text_edit = QTextEdit()
-        text_edit.setReadOnly(True)
-        text_edit.setHtml(html_text)
-        layout.addWidget(text_edit)
-        
-        button_box = QDialogButtonBox(QDialogButtonBox.Ok)
-        button_box.accepted.connect(dialog.accept)
-        layout.addWidget(button_box)
-        
-        dialog.exec()
 
     def _show_account_stats(self): #TODO не рабочий (скопирован из V2)
         """Показывает статистику по выбранному счету"""
@@ -453,10 +421,16 @@ class AccountDialog(BaseDialog):
             ValueError: если данные некорректны
         """
         name = self.name_input.text().strip()
+        if name == "":
+            raise ValueError("Введите название счёта")
 
         acc_type = self.type_combo.currentText()
+
+        raw_balance = self.initial_balance_input.text().strip().replace(',', '.')
+        if raw_balance == "":
+            raise ValueError("Введите начальный баланс")
         try:
-            initial_balance = float(self.initial_balance_input.text() or "0")
+            initial_balance = float(raw_balance)
             currency = self.currency_combo.currentText()
         except ValueError:
             raise ValueError("Некорректный формат начального баланса")

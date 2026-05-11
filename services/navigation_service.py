@@ -13,22 +13,26 @@ from core.db import Database
 from ui.dialogs.operation_dialog import OperationDialog
 from ui.dialogs.account_dialog import AccountDialog
 from ui.dialogs.category_dialog import CategoryDialog
+from ui.dialogs.transfer_dialog import TransferDialog
 
 # Презентеры
 from ui.presenters.transaction_presenter import TransactionPresenter
 from ui.presenters.account_presenter import AccountPresenter
 from ui.presenters.category_presenter import CategoryPresenter
+from ui.presenters.transfer_presenter import TransferPresenter
 
 
 # Сервисы
 from services.transaction_service import TransactionService
 from services.account_service import AccountService
 from services.category_service import CategoryService
+from services.transfer_service import TransferService
 
 # Репозитории
 from core.repositories.account_repository import AccountRepository
 from core.repositories.transaction_repository import TransactionRepository
 from core.repositories.category_repository import CategoryRepository
+from core.repositories.transfer_repository import TransferRepository
 
 
 class NavigationService:
@@ -50,6 +54,7 @@ class NavigationService:
         self.acc_repo = AccountRepository(self.db)
         self.tx_repo = TransactionRepository(self.db)
         self.cat_repo = CategoryRepository(self.db)
+        self.tr_repo = TransferRepository(self.db)
 
     def open_operation_dialog(self, parent: QWidget) -> None:
         """
@@ -97,7 +102,7 @@ class NavigationService:
         Returns:
             Экземпляр CategoryDialog
         """
-        # 1. Создаём сервис для КАТЕГОРИЙ (не счетов!)
+        # 1. Создаём сервис для КАТЕГОРИЙ
         cat_service = CategoryService(cat_repo=self.cat_repo)
         
         # 2. Создаём презентер для КАТЕГОРИЙ
@@ -107,4 +112,20 @@ class NavigationService:
         dialog = CategoryDialog(parent=parent, presenter=presenter)
         dialog.show()  # Немодальный
         
+        return dialog
+    
+    def open_transfer_dialog(self, parent: QWidget) -> TransferDialog:
+        """
+        Открывает диалог переводов (немодальный).
+        
+        Args:
+            parent: родительское окно (обычно MainWindow)
+            
+        Returns:
+            Объект TransferDialog
+        """
+        tr_service = TransferService(self.tr_repo, self.acc_repo)
+        presenter = TransferPresenter(tr_service)
+        dialog = TransferDialog(parent=parent, presenter=presenter)
+        dialog.show()
         return dialog

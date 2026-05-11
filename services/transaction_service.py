@@ -41,7 +41,6 @@ class TransactionService:
         Raises:
             ValueError: при некорректном формате суммы или данных
         """
-        # В начале create_transaction
         if not isinstance(account_id, int) or account_id <= 0:
             raise ValueError("Некорректный ID счёта")
         if not isinstance(category_id, int) or category_id <= 0:
