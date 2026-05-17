@@ -206,6 +206,22 @@ class Database:
             cursor.execute("ALTER TABLE transactions RENAME COLUMN type TO trans_type")
             logger.info("Миграция: transactions.type → trans_type")
 
+        # --- transfers: добавление type, is_system, loan_id (если отсутствуют) ---
+        cursor.execute("PRAGMA table_info(transfers)")
+        cols = {row[1] for row in cursor.fetchall()}
+
+        if "type" not in cols:
+            cursor.execute("ALTER TABLE transfers ADD COLUMN type TEXT DEFAULT 'internal'")
+            logger.info("Миграция: добавлена колонка transfers.type")
+
+        if "is_system" not in cols:
+            cursor.execute("ALTER TABLE transfers ADD COLUMN is_system INTEGER DEFAULT 0")
+            logger.info("Миграция: добавлена колонка transfers.is_system")
+
+        if "loan_id" not in cols:
+            cursor.execute("ALTER TABLE transfers ADD COLUMN loan_id INTEGER DEFAULT NULL")
+            logger.info("Миграция: добавлена колонка transfers.loan_id")
+
         self._conn.commit()
 
     # --- Методы доступа к данным ---

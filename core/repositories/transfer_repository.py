@@ -65,42 +65,37 @@ class TransferRepository:
 
     def get_all_with_details(self) -> List[dict]:
         """
-        Возвращает переводы с подставленными именами счетов.
-        Оптимизировано для отображения в UI (избегает N+1 запросов).
+        Возвращает пользовательские переводы с именами счетов и контрагентов.
         
         Returns:
-            Список словарей: {id, date, amount, type, from_account_name, to_account_name, description}
+            Список словарей с данными для UI
         """
         query = """
-            SELECT t.id, t.date, t.amount, t.type, t.description,
-                   a1.name as from_account_name,
-                   a2.name as to_account_name
+            SELECT 
+                t.id, t.date, t.amount, t.type, t.description, t.is_system,
+                a1.name AS from_account_name,
+                a2.name AS to_account_name,
+                -- Определяем имя контрагента для внешних переводов
+                CASE 
+                    WHEN t.type = 'external' AND a1.account_type = 'Counterparty' THEN a1.name
+                    WHEN t.type = 'external' AND a2.account_type = 'Counterparty' THEN a2.name
+                    ELSE ''
+                END AS counterparty_name
             FROM transfers t
             LEFT JOIN accounts a1 ON t.from_account_id = a1.id
             LEFT JOIN accounts a2 ON t.to_account_id = a2.id
+            WHERE t.is_system = 0  -- Фильтруем системные переводы на уровне БД
             ORDER BY t.date DESC
         """
         return self.db.fetchall(query)
 
     def create(self, transfer: Transfer) -> int:
-        """
-        Создаёт новую запись перевода в БД.
-        
-        Args:
-            transfer: объект Transfer с данными перевода
-            
-        Returns:
-            ID созданной записи
-        """
         query = """
             INSERT INTO transfers (
-                date, 
-                amount, 
-                type, 
-                from_account_id, 
-                to_account_id, 
-                description
-            ) VALUES (?, ?, ?, ?, ?, ?)
+                date, amount, type,
+                from_account_id, to_account_id,
+                description, is_system, loan_id
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         """
         params = (
             transfer.date,
@@ -108,10 +103,12 @@ class TransferRepository:
             transfer.type,
             transfer.from_account_id,
             transfer.to_account_id,
-            transfer.description
+            transfer.description,
+            1 if transfer.is_system else 0,
+            transfer.loan_id
         )
-        cursor = self.db.execute(query, params)
-        return cursor.lastrowid
+        transfer.id = self.db.execute(query, params)
+        return transfer
 
     def delete(self, transfer_id: int) -> bool:
         """

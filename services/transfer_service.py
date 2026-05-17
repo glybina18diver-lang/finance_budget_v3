@@ -63,6 +63,10 @@ class TransferService:
         """Возвращает все переводы."""
         return self.transfer_repo.get_all()
 
+    def get_transfers_with_names(self) -> List[Transfer]:
+        """Возвращает переводы с именем а не ID."""
+        return self.transfer_repo.get_all_with_details()
+
     def get_all_accounts_active(self) -> List:
         """Возвращает активные счета для комбобоксов."""
         return self.account_repo.get_all_active()
@@ -71,12 +75,23 @@ class TransferService:
         """Логика внутреннего перевода (Счёт → Счёт)."""
         if data["from_account_id"] == data["to_account_id"]:
             raise ValueError("Счета не могут совпадать")
-            
-        # Снимаем с отправителя
-        self.account_repo.update(data["from_account_id"], -data["amount"])
-        # Начисляем получателю
-        self.account_repo.update(data["to_account_id"], data["amount"])
         
+        # Получаем объекты счетов
+        from_account = self.account_repo.get_by_id(data["from_account_id"])
+        to_account = self.account_repo.get_by_id(data["to_account_id"])
+        
+        if not from_account or not to_account:
+            raise ValueError("Один из счетов не найден")
+        
+        # Обновляем балансы в объектах
+        from_account.current_balance -= data["amount"]
+        to_account.current_balance += data["amount"]
+        
+        # Сохраняем изменения через репозиторий
+        self.account_repo.update(from_account)
+        self.account_repo.update(to_account)
+        
+        # Создаём перевод
         transfer = Transfer(
             date=data["date"],
             amount=data["amount"],
@@ -89,41 +104,67 @@ class TransferService:
 
     def _create_external_transfer(self, data: dict) -> Transfer:
         """Логика внешнего перевода (Счёт ↔ Контрагент)."""
-        counterparty_name = data["counterparty"].strip().lower()
+        counterparty_name = data["counterparty"].strip()
         
-        # Получаем или создаём виртуальный счёт контрагента
-        counterparty_id = self.account_repo.get_or_create_counterparty(counterparty_name)
+        # Получаем объект Account контрагента (создает или находит)
+        counterparty_account = self.account_repo.get_or_create_counterparty(counterparty_name)
+        counterparty_id = counterparty_account.id  # ← Берем ID из объекта
         
+        # Получаем объекты счетов пользователя
         if data["direction"] == "incoming":
-            # Контрагент → Наш счёт
-            from_id = counterparty_id
-            to_id = data["account_id"]
-            self.account_repo.update(counterparty_id, -data["amount"])
-            self.account_repo.update(data["account_id"], data["amount"])
+            from_account = self.account_repo.get_by_id(counterparty_id)
+            to_account = self.account_repo.get_by_id(data["account_id"])
         else:
-            # Наш счёт → Контрагент
-            from_id = data["account_id"]
-            to_id = counterparty_id
-            self.account_repo.update(data["account_id"], -data["amount"])
-            self.account_repo.update(counterparty_id, data["amount"])
+            from_account = self.account_repo.get_by_id(data["account_id"])
+            to_account = self.account_repo.get_by_id(counterparty_id)
             
+        if not from_account or not to_account:
+            raise ValueError("Ошибка при получении счетов для перевода")
+        
+        # Обновляем балансы
+        from_account.current_balance -= data["amount"]
+        to_account.current_balance += data["amount"]
+        
+        # Сохраняем изменения
+        self.account_repo.update(from_account)
+        self.account_repo.update(to_account)
+        
+        # Создаём перевод
         transfer = Transfer(
             date=data["date"],
             amount=data["amount"],
             type="external",
-            from_account_id=from_id,
-            to_account_id=to_id,
-            description=data.get("description")
+            from_account_id=from_account.id,
+            to_account_id=to_account.id,
+            description=data.get("description"),
+            is_system=False,  # Пользовательский перевод
+            loan_id=None
         )
         return self.transfer_repo.create(transfer)
 
     def _reverse_balance_changes(self, tx: Transfer):
-        """Откатывает изменение балансов при удалении перевода."""
-        # Если перевод был внутренний
-        if tx.type == "internal":
-            self.account_repo.update(tx.from_account_id, tx.amount)  # Возвращаем деньги
-            self.account_repo.update(tx.to_account_id, -tx.amount)   # Забираем обратно
-        # Если внешний (логика аналогична, просто меняем знаки)
-        else:
-            self.account_repo.update(tx.from_account_id, tx.amount)
-            self.account_repo.update(tx.to_account_id, -tx.amount)
+        """
+        Откатывает изменение балансов при удалении перевода.
+        
+        Args:
+            tx: объект Transfer, который удаляется
+        """
+        # Получаем объекты счетов из БД по их ID
+        from_account = self.account_repo.get_by_id(tx.from_account_id)
+        to_account = self.account_repo.get_by_id(tx.to_account_id)
+        
+        if not from_account or not to_account:
+            # Если счета уже удалены или не найдены, откат невозможен
+            # В реальной системе можно логировать ошибку, но здесь просто выходим
+            return
+
+        # Логика отката: делаем обратное действие тому, что было при создании
+        # При создании: From -= Amount, To += Amount
+        # При удалении: From += Amount, To -= Amount
+        
+        from_account.current_balance += tx.amount
+        to_account.current_balance -= tx.amount
+        
+        # Сохраняем изменения через репозиторий (передаем объекты)
+        self.account_repo.update(from_account)
+        self.account_repo.update(to_account)

@@ -178,3 +178,57 @@ class AccountRepository:
         self.db.execute(query, params)
         return True
     
+    def get_or_create_counterparty(self, name: str) -> Account:
+        """
+        Ищет счет контрагента по имени. Если не найден — создает новый системный счет.
+        
+        Args:
+            name: имя контрагента
+            
+        Returns:
+            Объект Account созданного или найденного контрагента
+        """
+        normalized_name = name.strip().lower()
+        
+        # 1. Проверяем существование
+        query = "SELECT * FROM accounts WHERE LOWER(name) = ? AND account_type = 'Counterparty'"
+        row = self.db.fetchone(query, (normalized_name,))
+        
+        if row:
+            return self._row_to_account(row)
+            
+        # 2. Создаем новый объект Account
+        new_account = Account(
+            name=name.strip(),
+            account_type="Counterparty",
+            initial_balance=0.0,
+            current_balance=0.0,
+            currency="RUB",
+            is_active=True,
+            is_system=True  # Системный, чтобы скрыть из обычных списков
+        )
+        
+        # 3. Сохраняем в БД
+        insert_query = """
+            INSERT INTO accounts (
+                name, account_type, initial_balance, current_balance, 
+                currency, is_active, is_system
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+        """
+        params = (
+            new_account.name,
+            new_account.account_type,
+            new_account.initial_balance,
+            new_account.current_balance,
+            new_account.currency,
+            1 if new_account.is_active else 0,
+            1 if new_account.is_system else 0
+        )
+        
+        # db.execute возвращает lastrowid
+        new_id = self.db.execute(insert_query, params)
+        
+        # Присваиваем ID объекту
+        new_account.id = new_id
+        
+        return new_account

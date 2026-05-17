@@ -7,9 +7,11 @@ from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QTabWidget, QWidget,
     QGroupBox, QFormLayout, QRadioButton, QButtonGroup,
     QDateEdit, QLineEdit, QComboBox, QLabel, QTreeWidget,
-    QTreeWidgetItem, QHeaderView, QMenu, QMessageBox
+    QTreeWidgetItem, QHeaderView, QMenu, QMessageBox, QAbstractItemView
 )
 from PySide6.QtCore import Qt, QDate
+from typing import List, Optional
+
 from PySide6.QtGui import QFont, QDoubleValidator
 
 from ui.dialogs.base_dialog import BaseDialog
@@ -75,6 +77,7 @@ class TransferDialog(BaseDialog):
         self.date_input.setDisplayFormat("dd.MM.yyyy")
         form_layout.addRow("Дата:", self.date_input)
 
+        # Сумма
         self.amount_input = QLineEdit()
         self.amount_input.setPlaceholderText("0.00")
         form_layout.addRow("Сумма:", self.amount_input)
@@ -108,11 +111,13 @@ class TransferDialog(BaseDialog):
         dir_layout.addWidget(self.radio_outgoing)
         ext_layout.addRow("Направление:", dir_layout)
 
+        # Контрагент
         self.counterparty_input = QLineEdit()
         self.counterparty_input.setPlaceholderText("Имя контрагента")
         ext_layout.addRow("Контрагент:", self.counterparty_input)
         layout.addWidget(self.external_frame)
 
+        # Описание
         self.description_input = QLineEdit()
         self.description_input.setPlaceholderText("Описание (необязательно)")
         form_layout.addRow("Описание:", self.description_input)
@@ -137,18 +142,28 @@ class TransferDialog(BaseDialog):
         """Создаёт вкладку просмотра переводов."""
         tab = QWidget()
         layout = QVBoxLayout(tab)
-        self.tree = QTreeWidget()
-        self.tree.setHeaderLabels(["Дата", "Тип", "Сумма", "Откуда", "Куда", "Описание"])
-        self.tree.header().setSectionResizeMode(0, QHeaderView.ResizeToContents)
-        self.tree.header().setSectionResizeMode(1, QHeaderView.ResizeToContents)
-        self.tree.header().setSectionResizeMode(2, QHeaderView.ResizeToContents)
-        self.tree.header().setSectionResizeMode(3, QHeaderView.Stretch)
-        self.tree.header().setSectionResizeMode(4, QHeaderView.Stretch)
-        self.tree.header().setSectionResizeMode(5, QHeaderView.Stretch)
-        self.tree.setAlternatingRowColors(True)
-        self.tree.setContextMenuPolicy(Qt.CustomContextMenu)
-        self.tree.customContextMenuRequested.connect(self._show_context_menu)
-        layout.addWidget(self.tree)
+        
+        self.transfers_tree = QTreeWidget()
+        self.transfers_tree.setHeaderLabels(["Дата", "Тип", "Сумма", "Откуда", "Куда", "Контрагент", "Описание"])
+        
+        # === ВАЖНО: разрешаем множественное выделение ===
+        self.transfers_tree.setSelectionMode(QTreeWidget.ExtendedSelection)
+        self.transfers_tree.setSelectionBehavior(QTreeWidget.SelectRows)
+        
+        header = self.transfers_tree.header()
+        header.setSectionResizeMode(0, QHeaderView.ResizeToContents)  # Дата
+        header.setSectionResizeMode(1, QHeaderView.ResizeToContents)  # Тип
+        header.setSectionResizeMode(2, QHeaderView.ResizeToContents)  # Сумма
+        header.setSectionResizeMode(3, QHeaderView.Stretch)           # Откуда
+        header.setSectionResizeMode(4, QHeaderView.Stretch)           # Куда
+        header.setSectionResizeMode(5, QHeaderView.Stretch)           # Контрагент
+        header.setSectionResizeMode(6, QHeaderView.Stretch)           # Описание
+        
+        self.transfers_tree.setAlternatingRowColors(True)
+        self.transfers_tree.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.transfers_tree.customContextMenuRequested.connect(self._show_context_menu)
+        
+        layout.addWidget(self.transfers_tree)
         return tab
 
     def _toggle_transfer_type(self):
@@ -208,60 +223,119 @@ class TransferDialog(BaseDialog):
 
         return data
 
+    def _get_selected_transfer_ids(self) -> List[int]:
+        """
+        Возвращает список ID всех выделенных переводов.
+        
+        Returns:
+            Список целых чисел (ID переводов)
+        """
+        selected_items = self.transfers_tree.selectedItems()
+        ids = []
+        for item in selected_items:
+            transfer_id = item.data(0, Qt.UserRole)
+            if transfer_id is not None:
+                ids.append(transfer_id)
+        return ids
+
     def _show_context_menu(self, position):
         """
-        Показывает контекстное меню для таблицы переводов.
-        
+        Показывает контекстное меню для перевода.
+
         Args:
-            position: координаты курсора в таблице
+            position: позиция клика
         """
-        item = self.tree.itemAt(position)
+        item = self.transfers_tree.itemAt(position)
         if not item:
             return
 
-        menu = QMenu(self)
-        delete_action = menu.addAction("🗑️ Удалить перевод")
-        delete_action.triggered.connect(lambda: self._on_context_delete(item.data(0, Qt.UserRole)))
-        menu.exec(self.tree.viewport().mapToGlobal(position))
+        is_system = item.data(0, Qt.UserRole + 1)
 
-    def _on_context_delete(self, transfer_id: int):
-        """
-        Запрашивает удаление перевода через презентер.
+        # Не показываем меню для системных переводов (или делаем его пустым/неактивным)
+        if is_system:
+            return
+
+        selected_ids = self._get_selected_transfer_ids()
+        if not selected_ids:
+            return
+
+        menu = QMenu(self)
+        delete_action = menu.addAction("🗑️ Удалить выбранные")
+        delete_action.triggered.connect(lambda: self._delete_selected_transfers(selected_ids))
+        menu.exec(self.transfers_tree.viewport().mapToGlobal(position))
+
+    def _delete_selected_transfers(self, transfer_ids: List[int]):
+        """Удаляет несколько переводов.
         
         Args:
-            transfer_id: ID удаляемого перевода
+            transfer_ids: список ID переводов
         """
+        if not transfer_ids:
+            return
+            
+        count = len(transfer_ids)
         reply = QMessageBox.question(
-            self, "Подтверждение", "Удалить этот перевод?",
+            self,
+            "Подтверждение",
+            f"Удалить {count} перевод(ов)?",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             QMessageBox.StandardButton.No
         )
+        
         if reply == QMessageBox.StandardButton.Yes and self.presenter:
-            self.presenter.delete_transfer(transfer_id)
+            self.presenter.delete_transfers(transfer_ids)
 
     # =================== Контракт View <-> Presenter ===================
 
-    def load_transfers(self, transfers: list):
+    def load_transfers(self, transfers: List[dict]):
         """
-        Заполняет таблицу переводами.
+        Загружает переводы в таблицу.
         
         Args:
-            transfers: список объектов Transfer или словарей
+            transfers: список словарей с ключами: id, date, amount, type, 
+                       from_account_name, to_account_name, counterparty_name, is_system
         """
-        self.tree.clear()
+        self.transfers_tree.clear()
+        
         for tx in transfers:
+            # Безопасное получение данных с дефолтными значениями
+            date_str = tx.get("date", "")
+            amount_val = tx.get("amount", 0)
+            tx_type = tx.get("type", "internal")
+            from_name = tx.get("from_account_name", "")
+            to_name = tx.get("to_account_name", "")
+            counterparty = tx.get("counterparty_name", "")
+            description = tx.get("description", "")
+            is_system = bool(tx.get("is_system", False))
+            
+            # Форматирование типа
+            display_type = "Внутренний" if tx_type == "internal" else "Внешний"
+            
+            # Форматирование суммы
+            try:
+                amount_formatted = f'{float(amount_val):,.2f}'
+            except (ValueError, TypeError):
+                amount_formatted = "0.00"
+
             item = QTreeWidgetItem([
-                tx.date,
-                "Внутренний" if tx.type == "internal" else "Внешний",
-                f"{tx.amount:,.2f}",
-                tx.from_account_name,
-                tx.to_account_name,
-                tx.description or ""
+                date_str,
+                display_type,
+                amount_formatted,
+                from_name or "",
+                to_name or "",
+                counterparty or "",  # ← Теперь здесь будет имя контрагента для внешних переводов
+                description or ""
             ])
-            item.setData(0, Qt.UserRole, tx.id)
-            self.tree.addTopLevelItem(item)
+            
+            # Сохраняем ID и флаг системности в скрытых данных элемента
+            item.setData(0, Qt.UserRole, tx.get("id"))
+            item.setData(0, Qt.UserRole + 1, is_system)
+            
+            self.transfers_tree.addTopLevelItem(item)
 
     def clear_selection(self):
         """Очищает выделение в таблице."""
-        self.tree.clearSelection()
-        self._reset_form()
+        self.transfers_tree.clearSelection()
+        # self._reset_form()
+
+    

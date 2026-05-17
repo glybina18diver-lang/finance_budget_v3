@@ -70,6 +70,7 @@ class AccountDialog(BaseDialog):
         row = 0
         form_layout.addWidget(QLabel("Название:"), row, 0)
         self.name_input = QLineEdit()
+        self.name_input.setPlaceholderText("Например: Сберкарта")
         self.name_input.setFixedHeight(26)
         form_layout.addWidget(self.name_input, row, 1)
         row += 1
@@ -458,7 +459,7 @@ class AccountDialog(BaseDialog):
     def _reset_form(self):
         """Сбрасывает форму ввода к состоянию 'новый счёт'."""
         self.name_input.clear()
-        self.initial_balance_input.setText("0.00")
+        self.initial_balance_input.clear()
         #self.type_combo.setCurrentIndex(0)
         self.currency_combo.setCurrentIndex(0)
         self.editing_account_id = None

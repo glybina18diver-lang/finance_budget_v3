@@ -21,11 +21,11 @@ class Account(BaseModel):
     initial_balance: float = 0.0
     current_balance: float = 0.0
     
-    # Специфичные поля из V2
-    credit_limit: float = 0.0
-    payment_due_day: int = 1
-    min_payment_percent: float = 5.0
-    last_payment_date: Optional[str] = None
+    # Специфичные поля для Credit Card
+    credit_limit: Optional[float] = None       # Лимит кредита
+    payment_due_day: Optional[int] = None      # День оплаты (1-31)
+    min_payment_percent: Optional[float] = None # Минимальный платеж в %
+    last_payment_date: Optional[str] = None    # Дата последнего платежа (YYYY-MM-DD)
     
     # Системные
     is_active: bool = True
@@ -79,15 +79,18 @@ class Transaction(BaseModel):
     updated_at: str = field(default_factory=lambda: datetime.now().isoformat())
 
 @dataclass
-class Transfer(BaseModel):
-    """Модель перевода (из схемы V2)."""
+class Transfer:
+    """Модель перевода (Обновленная схема V3)."""
+    id: Optional[int] = None
     date: str = ""
     amount: float = 0.0
+    type: str = "internal"        # ← внутренний / внешний
     from_account_id: int = 0
     to_account_id: int = 0
-    description: str = ""
-    created_at: str = field(default_factory=lambda: datetime.now().isoformat())
-
+    description: Optional[str] = None
+    is_system: bool = False       # ← True если системный (займ и др.)
+    loan_id: Optional[int] = None # ← ID займа, если есть
+    
 @dataclass
 class Loan(BaseModel):
     """Модель займа (из схемы V2)."""

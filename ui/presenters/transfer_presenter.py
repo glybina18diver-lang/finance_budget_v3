@@ -4,6 +4,7 @@
 Связывает UI и бизнес-логику.
 """
 from services.transfer_service import TransferService
+from typing import Dict, List
 
 
 class TransferPresenter:
@@ -38,21 +39,22 @@ class TransferPresenter:
         """
         try:
             self.service.create_transfer(transfer_data)
-            self.view.show_status("✅ Перевод успешно добавлен", "success")
+            self.view.show_status("Перевод успешно добавлен", "success")
             self._load_data()
         except ValueError as e:
             self.view.show_status(str(e), "error")
 
-    def delete_transfer(self, transfer_id: int) -> None:
+    def delete_transfers(self, transfer_ids: List[int]) -> None:
         """
         Обрабатывает удаление перевода.
         
         Args:
-            transfer_id: ID перевода
+            transfer_ids: ID перевода
         """
         try:
-            self.service.delete_transfer(transfer_id)
-            self.view.show_status("Перевод удалён", "success")
+            for tid in transfer_ids:
+                self.service.delete_transfer(tid)
+                self.view.show_status(f"Удалено переводов: {len(transfer_ids)}", "success")
             self.view.clear_selection() 
             self._load_data()
         except ValueError as e:
@@ -62,14 +64,17 @@ class TransferPresenter:
         """Загружает переводы и списки счетов в UI."""
         if not self.view:
             return
-        transfers = self.service.get_all_transfers()
-        self.view.load_transfers(transfers)
         
+        # 1. Загружаем переводы
+        transfer_data = self.service.get_transfers_with_names()
+        self.view.load_transfers(transfer_data)
+
         # Заполняем комбобоксы счетов
         accounts = self.service.get_all_accounts_active()
-        self.view.from_combo.clear()
-        self.view.to_combo.clear()
-        self.view.ext_account_combo.clear()
+        self.view.amount_input.clear()
+        self.view.description_input.clear()
+        self.view.counterparty_input.clear()
+        self.view.amount_input.setFocus()
         for acc in accounts:
             self.view.from_combo.addItem(acc.name, acc.id)
             self.view.to_combo.addItem(acc.name, acc.id)
