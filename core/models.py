@@ -99,8 +99,8 @@ class Loan(BaseModel):
     contact_name: str = ""
     loan_type: str = "issued"  # issued, received
     loan_amount: float = 0.0
-    outstanding_amount: float = 0.0
-    interest_rate: float = 0.0
+    remaining: float = 0.0
+    # interest_rate: float = 0.0 в займа не исползуется
     issue_date: str = ""
     due_date: Optional[str] = None
     description: str = ""

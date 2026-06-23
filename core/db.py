@@ -206,6 +206,13 @@ class Database:
             cursor.execute("ALTER TABLE transactions RENAME COLUMN type TO trans_type")
             logger.info("Миграция: transactions.type → trans_type")
 
+        # --- loans: outstanding_amount → remaining ---
+        cursor.execute("PRAGMA table_info(loans)")
+        cols = {row[1] for row in cursor.fetchall()}
+        if "outstanding_amount" in cols and "remaining" not in cols:
+            cursor.execute("ALTER TABLE loans RENAME COLUMN outstanding_amount TO remaining")
+            logger.info("Миграция: loans.outstanding_amount → remaining")
+
         # --- transfers: добавление type, is_system, loan_id (если отсутствуют) ---
         cursor.execute("PRAGMA table_info(transfers)")
         cols = {row[1] for row in cursor.fetchall()}

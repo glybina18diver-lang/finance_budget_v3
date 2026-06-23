@@ -64,7 +64,7 @@ class OperationDialog(BaseDialog):
             ("📊 Категории", self._open_category_management, "#9C27B0"),
             ("📤 Переводы", self._open_transfer_dialog, "#FF9800"), 
             ("🔍 Сверка", self._stub_method, "#607D8B"),
-            ("💰 Займы", self._stub_method, "#795548"), 
+            ("💰 Займы", self._open_loan_dialog, "#795548"), 
             ("💳 Кредитки", self._stub_method, "#E91E63")
         ]
 
@@ -459,5 +459,14 @@ class OperationDialog(BaseDialog):
             self.parent.navigation_service.open_transfer_dialog(self.parent)
         else:
             self.show_status("Навигация недоступна", message_type="error")
+    
+    def _open_loan_dialog(self):
+        """
+        Открывает диалог управления займами через навигационный сервис.
+        """
+        if hasattr(self.parent, 'navigation_service'):
+            self.parent.navigation_service.open_loan_dialog(self.parent)
+        else:
+            self.show_status("Навигация недоступна", message_type="error")        
     
     #========== Функции (прочие) ==========

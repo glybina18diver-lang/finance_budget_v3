@@ -14,12 +14,14 @@ from ui.dialogs.operation_dialog import OperationDialog
 from ui.dialogs.account_dialog import AccountDialog
 from ui.dialogs.category_dialog import CategoryDialog
 from ui.dialogs.transfer_dialog import TransferDialog
+from ui.dialogs.loan_dialog import LoanDialog
 
 # Презентеры
 from ui.presenters.transaction_presenter import TransactionPresenter
 from ui.presenters.account_presenter import AccountPresenter
 from ui.presenters.category_presenter import CategoryPresenter
 from ui.presenters.transfer_presenter import TransferPresenter
+from ui.presenters.loan_presenter import LoanPresenter
 
 
 # Сервисы
@@ -27,12 +29,14 @@ from services.transaction_service import TransactionService
 from services.account_service import AccountService
 from services.category_service import CategoryService
 from services.transfer_service import TransferService
+from services.loan_service import LoanService
 
 # Репозитории
 from core.repositories.account_repository import AccountRepository
 from core.repositories.transaction_repository import TransactionRepository
 from core.repositories.category_repository import CategoryRepository
 from core.repositories.transfer_repository import TransferRepository
+from core.repositories.loan_repository import LoanRepository
 
 
 class NavigationService:
@@ -55,6 +59,7 @@ class NavigationService:
         self.tx_repo = TransactionRepository(self.db)
         self.cat_repo = CategoryRepository(self.db)
         self.tr_repo = TransferRepository(self.db)
+        self.loan_repo = LoanRepository(self.db)
 
     def open_operation_dialog(self, parent: QWidget) -> None:
         """
@@ -127,5 +132,26 @@ class NavigationService:
         tr_service = TransferService(self.tr_repo, self.acc_repo)
         presenter = TransferPresenter(tr_service)
         dialog = TransferDialog(parent=parent, presenter=presenter)
+        dialog.show()
+        return dialog
+    
+    def open_loan_dialog(self, parent: QWidget) -> LoanDialog:
+        """
+        Открывает диалог управления займами (немодальный).
+        
+        Args:
+            parent: родительское окно (обычно MainWindow)
+            
+        Returns:
+            Объект LoanDialog
+        """
+        # 2. Создаем сервис
+        service = LoanService(self.loan_repo, self.tr_repo, self.acc_repo)
+        
+        # 3. Создаем презентер
+        presenter = LoanPresenter(service)
+        
+        # 4. Создаем и показываем диалог
+        dialog = LoanDialog(parent=parent, presenter=presenter)
         dialog.show()
         return dialog
