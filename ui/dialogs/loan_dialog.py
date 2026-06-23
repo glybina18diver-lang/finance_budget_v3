@@ -11,6 +11,8 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Qt, Signal
 from ui.dialogs.base_dialog import BaseDialog
 from ui.widgets.colored_button import CompactButton
+from ui.dialogs.edit_loan_dialog import EditLoanDialog
+from ui.dialogs.loan_details_dialog import LoanDetailsDialog
 
 
 class LoanDialog(BaseDialog):
@@ -105,13 +107,13 @@ class LoanDialog(BaseDialog):
         add_payment_action.triggered.connect(self._add_payment)
         
         view_details_action = menu.addAction("📋 Детали займа")
-        view_details_action.triggered.connect(self._stub_method)
+        view_details_action.triggered.connect(self._view_loan_details)
         
         menu.addSeparator()
         
         if selected_rows:
             edit_action = menu.addAction("✏️ Редактировать")
-            edit_action.triggered.connect(self._stub_method)
+            edit_action.triggered.connect(self._edit_loan)
             
             delete_action = menu.addAction("🗑️ Удалить")
             delete_action.triggered.connect(self._delete_loan)
@@ -133,6 +135,32 @@ class LoanDialog(BaseDialog):
         """Запрашивает создание нового займа через презентер."""
         if self.presenter:
             self.presenter.open_add_loan_dialog()
+
+    def _edit_loan(self):
+        """Открывает диалог редактирования выбранного займа."""
+        selected = self.loans_table.selectionModel().selectedRows()
+        if not selected:
+            self.show_status("Выберите заём для редактирования", "warning")
+            return
+        
+        loan_id = self.loans_table.item(selected[0].row(), 0).data(Qt.UserRole)
+        
+        if self.presenter:
+            dialog = EditLoanDialog(self, presenter=self.presenter, loan_id=loan_id)
+            dialog.exec()
+
+    def _view_loan_details(self):
+        """Открывает диалог просмотра деталей выбранного займа."""
+        selected = self.loans_table.selectionModel().selectedRows()
+        if not selected:
+            self.show_status("Выберите займ для просмотра деталей", "warning")
+            return
+        
+        loan_id = self.loans_table.item(selected[0].row(), 0).data(Qt.UserRole)
+        
+        if self.presenter:
+            dialog = LoanDetailsDialog(self, presenter=self.presenter, loan_id=loan_id)
+            dialog.exec()
 
     def _delete_loan(self):
         """Запрашивает подтверждение и удаление выбранного займа."""

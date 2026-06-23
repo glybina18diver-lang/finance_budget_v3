@@ -104,25 +104,40 @@ class LoanRepository:
 
     def update(self, loan: Loan) -> bool:
         """
-        Обновляет данные займа (обычно остаток и статус).
+        Обновляет данные займа в БД.
+        Сохраняет все поля объекта Loan.
         
         Args:
-            loan: объект Loan с обновленными полями
+            loan: объект Loan с обновлёнными полями
             
         Returns:
             True если успешно
         """
         query = """
             UPDATE loans SET
+                contact_name = ?,
+                loan_type = ?,
+                loan_amount = ?,
                 remaining = ?,
                 status = ?,
-                description = ?
+                issue_date = ?,
+                due_date = ?,
+                description = ?,
+                account_id = ?,
+                counterparty_account_id = ?
             WHERE id = ?
         """
         params = (
+            loan.contact_name,
+            loan.loan_type,
+            loan.loan_amount,
             loan.remaining,
             loan.status,
+            loan.issue_date,
+            loan.due_date,
             loan.description,
+            loan.account_id,
+            loan.counterparty_account_id,
             loan.id
         )
         self.db.execute(query, params)
@@ -167,12 +182,6 @@ class LoanRepository:
     def _row_to_loan(self, row) -> Loan:
         """
         Преобразует строку БД в объект Loan.
-        
-        Args:
-            row: строка с данными
-            
-        Returns:
-            Объект Loan
         """
         return Loan(
             id=row["id"],
@@ -183,5 +192,7 @@ class LoanRepository:
             status=row["status"],
             issue_date=row["issue_date"],
             due_date=row.get("due_date"),
-            description=row.get("description")
+            description=row.get("description"),
+            account_id=row.get("account_id"),          
+            counterparty_account_id=row.get("counterparty_account_id")
         )

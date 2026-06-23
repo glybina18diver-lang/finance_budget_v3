@@ -7,8 +7,8 @@ from PySide6.QtWidgets import QDialog
 from services.loan_service import LoanService
 
 from ui.dialogs.loan_dialog import LoanDialog
-from ui.dialogs.add_loan_dialog import AddLoanDialog  # Импорт диалога добавления
-# from ui.dialogs.loan_payment_dialog import LoanPaymentDialog # Импорт диалога платежа
+from ui.dialogs.add_loan_dialog import AddLoanDialog
+from ui.dialogs.add_payment_dialog import AddPaymentDialog
 
 
 class LoanPresenter:
@@ -32,7 +32,7 @@ class LoanPresenter:
         self.load_loans()
 
     def load_loans(self):
-        """Загружает список займов из сервиса в UI."""
+        """Загружает список займов из сервиса в таблицу."""
         try:
             # Можно передать фильтры из view.current_filters, если нужно
             loans = self.service.get_all_loans()
@@ -63,12 +63,13 @@ class LoanPresenter:
         Args:
             loan_id: ID займа, для которого вносится платеж
         """
-        # Пример:
-        # dialog = LoanPaymentDialog(self.view, loan_id)
-        # if dialog.exec():
-        #     payment_data = dialog.get_data()
-        #     self.add_payment(loan_id, payment_data)
-        self.view.show_status(f"Открытие платежа для займа ID {loan_id}...", "info")
+        # 1. Создаём диалог, передавая ссылку на родителя и презентер
+        dialog = AddPaymentDialog(parent=self.view, presenter=self, loan_id=loan_id)
+        # 2. Показываем как модальный диалог (блокирует основное окно)
+        if dialog.exec() == QDialog.Accepted:
+            # Диалог закрыт через OK — данные уже обработаны в _on_accept
+            pass
+        # Если закрыт через Cancel — ничего не делаем
 
     def create_loan(self, loan_data: dict):
         """
@@ -85,10 +86,71 @@ class LoanPresenter:
         except ValueError as e:
             self.view.show_status(str(e), "error")
 
-    def load_accounts_for_loan_dialog(self, dialog):
-        """Загружает активные счета в диалог добавления займа."""
-        accounts = self.service.get_all_accounts_active()
-        dialog.load_accounts(accounts)
+    def load_data_for_payment_dialog(self, dialog, loan_id: int):
+        """Загружает данные займа и счетов для диалога платежа."""
+        try:
+            loan_data = self.service.get_loan_by_id(loan_id)
+            accounts_objects = self.service.get_all_accounts_active()
+            
+            # Конвертируем объекты Account в словари для UI
+            accounts = [
+                {
+                    'id': acc.id,
+                    'name': acc.name,
+                    'account_type': acc.account_type,
+                    'current_balance': acc.current_balance
+                }
+                for acc in accounts_objects
+            ]
+            
+            if loan_data:
+                dialog.populate_data(loan_data, accounts)
+            else:
+                dialog.show_status("Заём не найден", "error")
+                dialog.reject()
+        except Exception as e:
+            dialog.show_status(f"Ошибка загрузки: {e}", "error")
+
+    def load_loan_for_edit(self, dialog, loan_id: int):
+        """Загружает данные займа в диалог редактирования."""
+        try:
+            loan_data = self.service.get_loan_by_id(loan_id)
+            if loan_data:
+                dialog.populate_loan_data(loan_data)
+            else:
+                dialog.show_status("Заём не найден", "error")
+                dialog.reject()
+        except Exception as e:
+            dialog.show_status(f"Ошибка загрузки: {e}", "error")
+
+    def load_loan_details(self, dialog, loan_id: int):
+        """Загружает данные займа и историю платежей в диалог деталей."""
+        try:
+            loan_data = self.service.get_loan_by_id(loan_id)
+            payments = self.service.get_loan_payments(loan_id)
+            
+            if loan_data:
+                dialog.populate_loan_info(loan_data)
+                dialog.load_payments(payments)
+            else:
+                dialog.show_status("Заём не найден", "error")
+                dialog.reject()
+        except Exception as e:
+            dialog.show_status(f"Ошибка загрузки: {e}", "error")
+
+    def delete_loan_payment(self, loan_id: int, payment_id: int):
+        """Удаляет платёж по займу и пересчитывает остаток."""
+        try:
+            self.service.delete_loan_payment(loan_id, payment_id)
+            dialog = self.view  # LoanDialog
+            
+            # Обновляем данные в открытом диалоге деталей
+            # (если диалог деталей ещё открыт, нужно передать ему обновлённые данные)
+            self.view.show_status("Платёж удалён", "success")
+            self.load_loans()  # Обновляем таблицу в LoanDialog
+            self.view.data_updated.emit()
+        except ValueError as e:
+            self.view.show_status(str(e), "error")
 
     def add_payment(self, loan_id: int, payment_data: dict):
         """
@@ -100,7 +162,7 @@ class LoanPresenter:
         """
         try:
             self.service.add_payment_to_loan(loan_id, payment_data)
-            self.view.show_status("Платеж внесен успешно", "success")
+            self.view.show_status("Платёж успешно добавлен", "success")
             self.load_loans()
             self.view.data_updated.emit()
         except ValueError as e:
@@ -113,6 +175,22 @@ class LoanPresenter:
             self.view.show_status("Заём удален", "success")
             self.view.clear_selection()
             self.load_loans()
+        except ValueError as e:
+            self.view.show_status(str(e), "error")
+
+    def update_loan(self, loan_id: int, update_data: dict):
+        """
+        Обновляет данные займа.
+        
+        Args:
+            loan_id: ID займа
+            update_data: данные займа в формате словаря
+        """
+        try:
+            self.service.update_loan(loan_id, update_data)
+            self.view.show_status("Заём обновлён", "success")
+            self.load_loans()  
+            self.view.data_updated.emit()
         except ValueError as e:
             self.view.show_status(str(e), "error")
 

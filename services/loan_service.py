@@ -33,6 +33,22 @@ class LoanService:
         """
         return self.loan_repo.get_all_with_details(filters)
     
+    def get_loan_by_id(self, loan_id: int) -> Optional[Dict]:
+        """Возвращает данные займа для редактирования."""
+        loan = self.loan_repo.get_by_id(loan_id)
+        if not loan:
+            return None
+        return {
+            "id": loan.id,
+            "contact_name": loan.contact_name,
+            "loan_type": loan.loan_type,
+            "loan_amount": loan.loan_amount,
+            "remaining": loan.remaining,
+            "issue_date": loan.issue_date,
+            "due_date": loan.due_date,
+            "description": loan.description
+        }
+
     def get_all_accounts_active(self):
         return self.account_repo.get_all_active()
 
@@ -215,6 +231,50 @@ class LoanService:
         
         return True
 
+    def get_loan_payments(self, loan_id: int) -> List[Dict]:
+        """Возвращает историю платежей по займу из таблицы transfers."""
+        return self.loan_repo.get_payments_history(loan_id)
+
+    def delete_loan_payment(self, loan_id: int, payment_id: int) -> bool:
+        """
+        Удаляет платёж по займу и пересчитывает остаток.
+        
+        Args:
+            loan_id: ID займа
+            payment_id: ID платежа (записи в transfers)
+            
+        Returns:
+            True если успешно
+        """
+        # 1. Получаем платёж
+        payment = self.transfer_repo.get_by_id(payment_id)
+        if not payment or payment.loan_id != loan_id:
+            raise ValueError("Платёж не найден")
+        
+        # 2. Получаем заём
+        loan = self.loan_repo.get_by_id(loan_id)
+        if not loan:
+            raise ValueError("Заём не найден")
+        
+        # 3. Возвращаем остаток (увеличиваем долг обратно)
+        loan.remaining += payment.amount
+        
+        # 4. Если статус был "paid", возвращаем в "active"
+        if loan.status == "paid":
+            loan.status = "active"
+        
+        # 5. Откатываем балансы счетов
+        self.account_repo.update_balance(payment.from_account_id, payment.amount)
+        self.account_repo.update_balance(payment.to_account_id, -payment.amount)
+        
+        # 6. Удаляем перевод
+        self.transfer_repo.delete(payment_id)
+        
+        # 7. Сохраняем обновлённый заём
+        self.loan_repo.update(loan)
+        
+        return True
+
     def delete_loan(self, loan_id: int) -> bool:
         """Удаляет заём (только если нет платежей)."""
         loan = self.loan_repo.get_by_id(loan_id)
@@ -227,6 +287,40 @@ class LoanService:
             raise ValueError("Нельзя удалить заём с историей платежей. Сначала удалите платежи.")
         
         return self.loan_repo.delete(loan_id)
+    
+    def update_loan(self, loan_id: int, update_data: dict) -> bool:
+        """
+        Обновляет редактируемые поля займа.
+        
+        Args:
+            loan_id: ID займа
+            update_data: словарь с новыми данными (contact_name, due_date, description)
+            
+        Returns:
+            True если успешно
+        """
+        loan = self.loan_repo.get_by_id(loan_id)
+        if not loan:
+            raise ValueError("Заём не найден")
+        
+        # Обновляем только те поля, которые пришли из UI
+        if "contact_name" in update_data:
+            loan.contact_name = update_data["contact_name"].strip()
+        if "due_date" in update_data:
+            loan.due_date = update_data["due_date"]
+        if "description" in update_data:
+            loan.description = update_data["description"].strip()
+        
+        # Пересчитываем статус (если изменилась дата погашения)
+        if loan.due_date and loan.remaining > 0:
+            from datetime import datetime, date
+            due = datetime.strptime(loan.due_date, "%Y-%m-%d").date()
+            if due < date.today():
+                loan.status = "default"
+            else:
+                loan.status = "active"
+        
+        return self.loan_repo.update(loan)
 
     def update_overdue_loans(self) -> int:
         """
