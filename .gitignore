@@ -62,12 +62,8 @@ AGENTS.md
 KODA.md
 
 # Прочие
-Архивные_скрипты/
-plans
-Полезное из чата/
-olds_dialogs/
-Структура БД.txt
 commit_msg.txt
-operation_dialog copy.py
 архив.py
 changelog/
+backup/
+DRAFT_CHANGES.md

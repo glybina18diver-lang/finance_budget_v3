@@ -138,6 +138,11 @@ class LoanPresenter:
         except Exception as e:
             dialog.show_status(f"Ошибка загрузки: {e}", "error")
 
+    def load_accounts_for_loan_dialog(self, dialog):
+        """Загружает активные счета в диалог добавления займа."""
+        accounts = self.service.get_all_accounts_active()
+        dialog.load_accounts(accounts)
+
     def delete_loan_payment(self, loan_id: int, payment_id: int):
         """Удаляет платёж по займу и пересчитывает остаток."""
         try:
