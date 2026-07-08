@@ -4,7 +4,7 @@
 Центр управления открытием окон с правильным внедрением зависимостей.
 """
 from typing import Optional
-from PySide6.QtWidgets import QWidget
+from PySide6.QtWidgets import QWidget, QMessageBox, QInputDialog
 from PySide6.QtCore import Qt
 
 from core.db import Database
@@ -15,6 +15,8 @@ from ui.dialogs.account_dialog import AccountDialog
 from ui.dialogs.category_dialog import CategoryDialog
 from ui.dialogs.transfer_dialog import TransferDialog
 from ui.dialogs.loan_dialog import LoanDialog
+from ui.dialogs.credit_card_dialog import CreditCardDialog
+
 
 # Презентеры
 from ui.presenters.transaction_presenter import TransactionPresenter
@@ -22,6 +24,8 @@ from ui.presenters.account_presenter import AccountPresenter
 from ui.presenters.category_presenter import CategoryPresenter
 from ui.presenters.transfer_presenter import TransferPresenter
 from ui.presenters.loan_presenter import LoanPresenter
+from ui.presenters.credit_card_presenter import CreditCardPresenter
+
 
 
 # Сервисы
@@ -30,6 +34,8 @@ from services.account_service import AccountService
 from services.category_service import CategoryService
 from services.transfer_service import TransferService
 from services.loan_service import LoanService
+from services.credit_card_service import CreditCardService
+
 
 # Репозитории
 from core.repositories.account_repository import AccountRepository
@@ -37,6 +43,8 @@ from core.repositories.transaction_repository import TransactionRepository
 from core.repositories.category_repository import CategoryRepository
 from core.repositories.transfer_repository import TransferRepository
 from core.repositories.loan_repository import LoanRepository
+from core.repositories.credit_card_repository import CreditCardRepository
+from core.repositories.account_repository import AccountRepository
 
 
 class NavigationService:
@@ -60,6 +68,7 @@ class NavigationService:
         self.cat_repo = CategoryRepository(self.db)
         self.tr_repo = TransferRepository(self.db)
         self.loan_repo = LoanRepository(self.db)
+        self.credit_card_repo = CreditCardRepository(self.db)
 
     def open_operation_dialog(self, parent: QWidget) -> None:
         """
@@ -153,5 +162,48 @@ class NavigationService:
         
         # 4. Создаем и показываем диалог
         dialog = LoanDialog(parent=parent, presenter=presenter)
+        dialog.show()
+        return dialog
+    
+    def open_credit_card_dialog(self, parent: QWidget, card_id: int = None):
+        """
+        Открывает диалог управления кредитной картой.
+        
+        Args:
+            parent: родительское окно
+            card_id: ID кредитной карты (если None, будет запрошен выбор)
+        """
+        # Создаём сервис
+        credit_card_service = CreditCardService(self.credit_card_repo, self.acc_repo)
+        
+        # Создаём презентер
+        presenter = CreditCardPresenter(credit_card_service, self.acc_repo)
+        
+        # Если card_id не указан, показываем диалог выбора карты
+        if not card_id:
+            cards = self.credit_card_repo.get_all_cards()
+            if not cards:
+                QMessageBox.information(parent, "Информация", "Кредитные карты не найдены")
+                return
+            
+            # Простой диалог выбора (можно сделать красивее)
+            card_id, ok = QInputDialog.getItem(
+                parent,
+                "Выберите карту",
+                "Кредитная карта:",
+                [f"{card.name} (ID: {card.id})" for card in cards],
+                0,
+                False
+            )
+            
+            if not ok:
+                return
+            
+            # Извлекаем ID из строки
+            card_id = int(card_id.split("ID: ")[1].rstrip(")"))
+        
+        # Открываем диалог
+        dialog = CreditCardDialog(parent=parent, presenter=presenter, card_id=card_id)
+        #dialog.exec()
         dialog.show()
         return dialog

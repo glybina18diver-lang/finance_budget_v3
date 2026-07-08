@@ -65,7 +65,7 @@ class OperationDialog(BaseDialog):
             ("📤 Переводы", self._open_transfer_dialog, "#FF9800"), 
             ("🔍 Сверка", self._stub_method, "#607D8B"),
             ("💰 Займы", self._open_loan_dialog, "#795548"), 
-            ("💳 Кредитки", self._stub_method, "#E91E63")
+            ("💳 Кредитки", self._open_credit_card_dialog, "#E91E63")
         ]
 
         for text, callback, color in buttons:
@@ -467,6 +467,15 @@ class OperationDialog(BaseDialog):
         if hasattr(self.parent, 'navigation_service'):
             self.parent.navigation_service.open_loan_dialog(self.parent)
         else:
-            self.show_status("Навигация недоступна", message_type="error")        
+            self.show_status("Навигация недоступна", message_type="error")      
+    
+    def _open_credit_card_dialog(self):
+        """
+        Открывает диалог управления rhtlbnrfvb через навигационный сервис.
+        """
+        if hasattr(self.parent, 'navigation_service'):
+            self.parent.navigation_service.open_credit_card_dialog(self.parent)
+        else:
+            self.show_status("Навигация недоступна", message_type="error")
     
     #========== Функции (прочие) ==========

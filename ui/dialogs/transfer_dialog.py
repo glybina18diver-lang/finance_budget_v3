@@ -176,9 +176,55 @@ class TransferDialog(BaseDialog):
         """Обработчик нажатия кнопки 'Добавить'."""
         try:
             data = self._get_form_data()
+            
+            # Проверяем комиссию для внешних исходящих переводов с кредитки
+            if data["type"] == "external" and data["direction"] == "outgoing":
+                fee_info = self.presenter.check_credit_card_transfer(
+                    data["account_id"], data["amount"]
+                )
+                
+                if fee_info["is_credit_card"]:
+                    # Спрашиваем подтверждение
+                    reply = QMessageBox.question(
+                        self,
+                        "Комиссия за перевод",
+                        f"Перевод с карты «{fee_info['card_name']}» облагается комиссией:\n\n"
+                        f"Сумма перевода: {data['amount']:,.2f} ₽\n"
+                        f"Комиссия (5.9% + 590 ₽): {fee_info['commission']:,.2f} ₽\n"
+                        f"{'─' * 40}\n"
+                        f"Итого будет списано: {fee_info['total']:,.2f} ₽\n\n"
+                        f"Продолжить?",
+                        QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                        QMessageBox.StandardButton.No
+                    )
+                    
+                    if reply != QMessageBox.StandardButton.Yes:
+                        return
+                    
+                    # Создаём основной перевод
+                    self.presenter.add_transfer(data)
+                    
+                    # Создаём расход на комиссию
+                    self.presenter.add_commission_expense({
+                        "date": data["date"],
+                        "amount": fee_info["commission"],
+                        "account_id": data["account_id"],
+                        "description": f"Комиссия за перевод ({data['counterparty']})"
+                    })
+                    
+                    self.show_status(
+                        f"Перевод создан. Комиссия {fee_info['commission']:,.2f} ₽ учтена как расход.",
+                        "success"
+                    )
+                    return
+            
+            # Обычный перевод без комиссии
             self.presenter.add_transfer(data)
+            
         except ValueError as e:
             self.show_status(str(e), "error")
+        except Exception as e:
+            self.show_status(f"Ошибка: {e}", "error")
 
     def _get_form_data(self) -> dict:
         """

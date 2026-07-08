@@ -126,3 +126,39 @@ class Budget(BaseModel):
     planned_amount: float = 0.0
     actual_amount: float = 0.0
     created_at: str = field(default_factory=lambda: datetime.now().isoformat())
+
+@dataclass
+class CreditCard:
+    """Модель кредитной карты."""
+    id: Optional[int] = None
+    account_id: int = 0              # Счёт карты в accounts
+    name: str = "Сбер Молодёжная"
+    annual_rate: float = 49.8        # Годовая ставка %
+    grace_months: int = 3            # Льготный период (месяцев)
+    min_payment_percent: float = 0.02  # 2% от долга
+
+
+@dataclass
+class CreditCardPeriod:
+    """Период кредитной карты (группировка покупок/переводов по месяцам)."""
+    id: Optional[int] = None
+    card_id: int = 0
+    period_month: str = ""           # "2025-03"
+    total_purchases: float = 0.0     # Сумма покупок за период
+    total_transfers: float = 0.0     # Сумма переводов за период
+    grace_period_end: Optional[str] = None  # Конец льготного периода
+    is_paid: bool = False            # Полностью погашен
+    paid_amount: float = 0.0         # Сколько уже погашено
+    interest_retroactive: float = 0.0  # Ретроактивные проценты (начислены)
+    interest_daily_accrued: float = 0.0  # Ежедневные проценты после grace_period_end
+
+
+@dataclass
+class CreditCardPayment:
+    """Платёж по кредитной карте."""
+    id: Optional[int] = None
+    card_id: int = 0
+    date: str = ""
+    amount: float = 0.0
+    from_account_id: int = 0
+    allocation_json: Optional[str] = None  # JSON: как распределился платёж

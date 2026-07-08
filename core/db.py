@@ -217,6 +217,64 @@ class Database:
         cursor.execute("PRAGMA table_info(transfers)")
         cols = {row[1] for row in cursor.fetchall()}
 
+        
+
+        #миграция для таблиц кредитных карт
+        # --- credit_cards: создание таблицы кредитных карт ---
+        cursor.execute("PRAGMA table_info(credit_cards)")
+        if not cursor.fetchall():
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS credit_cards (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    account_id INTEGER NOT NULL,
+                    name TEXT NOT NULL DEFAULT 'Сбер Молодёжная',
+                    annual_rate REAL NOT NULL DEFAULT 49.8,
+                    grace_months INTEGER NOT NULL DEFAULT 3,
+                    min_payment_percent REAL NOT NULL DEFAULT 0.02,
+                    FOREIGN KEY (account_id) REFERENCES accounts(id)
+                )
+            """)
+            logger.info("Миграция: создана таблица credit_cards")
+
+        # --- credit_card_periods: периоды покупок/переводов ---
+        cursor.execute("PRAGMA table_info(credit_card_periods)")
+        if not cursor.fetchall():
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS credit_card_periods (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    card_id INTEGER NOT NULL,
+                    period_month TEXT NOT NULL,
+                    total_purchases REAL DEFAULT 0,
+                    total_transfers REAL DEFAULT 0,
+                    grace_period_end TEXT,
+                    is_paid INTEGER DEFAULT 0,
+                    paid_amount REAL DEFAULT 0,
+                    interest_retroactive REAL DEFAULT 0,
+                    interest_daily_accrued REAL DEFAULT 0,
+                    FOREIGN KEY (card_id) REFERENCES credit_cards(id)
+                )
+            """)
+            logger.info("Миграция: создана таблица credit_card_periods")
+
+        # --- credit_card_payments: платежи по кредитной карте ---
+        cursor.execute("PRAGMA table_info(credit_card_payments)")
+        if not cursor.fetchall():
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS credit_card_payments (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    card_id INTEGER NOT NULL,
+                    date TEXT NOT NULL,
+                    amount REAL NOT NULL,
+                    from_account_id INTEGER NOT NULL,
+                    allocation_json TEXT,
+                    FOREIGN KEY (card_id) REFERENCES credit_cards(id),
+                    FOREIGN KEY (from_account_id) REFERENCES accounts(id)
+                )
+            """)
+            logger.info("Миграция: создана таблица credit_card_payments")
+        
+        #конец миграции для кредитных карт
+
         if "type" not in cols:
             cursor.execute("ALTER TABLE transfers ADD COLUMN type TEXT DEFAULT 'internal'")
             logger.info("Миграция: добавлена колонка transfers.type")

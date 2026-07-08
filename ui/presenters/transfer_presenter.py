@@ -4,6 +4,7 @@
 Связывает UI и бизнес-логику.
 """
 from services.transfer_service import TransferService
+from services.transaction_service import TransactionService
 from typing import Dict, List
 
 
@@ -79,3 +80,51 @@ class TransferPresenter:
             self.view.from_combo.addItem(acc.name, acc.id)
             self.view.to_combo.addItem(acc.name, acc.id)
             self.view.ext_account_combo.addItem(acc.name, acc.id)
+            
+    def check_credit_card_transfer(self, from_account_id: int, amount: float) -> dict:
+        """
+        Проверяет, является ли счёт кредитной картой, и рассчитывает комиссию.
+        
+        Args:
+            from_account_id: ID счёта-источника
+            amount: сумма перевода
+            
+        Returns:
+            Словарь {is_credit_card: bool, commission: float, total: float}
+        """
+        from core.repositories.credit_card_repository import CreditCardRepository
+        
+        repo = CreditCardRepository(self.db)  # или через DI, если есть
+        card = repo.get_card_by_account_id(from_account_id)
+        
+        if not card:
+            return {"is_credit_card": False, "commission": 0.0, "total": amount}
+        
+        # Комиссия: 5.9% + 590 ₽
+        commission = amount * 0.059 + 590.0
+        return {
+            "is_credit_card": True,
+            "commission": commission,
+            "total": amount + commission,
+            "card_name": card.name
+        }
+
+    def add_commission_expense(self, data: dict):
+        """
+        Добавляет расход на комиссию за перевод с кредитной карты.
+        
+        Args:
+            data: {date, amount (комиссия), account_id, description}
+        """
+        # Здесь используем существующий сервис транзакций/расходов
+        # Пример (адаптируй под свою систему):
+        expense_data = {
+            "date": data["date"],
+            "type": "expense",
+            "raw_amount": data["amount"],
+            "account_id": data["account_id"],
+            "category_id": "4",  # или category_id
+            "description": data.get("description", "Комиссия за перевод с кредитной карты")
+        }
+        self.transaction_service.create_transaction(expense_data)
+        # Или через репозиторий напрямую
