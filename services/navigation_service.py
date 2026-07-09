@@ -70,6 +70,9 @@ class NavigationService:
         self.loan_repo = LoanRepository(self.db)
         self.credit_card_repo = CreditCardRepository(self.db)
 
+        self.credit_card_service = CreditCardService(self.credit_card_repo, self.acc_repo)
+
+
     def open_operation_dialog(self, parent: QWidget) -> None:
         """
         Открывает диалог операций (не модальный).
@@ -98,12 +101,13 @@ class NavigationService:
             parent: родительское окно (обычно MainWindow)
         """
         # Создаём сервис для счетов
-        acc_service = AccountService(acc_repo=self.acc_repo)
+        acc_service = AccountService(acc_repo=self.acc_repo, credit_card_service=self.credit_card_service)
         # Создаём презентер
         presenter = AccountPresenter(service=acc_service)
         # Создаём и показываем диалог
         dialog = AccountDialog(parent=parent, presenter=presenter)
-        dialog.exec()  # Modal
+        dialog.show()
+        #dialog.exec()  # Modal
         return dialog # Возвращаем диалог
     
     def open_category_dialog(self, parent: QWidget) -> CategoryDialog:
@@ -173,37 +177,45 @@ class NavigationService:
             parent: родительское окно
             card_id: ID кредитной карты (если None, будет запрошен выбор)
         """
-        # Создаём сервис
-        credit_card_service = CreditCardService(self.credit_card_repo, self.acc_repo)
+        # Получаем все кредитные карты (счета типа CreditCard)
+        cards = self.credit_card_service.get_all_credit_cards()
         
-        # Создаём презентер
-        presenter = CreditCardPresenter(credit_card_service, self.acc_repo)
-        
-        # Если card_id не указан, показываем диалог выбора карты
-        if not card_id:
-            cards = self.credit_card_repo.get_all_cards()
-            if not cards:
-                QMessageBox.information(parent, "Информация", "Кредитные карты не найдены")
-                return
-            
-            # Простой диалог выбора (можно сделать красивее)
-            card_id, ok = QInputDialog.getItem(
-                parent,
-                "Выберите карту",
-                "Кредитная карта:",
-                [f"{card.name} (ID: {card.id})" for card in cards],
-                0,
-                False
+        if not cards:
+            QMessageBox.information(
+                parent, 
+                "Информация", 
+                "Кредитные карты не найдены.\n\n"
+                "Сначала создайте счёт с типом 'CreditCard' в диалоге счетов."
             )
-            
-            if not ok:
-                return
-            
-            # Извлекаем ID из строки
-            card_id = int(card_id.split("ID: ")[1].rstrip(")"))
+            return
         
-        # Открываем диалог
-        dialog = CreditCardDialog(parent=parent, presenter=presenter, card_id=card_id)
+        # Диалог выбора карты
+        card_names = [f"{c['name']} (баланс: {c['current_balance']:,.2f} ₽)" for c in cards]
+        
+        selected, ok = QInputDialog.getItem(
+            parent,
+            "Выберите кредитную карту",
+            "Доступные карты:",
+            card_names,
+            0,
+            False
+        )
+        
+        if not ok:
+            return
+        
+        # Находим выбранную карту
+        idx = card_names.index(selected)
+        card = cards[idx]
+        
+        # Создаём презентер и открываем диалог
+        presenter = CreditCardPresenter(self.credit_card_service, self.acc_repo)
+        dialog = CreditCardDialog(
+            parent=parent, 
+            presenter=presenter, 
+            card_id=card["card_id"],
+            account_id=card["account_id"]
+        )
         #dialog.exec()
         dialog.show()
         return dialog

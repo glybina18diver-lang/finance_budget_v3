@@ -3,9 +3,8 @@
 Инкапсулирует бизнес-логику: расчёт процентов, комиссий, минимального платежа.
 """
 from typing import List, Optional, Dict
-import calendar
 from datetime import datetime, date
-#from dateutil.relativedelta import relativedelta
+from dateutil.relativedelta import relativedelta
 import json
 
 from core.models import CreditCard, CreditCardPeriod, CreditCardPayment
@@ -56,6 +55,39 @@ class CreditCardService:
             min_payment_percent=0.02
         )
         return self.repo.create_card(card)
+    
+    def get_all_credit_cards(self) -> List[Dict]:
+        """
+        Возвращает список кредитных карт (счетов типа CreditCard) для UI.
+        Автоматически создаёт запись в credit_cards, если её нет.
+        
+        Returns:
+            Список словарей с данными карт
+        """
+        cards_with_accounts = self.repo.get_all_cards_with_accounts()
+        
+        result = []
+        for row in cards_with_accounts:
+            # Если записи в credit_cards нет — создаём автоматически
+            if not row["card_id"]:
+                card = self.repo.get_or_create_card_for_account(row["account_id"])
+                row["card_id"] = card.id
+                row["annual_rate"] = card.annual_rate
+                row["grace_months"] = card.grace_months
+                row["min_payment_percent"] = card.min_payment_percent
+            
+            result.append({
+                "card_id": row["card_id"],
+                "account_id": row["account_id"],
+                "name": row["account_name"],
+                "current_balance": row["current_balance"],
+                "credit_limit": row.get("credit_limit", 0),
+                "annual_rate": row["annual_rate"],
+                "grace_months": row["grace_months"],
+                "min_payment_percent": row["min_payment_percent"]
+            })
+        
+        return result
 
     # =================== Периоды ===================
 
@@ -345,21 +377,24 @@ class CreditCardService:
     def _calculate_grace_period_end(self, purchase_date: str) -> str:
         """
         Рассчитывает конец льготного периода.
-        Логика: месяц покупки + grace_months месяцев → последний день того месяца.
+        Логика: месяц покупки + grace_months месяцев → конец последнего дня того месяца.
         
         Пример: покупка 15.03.2025, grace_months=3 → льгота до 30.06.2025
+        
+        Args:
+            purchase_date: дата покупки
+            
+        Returns:
+            Дата конца льготного периода (YYYY-MM-DD)
         """
-        dt = datetime.strptime(purchase_date, "%Y-%m-%d").date()
+        dt = datetime.strptime(purchase_date, "%Y-%m-%d")
+        # Переходим на конец месяца покупки
+        end_of_month = dt.replace(day=28) + relativedelta(days=31)
+        end_of_month = end_of_month.replace(day=1) - relativedelta(days=1)
         
-        # Вычисляем целевой год и месяц (добавляем grace_months)
-        month = dt.month - 1 + self._get_card_grace_months()
-        year = dt.year + month // 12
-        month = month % 12 + 1
+        # Добавляем grace_months месяцев
+        grace_end = end_of_month + relativedelta(months=self._get_card_grace_months())
         
-        # Находим последний день этого месяца
-        last_day = calendar.monthrange(year, month)[1]
-        
-        grace_end = date(year, month, last_day)
         return grace_end.strftime("%Y-%m-%d")
 
     def _get_card_grace_months(self) -> int:

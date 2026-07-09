@@ -5,20 +5,23 @@
 """
 from typing import Dict, Optional, List
 from core.repositories.account_repository import AccountRepository
+from services.credit_card_service import CreditCardService
 from core.models import Account
 
 
 class AccountService:
     """Сервис для управления счетами: валидация, CRUD, бизнес-логика."""
 
-    def __init__(self, acc_repo: AccountRepository):
+    def __init__(self, acc_repo: AccountRepository, credit_card_service: CreditCardService = None):
         """
-        Инициализация сервиса.
+        Инициализация сервиса счетов.
         
         Args:
-            acc_repo: репозиторий для работы с БД
+            acc_repo: репозиторий счетов
+            credit_card_service: сервис кредитных карт (для проверки зависимостей)
         """
         self.acc_repo = acc_repo
+        self.credit_card_service = credit_card_service
 
     def create_account(self, account_data: Dict) -> Account:
         """

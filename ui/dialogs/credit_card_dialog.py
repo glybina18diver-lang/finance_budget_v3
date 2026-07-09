@@ -20,26 +20,28 @@ class CreditCardDialog(BaseDialog):
 
     data_updated = Signal()
 
-    def __init__(self, parent=None, presenter=None, card_id: int = None):
+    def __init__(self, parent=None, presenter=None, card_id: int = None, account_id: int = None):
         """
         Инициализация диалога.
         
         Args:
             parent: родительское окно
             presenter: экземпляр CreditCardPresenter
-            card_id: ID кредитной карты
+            card_id: ID из таблицы credit_cards
+            account_id: ID счёта в таблице accounts
         """
         super().__init__(parent)
         self.presenter = presenter
         self.card_id = card_id
+        self.account_id = account_id
         
         self.setWindowTitle("Кредитная карта")
         self.resize(900, 700)
         
         self._init_ui()
         
-        if self.presenter and self.card_id:
-            self.presenter.set_current_card(self.card_id)
+        if self.presenter and self.card_id and self.account_id:
+            self.presenter.set_current_card(self.card_id, self.account_id)
             self.presenter.set_view(self)
 
     def _init_ui(self):

@@ -25,6 +25,7 @@ class CreditCardPresenter:
         self.account_repo = account_repo
         self.view = None
         self.current_card_id: Optional[int] = None
+        self.current_account_id: Optional[int] = None
 
     def set_view(self, view):
         """
@@ -101,6 +102,22 @@ class CreditCardPresenter:
             
         except Exception as e:
             dialog.show_status(f"Ошибка загрузки: {e}", "error")
+
+    def set_current_card(self, card_id: int, account_id: int):
+        """
+        Устанавливает текущую карту для работы.
+        
+        Args:
+            card_id: ID из таблицы credit_cards
+            account_id: ID счёта в таблице accounts
+        """
+        self.current_card_id = card_id
+        self.current_account_id = account_id
+        self.load_initial_data()
+
+    def get_all_credit_cards(self) -> List[Dict]:
+        """Возвращает список кредитных карт для UI выбора."""
+        return self.service.get_all_credit_cards()
 
     # =================== Действия пользователя ===================
 

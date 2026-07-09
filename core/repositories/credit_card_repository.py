@@ -72,6 +72,51 @@ class CreditCardRepository:
         query = "DELETE FROM credit_cards WHERE id = ?"
         self.db.execute(query, (card_id,))
         return True
+    
+    def get_or_create_card_for_account(self, account_id: int) -> CreditCard:
+        """
+        Возвращает кредитную карту для счёта.
+        Если записи нет — создаёт с дефолтными параметрами.
+        
+        Args:
+            account_id: ID счёта в таблице accounts
+            
+        Returns:
+            Объект CreditCard
+        """
+        card = self.get_card_by_account_id(account_id)
+        if card:
+            return card
+        
+        card = CreditCard(
+            account_id=account_id,
+            name="Сбер Молодёжная",
+            annual_rate=49.8,
+            grace_months=3,
+            min_payment_percent=0.02
+        )
+        self.create_card(card)
+        return card
+
+    def get_all_cards_with_accounts(self) -> List[dict]:
+        """
+        Возвращает все кредитные карты вместе с данными счёта.
+        Ищет по account_type = 'CreditCard' в accounts.
+        
+        Returns:
+            Список словарей с данными карт и счетов
+        """
+        query = """
+            SELECT 
+                a.id AS account_id, a.name AS account_name, 
+                a.current_balance, a.credit_limit,
+                cc.id AS card_id, cc.annual_rate, cc.grace_months, cc.min_payment_percent
+            FROM accounts a
+            LEFT JOIN credit_cards cc ON a.id = cc.account_id
+            WHERE a.account_type = 'Credit Card' AND a.is_active = 1
+            ORDER BY a.name
+        """
+        return self.db.fetchall(query)
 
     # =================== CreditCardPeriod ===================
 
