@@ -219,6 +219,24 @@ class CreditCardPresenter:
             self.view.show_status(f"Ошибка при добавлении перевода: {e}", "error")
             return None
 
+    def delete_card(self):
+        """
+        Обрабатывает удаление кредитной карты.
+        Проверяет операции и удаляет карту.
+        """
+        if not self.current_card_id:
+            self.view.show_status("Карта не выбрана", "error")
+            return
+        
+        try:
+            self.service.delete_card(self.current_card_id)
+            self.view.show_status("Карта удалена", "success")
+            self.view.close()  # Закрываем диалог после удаления
+            #TODO: тут надо сделать всплывающие уведомления
+            
+        except ValueError as e:
+            self.view.show_status(str(e), "error")
+
     def refresh_calculations(self):
         """Пересчитывает проценты и обновляет UI."""
         try:

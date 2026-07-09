@@ -96,28 +96,105 @@ class AccountService:
 
     def _has_transactions(self, account_id: int) -> bool:
         """
-        Проверяет наличие транзакций, связанных со счётом.
+        Проверяет наличие зависимостей у счёта во всех связанных таблицах.
         
         Returns:
             True если к счёту привязаны операции
         """
+        # 1. Проверяем транзакции (расходы/доходы)
         query = "SELECT COUNT(*) AS cnt FROM transactions WHERE account_id = ?"
         result = self.acc_repo.db.fetchone(query, (account_id,))
-        return result["cnt"] > 0 if result else False
+        if result and result["cnt"] > 0:
+            return True
+        
+        # 2. Проверяем переводы (from_account_id и to_account_id)
+        query = """
+            SELECT COUNT(*) AS cnt FROM transfers 
+            WHERE from_account_id = ? OR to_account_id = ?
+        """
+        result = self.acc_repo.db.fetchone(query, (account_id, account_id))
+        if result and result["cnt"] > 0:
+            return True
+        
+        # 3. Проверяем займы (account_id и counterparty_account_id)
+        query = """
+            SELECT COUNT(*) AS cnt FROM loans 
+            WHERE account_id = ? OR counterparty_account_id = ?
+        """
+        result = self.acc_repo.db.fetchone(query, (account_id, account_id))
+        if result and result["cnt"] > 0:
+            return True
+        
+        # 4. Проверяем кредитные карты 
+        
+        return False
     
     def _get_transaction_count(self, account_id: int) -> int:
         """
         Вспомогательный метод для получения количества операций по счёту.
+        Проверяет все связанные таблицы: transactions, transfers, loans, credit_cards.
+        
+        Для кредитных карт: считаются только карты с операциями (periods/payments).
+        Пустые карты игнорируются, так как они удаляются вместе со счётом.
         
         Args:
             account_id: ID счёта
             
         Returns:
-            Количество связанных транзакций
+            Общее количество связанных операций
         """
+        total_count = 0
+        
+        # 1. Транзакции (расходы/доходы)
         query = "SELECT COUNT(*) AS cnt FROM transactions WHERE account_id = ?"
         result = self.acc_repo.db.fetchone(query, (account_id,))
-        return result["cnt"] if result else 0
+        if result:
+            total_count += result["cnt"]
+        
+        # 2. Переводы (отправитель или получатель)
+        query = """
+            SELECT COUNT(*) AS cnt FROM transfers 
+            WHERE from_account_id = ? OR to_account_id = ?
+        """
+        result = self.acc_repo.db.fetchone(query, (account_id, account_id))
+        if result:
+            total_count += result["cnt"]
+        
+        # 3. Займы (наш счёт или счёт контрагента)
+        query = """
+            SELECT COUNT(*) AS cnt FROM loans 
+            WHERE account_id = ? OR counterparty_account_id = ?
+        """
+        result = self.acc_repo.db.fetchone(query, (account_id, account_id))
+        if result:
+            total_count += result["cnt"]
+        
+        # 4. Кредитные карты — УМНАЯ ПРОВЕРКА
+        # Сначала находим карту, привязанную к счёту
+        card_query = "SELECT id FROM credit_cards WHERE account_id = ?"
+        card_row = self.acc_repo.db.fetchone(card_query, (account_id,))
+        
+        if card_row:
+            card_id = card_row["id"]
+            
+            # Считаем операции по карте (периоды + платежи)
+            periods_q = "SELECT COUNT(*) AS cnt FROM credit_card_periods WHERE card_id = ?"
+            payments_q = "SELECT COUNT(*) AS cnt FROM credit_card_payments WHERE card_id = ?"
+            
+            p_result = self.acc_repo.db.fetchone(periods_q, (card_id,))
+            pay_result = self.acc_repo.db.fetchone(payments_q, (card_id,))
+            
+            card_ops = 0
+            if p_result:
+                card_ops += p_result["cnt"]
+            if pay_result:
+                card_ops += pay_result["cnt"]
+            
+            # Добавляем в общий счётчик ТОЛЬКО если есть операции
+            # Пустая карта = 0, она не блокирует удаление
+            total_count += card_ops
+        
+        return total_count
 
     def get_all_accounts(self) -> List[Account]:
         """

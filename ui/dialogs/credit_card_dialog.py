@@ -76,6 +76,22 @@ class CreditCardDialog(BaseDialog):
         """)
         self.payment_btn.clicked.connect(self._open_payment_dialog)
         header_layout.addWidget(self.payment_btn)
+
+        self.delete_card_btn = QPushButton("🗑️ Удалить карту")
+        self.delete_card_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #dc3545;
+                color: white;
+                padding: 10px 20px;
+                border-radius: 5px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #c82333;
+            }
+        """)
+        self.delete_card_btn.clicked.connect(self._on_delete_card)
+        header_layout.addWidget(self.delete_card_btn)
         
         self._main_layout.addWidget(header_frame)
         
@@ -205,6 +221,22 @@ class CreditCardDialog(BaseDialog):
         
         if result == QDialog.Accepted:
             self.data_updated.emit()
+
+    def _on_delete_card(self):
+        """Обработчик нажатия кнопки 'Удалить карту'."""
+        from PySide6.QtWidgets import QMessageBox
+        
+        reply = QMessageBox.question(
+            self,
+            "Удаление карты",
+            "Вы уверены, что хотите удалить эту кредитную карту?\n\n"
+            "Все данные о периодах и платежах будут удалены безвозвратно.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No
+        )
+        
+        if reply == QMessageBox.StandardButton.Yes and self.presenter:
+            self.presenter.delete_card()
 
     # =================== Контракт View <-> Presenter ===================
 

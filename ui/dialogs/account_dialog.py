@@ -295,7 +295,7 @@ class AccountDialog(BaseDialog):
             # Удаление одного счёта
             result = self.presenter.delete_account(account_id)
             if result.get('success'):
-                self.show_status(f"Удалён: {account_name}", "success")
+                self.show_status(f"Счёт: {account_name} удалён", "success")
             else:
                 if not result.get('can_delete', True):
                     self._show_cannot_delete_message({

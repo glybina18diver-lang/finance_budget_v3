@@ -56,6 +56,34 @@ class CreditCardService:
         )
         return self.repo.create_card(card)
     
+    def delete_card(self, card_id: int) -> bool:
+        """
+        Удаляет кредитную карту.
+        Проверяет наличие операций перед удалением.
+        
+        Args:
+            card_id: ID карты из таблицы credit_cards
+            
+        Returns:
+            True если удалена успешно
+            
+        Raises:
+            ValueError: если есть операции по карте
+        """
+        # Проверяем наличие операций
+        periods = self.repo.get_periods_by_card(card_id)
+        payments = self.repo.get_payments_by_card(card_id)
+        
+        if periods or payments:
+            raise ValueError(
+                f"Невозможно удалить карту: есть операции.\n"
+                f"Периодов: {len(periods)}, Платежей: {len(payments)}\n\n"
+                f"Сначала удалите все периоды и платежи."
+            )
+        
+        # Удаляем карту
+        return self.repo.delete_card(card_id)
+    
     def get_all_credit_cards(self) -> List[Dict]:
         """
         Возвращает список кредитных карт (счетов типа CreditCard) для UI.
