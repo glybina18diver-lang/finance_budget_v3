@@ -41,12 +41,13 @@ class CreditCardRepository:
     def create_card(self, card: CreditCard) -> int:
         """Создаёт новую кредитную карту."""
         query = """
-            INSERT INTO credit_cards (account_id, name, annual_rate, grace_months, min_payment_percent)
-            VALUES (?, ?, ?, ?, ?)
+            INSERT INTO credit_cards (account_id, name, annual_rate, grace_months, 
+                                      min_payment_percent, payment_day, statement_day, credit_limit)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         """
         params = (
-            card.account_id, card.name, card.annual_rate,
-            card.grace_months, card.min_payment_percent
+            card.account_id, card.name, card.annual_rate, card.grace_months,
+            card.min_payment_percent, card.payment_day, card.statement_day, card.credit_limit
         )
         new_id = self.db.execute(query, params)
         card.id = new_id
@@ -57,12 +58,15 @@ class CreditCardRepository:
         query = """
             UPDATE credit_cards SET
                 account_id = ?, name = ?, annual_rate = ?,
-                grace_months = ?, min_payment_percent = ?
+                grace_months = ?, min_payment_percent = ?,
+                payment_day = ?, statement_day = ?, credit_limit = ?
             WHERE id = ?
         """
         params = (
             card.account_id, card.name, card.annual_rate,
-            card.grace_months, card.min_payment_percent, card.id
+            card.grace_months, card.min_payment_percent,
+            card.payment_day, card.statement_day, card.credit_limit,
+            card.id
         )
         self.db.execute(query, params)
         return True
@@ -107,10 +111,11 @@ class CreditCardRepository:
             Список словарей с данными карт и счетов
         """
         query = """
-            SELECT 
-                a.id AS account_id, a.name AS account_name, 
-                a.current_balance, a.credit_limit,
-                cc.id AS card_id, cc.annual_rate, cc.grace_months, cc.min_payment_percent
+            SELECT
+                a.id AS account_id, a.name AS account_name,
+                a.current_balance,
+                cc.id AS card_id, cc.annual_rate, cc.grace_months, cc.min_payment_percent,
+                cc.credit_limit
             FROM accounts a
             LEFT JOIN credit_cards cc ON a.id = cc.account_id
             WHERE a.account_type = 'Credit Card' AND a.is_active = 1
@@ -231,7 +236,10 @@ class CreditCardRepository:
             name=row["name"],
             annual_rate=row["annual_rate"],
             grace_months=row["grace_months"],
-            min_payment_percent=row["min_payment_percent"]
+            min_payment_percent=row["min_payment_percent"],
+            payment_day=row.get("payment_day", 10),
+            statement_day=row.get("statement_day", 1),
+            credit_limit=row.get("credit_limit", 0.0)
         )
 
     def _row_to_period(self, row) -> CreditCardPeriod:

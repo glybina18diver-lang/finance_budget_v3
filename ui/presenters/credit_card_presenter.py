@@ -5,9 +5,14 @@
 """
 from typing import List, Dict, Optional
 from datetime import date
+from PySide6.QtWidgets import QDialog
 
 from services.credit_card_service import CreditCardService
 from core.repositories.account_repository import AccountRepository
+from ui.dialogs.credit_card_settings_dialog import CreditCardSettingsDialog
+from ui.dialogs.credit_card_payment_dialog import CreditCardPaymentDialog
+
+
 
 
 class CreditCardPresenter:
@@ -118,8 +123,64 @@ class CreditCardPresenter:
     def get_all_credit_cards(self) -> List[Dict]:
         """Возвращает список кредитных карт для UI выбора."""
         return self.service.get_all_credit_cards()
+    
+    # ================== Открытие дилогов ===================
+    def _open_payment_dialog(self):
+        """Открывает диалог внесения платежа."""
+        dialog = CreditCardPaymentDialog(parent=self.view, presenter=self)
+        result = dialog.exec()
+        
+        if result == QDialog.Accepted:
+            self.view.show_status("Платеж успешно внесён", "success")
+            self.load_initial_data() 
+
+    def open_settings_dialog(self):
+        """Открывает диалог настроек текущей карты."""
+        
+        # Получаем текущие данные карты
+        card_data = self._get_current_card_data()
+        if not card_data:
+            self.view.show_status("Данные карты не найдены", "error")
+            return
+            
+        dialog = CreditCardSettingsDialog(parent=self.view, presenter=self)
+        dialog.populate_settings(card_data)
+        
+        result = dialog.exec()
+        if result == QDialog.Accepted:
+            self.view.show_status("Настройки карты обновлены", "success")
+            self.load_initial_data()  # Обновляем UI основного диалога
+
+    
 
     # =================== Действия пользователя ===================
+
+    def save_card_settings(self, settings_data: dict):
+        """Сохраняет обновленные настройки карты."""
+        try:
+            self.service.update_card_settings(self.current_card_id, settings_data)
+        except ValueError as e:
+            self.view.show_status(f"Ошибка сохранения: {e}", "error")
+            raise
+
+    def _get_current_card_data(self) -> Optional[Dict]:
+        """Возвращает данные текущей карты в виде словаря."""
+        if not self.current_card_id:
+            return None
+        card = self.service.repo.get_card_by_id(self.current_card_id)
+        if not card:
+            return None
+            
+        return {
+            "id": card.id,
+            "name": card.name,
+            "annual_rate": card.annual_rate,
+            "grace_months": card.grace_months,
+            "min_payment_percent": card.min_payment_percent * 100,  # В UI показываем в %
+            "payment_day": card.payment_day,
+            "statement_day": card.statement_day,
+            "credit_limit": card.credit_limit
+        }
 
     def make_payment(self, payment_data: dict):
         """

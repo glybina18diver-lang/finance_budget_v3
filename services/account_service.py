@@ -98,8 +98,11 @@ class AccountService:
         """
         Проверяет наличие зависимостей у счёта во всех связанных таблицах.
         
+        Для счетов типа CreditCard всегда возвращает True,
+        так как удаление должно происходить через диалог кредитных карт.
+        
         Returns:
-            True если к счёту привязаны операции
+            True если к счёту привязаны операции или это кредитная карта
         """
         # 1. Проверяем транзакции (расходы/доходы)
         query = "SELECT COUNT(*) AS cnt FROM transactions WHERE account_id = ?"
@@ -125,7 +128,14 @@ class AccountService:
         if result and result["cnt"] > 0:
             return True
         
-        # 4. Проверяем кредитные карты 
+        # 4. Проверяем кредитные карты
+        # TODO: все еще вылетает ошибка FOREIGN KEY
+        # Если счёт имеет тип CreditCard — блокируем удаление
+        # Удаление должно происходить через диалог управления кредитными картами
+        query = "SELECT account_type FROM accounts WHERE id = ?"
+        result = self.acc_repo.db.fetchone(query, (account_id,))
+        if result and result["account_type"] == "CreditCard":
+            return True
         
         return False
     
@@ -231,6 +241,3 @@ class AccountService:
             raise ValueError("Название счёта не может быть пустым")
         if account_data.get("initial_balance", 0) < 0:
             raise ValueError("Начальный баланс не может быть отрицательным")
-        if account_data.get("account_type") == "Credit Card":
-            if not (1 <= account_data.get("payment_due_day", 0) <= 31):
-                raise ValueError("День платежа должен быть от 1 до 31")

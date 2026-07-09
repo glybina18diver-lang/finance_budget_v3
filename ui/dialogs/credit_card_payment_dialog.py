@@ -38,8 +38,7 @@ class CreditCardPaymentDialog(BaseDialog):
 
     def _init_ui(self):
         """Инициализация интерфейса."""
-        layout = QVBoxLayout(self)
-        layout.setSpacing(10)
+        self._main_layout.setSpacing(10)
         
         # === Информация о платеже ===
         info_group = QGroupBox("Текущая задолженность")
@@ -54,7 +53,7 @@ class CreditCardPaymentDialog(BaseDialog):
         info_layout.addRow("Вся задолженность:", self.total_debt_label)
         
         info_group.setLayout(info_layout)
-        layout.addWidget(info_group)
+        self._main_layout.addWidget(info_group)
         
         # === Данные платежа ===
         form_group = QGroupBox("Данные платежа")
@@ -77,7 +76,6 @@ class CreditCardPaymentDialog(BaseDialog):
         validator = QDoubleValidator(0.0, 9999999.0, 2)
         validator.setNotation(QDoubleValidator.StandardNotation)
         self.amount_input.setValidator(validator)
-        self.amount_input.textChanged.connect(self._on_amount_changed)
         form_layout.addRow("Сумма платежа:", self.amount_input)
         
         # Быстрые кнопки
@@ -110,14 +108,14 @@ class CreditCardPaymentDialog(BaseDialog):
         form_layout.addRow("", self.allocation_group)
         
         form_group.setLayout(form_layout)
-        layout.addWidget(form_group)
+        self._main_layout.addWidget(form_group)
         
         # Подсказка
         hint = QLabel("💡 Платёж распределяется: сначала проценты, затем основной долг")
         hint.setStyleSheet("color: gray; font-size: 9pt;")
-        layout.addWidget(hint)
+        self._main_layout.addWidget(hint)
         
-        layout.addStretch()
+        self._main_layout.addStretch()
         
         # Кнопки
         button_box = QDialogButtonBox(
@@ -125,7 +123,7 @@ class CreditCardPaymentDialog(BaseDialog):
         )
         button_box.accepted.connect(self._on_accept)
         button_box.rejected.connect(self.reject)
-        layout.addWidget(button_box)
+        self._main_layout.addWidget(button_box)
 
     def _on_amount_changed(self, text):
         """Обновляет preview распределения платежа."""

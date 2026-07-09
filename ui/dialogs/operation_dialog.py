@@ -63,9 +63,9 @@ class OperationDialog(BaseDialog):
             ("🏦 Счета", self._open_account_management, "#2196F3"), 
             ("📊 Категории", self._open_category_management, "#9C27B0"),
             ("📤 Переводы", self._open_transfer_dialog, "#FF9800"), 
-            ("🔍 Сверка", self._stub_method, "#607D8B"),
+            #("🔍 Сверка", self._stub_method, "#607D8B"),
             ("💰 Займы", self._open_loan_dialog, "#795548"), 
-            ("💳 Кредитки", self._open_credit_card_dialog, "#E91E63")
+            ("💳 Кредитные карты", self._open_credit_card_dialog, "#E91E63")
         ]
 
         for text, callback, color in buttons:

@@ -36,25 +36,65 @@ class CreditCardService:
         """Возвращает все кредитные карты."""
         return self.repo.get_all_cards()
 
-    def create_card(self, account_id: int, name: str = "Сбер Молодёжная") -> int:
+    def create_card(self, account_id: int) -> int:
         """
         Создаёт новую кредитную карту.
+        Имя карты по умолчанию берется из названия привязанного счета.
         
         Args:
             account_id: ID счёта карты
-            name: название карты
             
         Returns:
             ID созданной карты
         """
+        # Получаем счет, чтобы узнать его имя
+        account = self.account_repo.get_by_id(account_id)
+        default_name = account.name if account else "Кредитная карта"
+        
         card = CreditCard(
             account_id=account_id,
-            name=name,
+            name=default_name,  # <-- Подхватываем имя счета
             annual_rate=49.8,
             grace_months=3,
-            min_payment_percent=0.02
+            min_payment_percent=0.02,
+            payment_day=1,
+            statement_day=1,
+            credit_limit=10000
         )
         return self.repo.create_card(card)
+
+    def update_card_settings(self, card_id: int, settings_data: dict) -> bool:
+        """
+        Обновляет настройки кредитной карты.
+        
+        Args:
+            card_id: ID карты
+            settings_data: словарь с новыми настройками
+            
+        Returns:
+            True если успешно
+        """
+        card = self.repo.get_card_by_id(card_id)
+        if not card:
+            raise ValueError("Карта не найдена")
+        
+        # Обновляем поля, если они есть в словаре
+        if "name" in settings_data:
+            card.name = settings_data["name"].strip()
+        if "annual_rate" in settings_data:
+            card.annual_rate = float(settings_data["annual_rate"])
+        if "grace_months" in settings_data:
+            card.grace_months = int(settings_data["grace_months"])
+        if "min_payment_percent" in settings_data:
+            card.min_payment_percent = float(settings_data["min_payment_percent"])
+        if "payment_day" in settings_data:
+            card.payment_day = int(settings_data["payment_day"])
+        if "statement_day" in settings_data:
+            card.statement_day = int(settings_data["statement_day"])
+        if "credit_limit" in settings_data:
+            card.credit_limit = float(settings_data["credit_limit"])
+            
+        return self.repo.update_card(card)
     
     def delete_card(self, card_id: int) -> bool:
         """

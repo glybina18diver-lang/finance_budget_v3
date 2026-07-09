@@ -22,10 +22,7 @@ class Account(BaseModel):
     current_balance: float = 0.0
     
     # Специфичные поля для Credit Card
-    credit_limit: Optional[float] = None       # Лимит кредита
-    payment_due_day: Optional[int] = None      # День оплаты (1-31)
-    min_payment_percent: Optional[float] = None # Минимальный платеж в %
-    last_payment_date: Optional[str] = None    # Дата последнего платежа (YYYY-MM-DD)
+    # все пернесены в таблицу credit_cards
     
     # Системные
     is_active: bool = True
@@ -132,10 +129,17 @@ class CreditCard:
     """Модель кредитной карты."""
     id: Optional[int] = None
     account_id: int = 0              # Счёт карты в accounts
-    name: str = "Сбер Молодёжная"
+    
+    # Основные настройки
+    name: str = ""                   # Название (по умолчанию берется от счета)
     annual_rate: float = 49.8        # Годовая ставка %
     grace_months: int = 3            # Льготный период (месяцев)
     min_payment_percent: float = 0.02  # 2% от долга
+    
+    # Дополнительные настройки
+    payment_day: int = 1             # День месяца для обязательного платежа
+    statement_day: int = 1           # День месяца для формирования выписки
+    credit_limit: int = 10000           # Кредитный лимит карты
 
 
 @dataclass

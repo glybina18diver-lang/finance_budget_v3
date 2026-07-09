@@ -13,12 +13,12 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import QDate, Qt, Signal
 from PySide6.QtGui import QFont
 from ui.dialogs.base_dialog import BaseDialog
+from ui.widgets.colored_button import CompactButton
+
 
 
 class CreditCardDialog(BaseDialog):
     """Основной диалог управления кредитной картой."""
-
-    data_updated = Signal()
 
     def __init__(self, parent=None, presenter=None, card_id: int = None, account_id: int = None):
         """
@@ -60,39 +60,20 @@ class CreditCardDialog(BaseDialog):
         
         header_layout.addStretch()
         
+        # Кнопака настроек  карты
+        self.settings_btn = CompactButton("Настройки")
+        self.settings_btn.clicked.connect(self._on_settings_card)
+        header_layout.addWidget(self.settings_btn)
+
         # Кнопка внесения платежа
-        self.payment_btn = QPushButton("💳 Внести платёж")
-        self.payment_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #28a745;
-                color: white;
-                padding: 10px 20px;
-                border-radius: 5px;
-                font-weight: bold;
-            }
-            QPushButton:hover {
-                background-color: #218838;
-            }
-        """)
+        self.payment_btn = CompactButton("💳 Внести платёж")
         self.payment_btn.clicked.connect(self._open_payment_dialog)
         header_layout.addWidget(self.payment_btn)
 
-        self.delete_card_btn = QPushButton("🗑️ Удалить карту")
-        self.delete_card_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #dc3545;
-                color: white;
-                padding: 10px 20px;
-                border-radius: 5px;
-                font-weight: bold;
-            }
-            QPushButton:hover {
-                background-color: #c82333;
-            }
-        """)
+        self.delete_card_btn = CompactButton("🗑️ Удалить карту")
         self.delete_card_btn.clicked.connect(self._on_delete_card)
         header_layout.addWidget(self.delete_card_btn)
-        
+
         self._main_layout.addWidget(header_frame)
         
         # === Блок общей задолженности ===
@@ -208,20 +189,15 @@ class CreditCardDialog(BaseDialog):
         self._main_layout.addWidget(tabs, 1)
         
         # === Кнопка закрытия ===
-        close_btn = QPushButton("Закрыть")
+        close_btn = CompactButton("Закрыть")
         close_btn.clicked.connect(self.reject)
         self._main_layout.addWidget(close_btn)
 
     def _open_payment_dialog(self):
         """Открывает диалог внесения платежа."""
-        from ui.dialogs.credit_card_payment_dialog import CreditCardPaymentDialog
+        if self.presenter:
+            self.presenter._open_payment_dialog()
         
-        dialog = CreditCardPaymentDialog(self, presenter=self.presenter)
-        result = dialog.exec()
-        
-        if result == QDialog.Accepted:
-            self.data_updated.emit()
-
     def _on_delete_card(self):
         """Обработчик нажатия кнопки 'Удалить карту'."""
         from PySide6.QtWidgets import QMessageBox
@@ -237,6 +213,11 @@ class CreditCardDialog(BaseDialog):
         
         if reply == QMessageBox.StandardButton.Yes and self.presenter:
             self.presenter.delete_card()
+
+    def _on_settings_card(self):
+        """Открывает диалог настроек кредитной карты."""
+        if self.presenter:
+            self.presenter.open_settings_dialog()
 
     # =================== Контракт View <-> Presenter ===================
 

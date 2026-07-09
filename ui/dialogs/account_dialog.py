@@ -93,32 +93,12 @@ class AccountDialog(BaseDialog):
         validator.setNotation(QDoubleValidator.StandardNotation)
         self.initial_balance_input.setValidator(validator)
 
-        # 🔑 Основное изменение: создаем отдельный виджет для полей кредитной карты
-        self.credit_card_group = QGroupBox("Параметры кредитной карты")
-        credit_card_layout = QGridLayout(self.credit_card_group)
-        
-        # Поля кредитной карты (теперь в отдельном контейнере)
-        credit_card_layout.addWidget(QLabel("Кредитный лимит:"), 0, 0)
-        self.credit_limit_input = QLineEdit()
-        self.credit_limit_input.setPlaceholderText("0.00")
-        self.credit_limit_input.setFixedHeight(26)
-        credit_card_layout.addWidget(self.credit_limit_input, 0, 1)
-        
-        credit_card_layout.addWidget(QLabel("День платежа (1-31):"), 1, 0)
-        self.payment_day_input = QLineEdit()
-        self.payment_day_input.setPlaceholderText("1")
-        self.payment_day_input.setFixedHeight(26)
-        credit_card_layout.addWidget(self.payment_day_input, 1, 1)
-        
-        credit_card_layout.addWidget(QLabel("Мин. платёж (%):"), 2, 0)
-        self.min_payment_input = QLineEdit()
-        self.min_payment_input.setPlaceholderText("5.0")
-        self.min_payment_input.setFixedHeight(26)
-        credit_card_layout.addWidget(self.min_payment_input, 2, 1)
-        
-        # Скрываем всю группу сразу
-        self.credit_card_group.setVisible(False)
-        form_layout.addWidget(self.credit_card_group, row, 0, 1, 2)
+        # Подсказка для кредитной карты
+        self.credit_card_hint = QLabel("💡 Все параметры карты настраиваются в окне Кредитные карты — Настройки")
+        self.credit_card_hint.setStyleSheet("color: gray; font-size: 9pt;")
+        self.credit_card_hint.setVisible(False)
+        self.credit_card_hint.setWordWrap(True)
+        form_layout.addWidget(self.credit_card_hint, row, 0, 1, 2)
         row += 1
 
         form_layout.addWidget(QLabel("Валюта:"), row, 0)
@@ -310,106 +290,11 @@ class AccountDialog(BaseDialog):
         else:
             self.show_status("Презентер не подключен", "error")
 
-    def _show_account_stats(self): #TODO не рабочий (скопирован из V2)
-        """Показывает статистику по выбранному счету"""
-        selected_items = self.accounts_tree.selectedItems()
-        if not selected_items:
-            self.show_status("Выберите счет для статистики", "warning")
-            return
-        
-        item = selected_items[0]
-        account_id = item.data(0, Qt.UserRole)
-        account_name = item.text(0)
-        
-        try:
-            # Получаем данные счета
-            account_obj = self.database.accounts.get_by_id(account_id)
-            if account_obj is None:
-                self.show_status("Данные счета не найдены", "error")
-                return
-            account_data = account_obj.to_dict()
-            
-            # Получаем транзакции
-            transactions = self.database.transactions.get_transactions(filters={'account_id': account_id, 'exclude_corrections': True})
-            
-            # Получаем переводы
-            transfers = self.database.transfers.get_transfers(filters={'account_id': account_id})
-            
-            # Вычисляем статистику
-            total_income = 0.0
-            total_expense = 0.0
-            transaction_count = len(transactions)
-            
-            for t in transactions:
-                amount = t['amount']
-                if t['type'] == 'income':
-                    total_income += amount
-                elif t['type'] == 'expense':
-                    total_expense += abs(amount)
-            
-            transfers_in = 0
-            transfers_out = 0
-            
-            for t in transfers:
-                if t['to_account_id'] == account_id:
-                    transfers_in += 1
-                elif t['from_account_id'] == account_id:
-                    transfers_out += 1
-            
-            # Формируем сообщение
-            stats_text = f"📊 Статистика счета: {account_data['name']}\n\n"
-            stats_text += f"💰 Текущий баланс: {account_data['current_balance']:.2f} {account_data['currency']}\n"
-            stats_text += f"📈 Всего доходов: {total_income:.2f} {account_data['currency']}\n"
-            stats_text += f"📉 Всего расходов: {total_expense:.2f} {account_data['currency']}\n"
-            stats_text += f"🔄 Чистый поток: {total_income - total_expense:.2f} {account_data['currency']}\n\n"
-            
-            stats_text += f"📋 Количество операций:\n"
-            stats_text += f"   • Транзакций: {transaction_count}\n"
-            stats_text += f"   • Входящих переводов: {transfers_in}\n"
-            stats_text += f"   • Исходящих переводов: {transfers_out}\n"
-            stats_text += f"   • Всего: {transaction_count + transfers_in + transfers_out}\n\n"
-            
-            stats_text += f"🗓️ Тип счета: {account_data['type']}\n"
-            
-            if account_data['type'] == 'Credit Card':
-                stats_text += f"💳 Кредитный лимит: {account_data.get('credit_limit', 0.0):.2f} {account_data['currency']}\n"
-                stats_text += f"📅 День платежа: {account_data.get('payment_due_day', 1)}\n"
-                stats_text += f"📊 Мин. платеж: {account_data.get('min_payment_percent', 5.0):.1f}%\n"
-            
-            # Дата создания
-            created_at = account_data.get('created_at', '')
-            if created_at:
-                if isinstance(created_at, str):
-                    stats_text += f"📅 Создан: {created_at[:10]}\n"
-            
-            # Показываем диалог
-            stats_dialog = QDialog(self)
-            stats_dialog.setWindowTitle(f"Статистика: {account_data['name']}")
-            stats_dialog.resize(400, 400)
-            
-            layout = QVBoxLayout(stats_dialog)
-            
-            text_edit = QTextEdit()
-            text_edit.setReadOnly(True)
-            text_edit.setPlainText(stats_text)
-            text_edit.setFont(QFont("Consolas", 10))
-            
-            layout.addWidget(text_edit)
-            
-            button_box = QDialogButtonBox(QDialogButtonBox.Ok)
-            button_box.accepted.connect(stats_dialog.accept)
-            layout.addWidget(button_box)
-            
-            stats_dialog.exec()
-            
-        except Exception as e:
-            self.show_status(f"Ошибка статистики: {str(e)[:50]}", "error")
     
-
     def _on_type_change(self):
-        """Показывает/скрывает поля кредитной карты."""
+        """Показывает/скрывает подсказку для кредитной карты."""
         is_credit = self.type_combo.currentText() == "Credit Card"
-        self.credit_card_group.setVisible(is_credit)
+        self.credit_card_hint.setVisible(is_credit)
 
     def _get_form_data(self) -> dict:
         """
@@ -445,15 +330,6 @@ class AccountDialog(BaseDialog):
             "is_active": True,
             "is_system": False
         }
-
-        if acc_type == "Credit Card":
-            try:
-                data["credit_limit"] = float(self.credit_limit_input.text() or "0")
-                data["payment_due_day"] = int(self.payment_day_input.text() or "1")
-                data["min_payment_percent"] = float(self.min_payment_input.text() or "5.0")
-            except ValueError:
-                raise ValueError("Некорректные данные кредитной карты")
-
         return data
 
     def _reset_form(self):
@@ -500,12 +376,6 @@ class AccountDialog(BaseDialog):
         self.type_combo.setCurrentText(account.account_type)
         self.initial_balance_input.setText(f"{account.initial_balance:.2f}")
         self.currency_combo.setCurrentText(account.currency or "RUB")
-
-        if account.account_type == "Credit Card":
-            self.credit_limit_input.setText(f"{account.credit_limit or 0.0:.2f}")
-            self.payment_day_input.setText(str(account.payment_due_day or 1))
-            self.min_payment_input.setText(f"{account.min_payment_percent or 5.0:.2f}")
-
         self.editing_account_id = account.id
         self.add_button.setEnabled(False)
         self.edit_button.setEnabled(True)
