@@ -34,7 +34,7 @@ def validate_date_format(date_str: str, format_str: str = '%Y-%m-%d') -> bool:
 
 def validate_account_type(account_type: str) -> bool:
     """Валидация типа счёта."""
-    valid_types = ['Cash', 'Credit Card', 'Bank Account', 'Counterparty']
+    valid_types = ['Cash', 'CreditCard', 'BankAccount', 'Counterparty']
     return account_type in valid_types
 
 

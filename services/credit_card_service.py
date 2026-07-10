@@ -158,7 +158,28 @@ class CreditCardService:
         return result
 
     # =================== Периоды ===================
-
+    def add_purchase_by_account(self, account_id: int, purchase_date: str, amount: float):
+        """
+        Добавляет покупку, находя карту по ID счёта.
+        Метод-обёртка для использования из других сервисов.
+        
+        Args:
+            account_id: ID счёта типа CreditCard
+            purchase_date: дата покупки
+            amount: сумма покупки (положительная)
+            
+        Returns:
+            Обновлённый объект периода или None, если счёт не кредитка
+        """
+        # Используем готовый метод из репозитория
+        card = self.repo.get_or_create_card_for_account(account_id)
+        
+        if not card:
+            print(f"Ошибка: не удалось получить/создать карту для счета ID: {account_id}")
+            return None
+        
+        return self.add_purchase(card.id, purchase_date, amount)
+        
     def get_periods(self, card_id: int) -> List[CreditCardPeriod]:
         """Возвращает все периоды по карте."""
         return self.repo.get_periods_by_card(card_id)
@@ -181,7 +202,7 @@ class CreditCardService:
         
         if not period:
             # Создаём новый период
-            grace_end = self._calculate_grace_period_end(purchase_date)
+            grace_end = self._calculate_grace_period_end(purchase_date, card_id)
             period = CreditCardPeriod(
                 card_id=card_id,
                 period_month=period_month,
@@ -219,7 +240,7 @@ class CreditCardService:
         period = self.repo.get_period(card_id, period_month)
         
         if not period:
-            grace_end = self._calculate_grace_period_end(transfer_date)
+            grace_end = self._calculate_grace_period_end(transfer_date, card_id)
             period = CreditCardPeriod(
                 card_id=card_id,
                 period_month=period_month,
@@ -442,34 +463,46 @@ class CreditCardService:
         dt = datetime.strptime(purchase_date, "%Y-%m-%d")
         return dt.strftime("%Y-%m")
 
-    def _calculate_grace_period_end(self, purchase_date: str) -> str:
+    def _calculate_grace_period_end(self, purchase_date: str, card_id: int) -> str:
         """
         Рассчитывает конец льготного периода.
-        Логика: месяц покупки + grace_months месяцев → конец последнего дня того месяца.
+        Логика: конец месяца покупки + grace_months месяцев.
         
         Пример: покупка 15.03.2025, grace_months=3 → льгота до 30.06.2025
         
         Args:
-            purchase_date: дата покупки
+            purchase_date: дата покупки (YYYY-MM-DD)
+            card_id: ID кредитной карты (для получения настроек)
             
         Returns:
             Дата конца льготного периода (YYYY-MM-DD)
         """
         dt = datetime.strptime(purchase_date, "%Y-%m-%d")
-        # Переходим на конец месяца покупки
-        end_of_month = dt.replace(day=28) + relativedelta(days=31)
-        end_of_month = end_of_month.replace(day=1) - relativedelta(days=1)
         
-        # Добавляем grace_months месяцев
-        grace_end = end_of_month + relativedelta(months=self._get_card_grace_months())
+        # 1. Находим конец месяца покупки
+        end_of_month = dt.replace(day=1) + relativedelta(months=1, days=-1)
+        
+        # 2. Добавляем grace_months из настроек карты
+        grace_months = self._get_card_grace_months(card_id)
+        grace_end = end_of_month + relativedelta(months=grace_months)
         
         return grace_end.strftime("%Y-%m-%d")
 
-    def _get_card_grace_months(self) -> int:
-        """Возвращает количество месяцев льготного периода (по умолчанию 3)."""
-        # TODO: брать из настроек карты, пока хардкод
-        return 3
-
+    def _get_card_grace_months(self, card_id: int) -> int:
+        """
+        Возвращает количество месяцев льготного периода из настроек карты.
+        
+        Args:
+            card_id: ID кредитной карты
+            
+        Returns:
+            Количество месяцев льготного периода (по умолчанию 0, если карта не найдена)
+        """
+        card = self.repo.get_card_by_id(card_id)
+        if card and card.grace_months:
+            return card.grace_months
+        return 0  # Значение по умолчанию, если карта не найдена
+    
     def _recalculate_interest(self, periods: List[CreditCardPeriod], as_of_date: str):
         """
         Пересчитывает проценты для всех периодов на указанную дату.

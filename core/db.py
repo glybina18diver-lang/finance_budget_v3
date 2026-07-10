@@ -39,7 +39,7 @@ class Database:
             CREATE TABLE IF NOT EXISTS accounts (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 name TEXT NOT NULL UNIQUE,
-                account_type TEXT NOT NULL CHECK(account_type IN ('Cash', 'Bank Account', 'Credit Card', 'Counterparty')),
+                account_type TEXT NOT NULL CHECK(account_type IN ('Cash', 'BankAccount', 'CreditCard', 'Counterparty')),
                 initial_balance REAL DEFAULT 0.0,
                 current_balance REAL DEFAULT 0.0,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,

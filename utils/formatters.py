@@ -87,8 +87,8 @@ def format_account_type(account_type: str) -> str:
     """
     type_map = {
         'Cash': 'Наличные',
-        'Credit Card': 'Кредитная карта',
-        'Bank Account': 'Банковский счёт',
+        'CreditCard': 'Кредитная карта',
+        'BankAccount': 'Банковский счёт',
         'Counterparty': 'Контрагент'
     }
 

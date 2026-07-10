@@ -15,13 +15,13 @@ class BaseModel:
 class Account(BaseModel):
     """Модель счета (полное соответствие схеме V2)."""
     name: str = ""
-    account_type: str = "Cash"  # Cash, Bank Account, Credit Card, Counterparty
+    account_type: str = "Cash"  # Cash, BankAccount, CreditCard, Counterparty
     
     # Балансы
     initial_balance: float = 0.0
     current_balance: float = 0.0
     
-    # Специфичные поля для Credit Card
+    # Специфичные поля для CreditCard
     # все пернесены в таблицу credit_cards
     
     # Системные
@@ -131,7 +131,7 @@ class CreditCard:
     account_id: int = 0              # Счёт карты в accounts
     
     # Основные настройки
-    name: str = ""                   # Название (по умолчанию берется от счета)
+    name: str = "Кредитная карта"    # Название (по умолчанию берется от счета) уже нет 
     annual_rate: float = 49.8        # Годовая ставка %
     grace_months: int = 3            # Льготный период (месяцев)
     min_payment_percent: float = 0.02  # 2% от долга

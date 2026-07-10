@@ -84,7 +84,8 @@ class NavigationService:
         tx_service = TransactionService(
             tx_repo=self.tx_repo,
             acc_repo=self.acc_repo,
-            cat_repo=self.cat_repo
+            cat_repo=self.cat_repo,
+            credit_card_service=self.credit_card_service
         )
         # Создаём презентер
         presenter = TransactionPresenter(tx_service=tx_service)

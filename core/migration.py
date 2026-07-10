@@ -19,6 +19,34 @@ def migrate_schema(conn: Optional[sqlite3.Connection]) -> None:
     if "type" in cols and "account_type" not in cols:
         cursor.execute("ALTER TABLE accounts RENAME COLUMN type TO account_type")
         logger.info("Миграция: accounts.type → account_type")
+    
+    # --- accounts: нормализация значений account_type ---
+    # Приводим все варианты написания к единому стилю PascalCase
+    if "account_type" in cols or "account_type" in {row[1] for row in cursor.execute("PRAGMA table_info(accounts)").fetchall()}:
+        # Маппинг: старое значение → новое значение
+        type_normalization = {
+            'Credit Card': 'CreditCard',
+            'credit_card': 'CreditCard',
+            'creditcard': 'CreditCard',
+            'credit': 'CreditCard',
+            
+            'Bank Account': 'BankAccount',
+            'bank_account': 'BankAccount',
+            'bankaccount': 'BankAccount',
+            'bank': 'BankAccount',
+            
+            'cash': 'Cash',
+            'НАЛИЧНЫЕ': 'Cash',
+            'Наличные': 'Cash',            
+        }
+        
+        for old_type, new_type in type_normalization.items():
+            cursor.execute(
+                "UPDATE accounts SET account_type = ? WHERE account_type = ?",
+                (new_type, old_type)
+            )
+            if cursor.rowcount > 0:
+                logger.info(f"Миграция: account_type '{old_type}' → '{new_type}' ({cursor.rowcount} записей)")
 
     # --- categories: type → cat_type ---
     cursor.execute("PRAGMA table_info(categories)")

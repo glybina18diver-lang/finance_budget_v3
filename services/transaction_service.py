@@ -1,4 +1,5 @@
 # services/transaction_service.py
+import logging
 from core.repositories.transaction_repository import TransactionRepository
 from core.repositories.account_repository import AccountRepository
 from core.repositories.category_repository import CategoryRepository
@@ -8,8 +9,10 @@ import re
 
 class TransactionService:
     """Сервис управления транзакциями: валидация, расчёты, обновление балансов."""
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(message)s")
 
-    def __init__(self, tx_repo: TransactionRepository, acc_repo: AccountRepository, cat_repo: CategoryRepository):
+    def __init__(self, tx_repo: TransactionRepository, acc_repo: AccountRepository, 
+                 cat_repo: CategoryRepository, credit_card_service= None):
         """
         Инициализация сервиса.
         
@@ -20,6 +23,7 @@ class TransactionService:
         self.tx_repo = tx_repo
         self.acc_repo = acc_repo
         self.cat_repo = cat_repo
+        self.credit_card_service = credit_card_service 
 
     #------Работа с транзакциями------
     def create_transaction(self, raw_amount: str, trans_type: str, account_id: int, 
@@ -69,11 +73,15 @@ class TransactionService:
         # 5. Сохранение в БД
         saved_tx = self.tx_repo.create(transaction)
         
-        # 6. Обновление баланса счёта
+        # 6. ОБРАБОТКА КРЕДИТНОЙ КАРТЫ (если это расход с кредитки)
+        if trans_type == "expense":
+            self._handle_credit_card_expense(account_id, amount_positive, date_str)
+            # Передаём amount_positive, а не signed_amount так как метод add_purchase ожидает положительное число
+        
+        # 7. Обновление баланса счёта
         self._update_account_balance(account_id, signed_amount)
         
         return saved_tx
-    
     def delete_transaction(self, tx_id: int) -> bool:
         """
         Удаляет транзакцию и коррекцией баланса счёта.
@@ -95,6 +103,33 @@ class TransactionService:
         # Возвращаем баланс: вычитаем сумму (т.к. она уже со знаком)
         self._update_account_balance(tx.account_id, -tx.amount)
         return True
+
+    def _handle_credit_card_expense(self, account_id: int, amount: float, date: str):
+        """
+        Метод-посредник: если счёт — кредитная карта, добавляет покупку в период кредитки.
+        Вызывается после создания расхода.
+        
+        Args:
+            account_id: ID счёта
+            amount: сумма расхода (положительное число)
+            date: дата транзакции (YYYY-MM-DD)
+        """
+        if not self.credit_card_service:
+            print("Сервис кредиток не подключён")
+            return 
+        
+        # Проверяем, является ли счёт кредитной картой
+        account = self.acc_repo.get_by_id(account_id)
+        if not account or account.account_type != 'CreditCard':
+            print(f"Счет ID: {account_id} не является CreditCard")
+            return 
+        print(f"Счет ID: {account_id} является CreditCard")
+        # Делегируем сервису кредиток — он сам найдёт карту и добавит покупку
+        try:
+            self.credit_card_service.add_purchase_by_account(account_id, date, amount)
+        except Exception as e:
+            logging.info(f"️ Ошибка при добавлении покупки в период кредитки: {e}")
+            print(f"⚠️ Ошибка при добавлении покупки в период кредитки: {e}")
 
     #------Проверки, валидация, преобразавание------
     def _parse_amount(self, raw: str) -> Tuple[float, float]:

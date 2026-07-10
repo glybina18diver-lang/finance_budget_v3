@@ -80,7 +80,7 @@ class CreditCardRepository:
     def get_or_create_card_for_account(self, account_id: int) -> CreditCard:
         """
         Возвращает кредитную карту для счёта.
-        Если записи нет — создаёт с дефолтными параметрами.
+        Если записи нет — создаёт с дефолтными параметрами из модели.
         
         Args:
             account_id: ID счёта в таблице accounts
@@ -92,13 +92,8 @@ class CreditCardRepository:
         if card:
             return card
         
-        card = CreditCard(
-            account_id=account_id,
-            name="Сбер Молодёжная",
-            annual_rate=49.8,
-            grace_months=3,
-            min_payment_percent=0.02
-        )
+        # Используем только обязательные поля, остальное берётся из модели
+        card = CreditCard(account_id=account_id)
         self.create_card(card)
         return card
 
@@ -118,7 +113,7 @@ class CreditCardRepository:
                 cc.credit_limit
             FROM accounts a
             LEFT JOIN credit_cards cc ON a.id = cc.account_id
-            WHERE a.account_type = 'Credit Card' AND a.is_active = 1
+            WHERE a.account_type = 'CreditCard' AND a.is_active = 1
             ORDER BY a.name
         """
         return self.db.fetchall(query)

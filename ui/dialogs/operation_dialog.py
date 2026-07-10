@@ -278,9 +278,8 @@ class OperationDialog(BaseDialog):
             self.show_error("Выберите счёт")
             return
             
-        # Для типа "Корректировка" категория может быть None, но у тебя пока только Доход/Расход
         if not category_id:
-            self.show_status("Выберите категорию", message_type="error")
+            self.show_error("Выберите категорию")
             return
 
         trans_type = "income" if self.type_combo.currentText() == "Доход" else "expense"
@@ -296,8 +295,10 @@ class OperationDialog(BaseDialog):
                 description=description,
                 date_str=date_str
             )
-        except AttributeError:
-            self.show_status("Презентер не подключен", message_type="error")
+        except Exception as e:
+            import traceback
+            # 1. Выводит точный стек ошибки в консоль IDE
+            traceback.print_exc() 
 
 
 

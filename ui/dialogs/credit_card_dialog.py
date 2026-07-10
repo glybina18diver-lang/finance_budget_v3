@@ -35,7 +35,7 @@ class CreditCardDialog(BaseDialog):
         self.card_id = card_id
         self.account_id = account_id
         
-        self.setWindowTitle("Кредитная карта")
+        self.setWindowTitle("Кредитная карта beta")
         self.resize(900, 700)
         
         self._init_ui()
@@ -283,8 +283,8 @@ class CreditCardDialog(BaseDialog):
             full_payoff: {total, principal, interest_retroactive, interest_daily}
         """
         # Общая задолженность
-        total_debt = full_payoff.get("total", 0)
-        self.total_debt_label.setText(f"Вся задолженность: {total_debt:,.2f} ₽")
+        total_deft = full_payoff.get("total", 0)
+        self.total_debt_label.setText(f"Вся задолженность: {total_deft:,.2f} ₽")
         
         # Основной долг
         principal = full_payoff.get("principal", 0)

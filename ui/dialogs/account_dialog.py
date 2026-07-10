@@ -78,7 +78,7 @@ class AccountDialog(BaseDialog):
         form_layout.addWidget(QLabel("Тип:"), row, 0)
         self.type_combo = QComboBox()
         self.type_combo.setFixedHeight(26)
-        self.type_combo.addItems(["Cash", "Bank Account", "Credit Card"])
+        self.type_combo.addItems(["Cash", "BankAccount", "CreditCard"])
         self.type_combo.currentTextChanged.connect(self._on_type_change)
         form_layout.addWidget(self.type_combo, row, 1)
         row += 1
@@ -293,7 +293,7 @@ class AccountDialog(BaseDialog):
     
     def _on_type_change(self):
         """Показывает/скрывает подсказку для кредитной карты."""
-        is_credit = self.type_combo.currentText() == "Credit Card"
+        is_credit = self.type_combo.currentText() == "CreditCard"
         self.credit_card_hint.setVisible(is_credit)
 
     def _get_form_data(self) -> dict:
