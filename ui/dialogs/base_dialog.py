@@ -2,10 +2,13 @@
 """
 Базовый диалог с общими функциями: статус-бар, сообщения, заглушки.
 """
+import logging
 from PySide6.QtWidgets import (
     QDialog, QLabel, QVBoxLayout, QHBoxLayout, QMessageBox, QTextEdit, QDialogButtonBox
 )
 from PySide6.QtCore import QTimer
+
+logger = logging.getLogger(__name__)
 
 
 class BaseDialog(QDialog):
@@ -55,6 +58,7 @@ class BaseDialog(QDialog):
         Args:
             message: текст ошибки
         """
+        logger.error("[BaseDialog] show_error: %s", message)
         QMessageBox.critical(self, "Ошибка", message)
 
     def _reset_status_bar(self):
@@ -75,6 +79,7 @@ class BaseDialog(QDialog):
         """
         account_name = result_info.get('account_name', 'Счёт')
         total_ops = result_info.get('total_operations', 0)
+        logger.warning("[BaseDialog] Невозможно удалить счёт '%s': %s операций", account_name, total_ops)
         
         html_text = f"""
             <h3 style='color: #dc3545; margin-top: 0;'>❌ Счёт нельзя удалить</h3>

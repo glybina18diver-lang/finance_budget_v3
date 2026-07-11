@@ -75,3 +75,43 @@ def get_db_path() -> str:
     data_dir = base / APP_NAME
     data_dir.mkdir(parents=True, exist_ok=True)
     return str(data_dir / DB_FILENAME)
+
+# ========== ЛОГИРОВАНИЕ ==========
+LOGS_DIR_NAME = "logs"
+
+def get_logs_dir() -> Path:
+    """
+    Возвращает путь к директории логов.
+    - В разработке: logs/ в корне проекта (ищет .git вверх по дереву)
+    - В собранной версии: logs/ в системной папке пользователя (рядом с БД)
+    """
+    is_compiled = getattr(sys, "frozen", False)
+    project_root, is_dev_mode = _find_project_root()
+
+    # Возвращаем путь разработки, если не скомпилировано и режим dev активен
+    if not is_compiled and is_dev_mode:
+        logs_path = project_root / LOGS_DIR_NAME
+        logs_path.mkdir(exist_ok=True)
+        return logs_path
+
+    # Системный путь для готовой сборки
+    if sys.platform == "win32":
+        base = Path(os.getenv("APPDATA", Path.home() / "AppData" / "Roaming"))
+    elif sys.platform == "darwin":
+        base = Path.home() / "Library" / "Application Support"
+    else:  # Linux
+        base = Path(os.getenv("XDG_DATA_HOME", Path.home() / ".local" / "share"))
+
+    data_dir = base / APP_NAME
+    logs_path = data_dir / LOGS_DIR_NAME
+    logs_path.mkdir(parents=True, exist_ok=True)
+    return logs_path
+
+def get_log_file_path(filename: str = "app.log") -> Path:
+    """
+    Возвращает полный путь к файлу лога.
+    
+    Args:
+        filename: имя файла лога (по умолчанию "app.log")
+    """
+    return get_logs_dir() / filename

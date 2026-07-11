@@ -4,8 +4,11 @@
 Координирует взаимодействие между AccountManagementDialog и AccountService.
 """
 from typing import Dict, List
+import logging
 from services.account_service import AccountService
 from core.models import Account
+
+logger = logging.getLogger(__name__)
 
 
 class AccountPresenter:
@@ -14,7 +17,7 @@ class AccountPresenter:
     def __init__(self, service: AccountService):
         """
         Инициализация презентера.
-        
+
         Args:
             service: экземпляр AccountService
         """
@@ -24,7 +27,7 @@ class AccountPresenter:
     def set_view(self, view):
         """
         Устанавливает ссылку на представление и инициирует загрузку данных.
-        
+
         Args:
             view: объект диалога с методами контракта UI
         """
@@ -35,13 +38,17 @@ class AccountPresenter:
         """Загружает список счетов из сервиса и передаёт в UI."""
         if not self.view:
             return
-        accounts = self.service.get_all_accounts()
-        self.view.load_accounts(accounts)
+        try:
+            accounts = self.service.get_all_accounts()
+            self.view.load_accounts(accounts)
+        except Exception as e:
+            logger.error(f"[AccountPresenter] Ошибка загрузки счетов: {e}", exc_info=True)
+            self.view.show_error(f"Ошибка загрузки счетов: {e}")
 
     def add_account(self, account_data: Dict) -> None:
         """
         Обрабатывает создание нового счёта.
-        
+
         Args:
             account_data: данные формы
         """
@@ -52,11 +59,14 @@ class AccountPresenter:
             self.view._reset_form()
         except ValueError as e:
             self.view.show_status(str(e), "error")
+        except Exception as e:
+            logger.error(f"[AccountPresenter] Ошибка создания счёта: {e}", exc_info=True)
+            self.view.show_status("Произошла ошибка при создании счёта", "error")
 
     def update_account(self, account_data: Dict) -> None:
         """
         Обрабатывает обновление счёта.
-        
+
         Args:
             account_data: данные формы (должны содержать 'id')
         """
@@ -64,7 +74,7 @@ class AccountPresenter:
         if not account_id:
             self.view.show_error("ID счёта не указан")
             return
-            
+
         try:
             self.service.update_account(account_id, account_data)
             self.view.show_status("Счёт успешно обновлён", "success")
@@ -72,11 +82,14 @@ class AccountPresenter:
             self.view._reset_form()
         except ValueError as e:
             self.view.show_status(str(e), "error")
+        except Exception as e:
+            logger.error(f"[AccountPresenter] Ошибка обновления счёта #{account_id}: {e}", exc_info=True)
+            self.view.show_status("Произошла ошибка при обновлении счёта", "error")
 
     def delete_account(self, account_id: int) -> dict:
         """
         Удаляет счёт и возвращает детальный результат.
-        
+
         Returns:
             Словарь с ключами:
             - 'success': bool (удаление прошло успешно)
@@ -88,17 +101,17 @@ class AccountPresenter:
             # Сначала проверим, можно ли удалить
             can_delete = True
             total_ops = 0
-            
+
             # Проверка через сервис (должен бросать ValueError при ошибках)
             self.service.delete_account(account_id)
-            self.view.clear_selection() 
+            self.view.clear_selection()
             self.load_accounts()
             return {
                 'success': True,
                 'can_delete': True,
                 'message': "Счёт успешно удалён"
             }
-            
+
         except ValueError as e:
             error_msg = str(e)
             # Определяем тип ошибки по тексту
@@ -118,16 +131,27 @@ class AccountPresenter:
                     'can_delete': False,
                     'message': error_msg
                 }
+        except Exception as e:
+            logger.error(f"[AccountPresenter] Ошибка удаления счёта #{account_id}: {e}", exc_info=True)
+            return {
+                'success': False,
+                'can_delete': False,
+                'message': f"Системная ошибка: {e}"
+            }
 
     def select_account(self, account_id: int) -> None:
         """
         Загружает данные выбранного счёта в форму редактирования.
-        
+
         Args:
             account_id: ID выбранного счёта
         """
-        account = self.service.get_account(account_id)
-        if account:
-            self.view.show_account_in_form(account)
-        else:
-            self.view.show_error("Счёт не найден в базе")
+        try:
+            account = self.service.get_account(account_id)
+            if account:
+                self.view.show_account_in_form(account)
+            else:
+                self.view.show_error("Счёт не найден в базе")
+        except Exception as e:
+            logger.error(f"[AccountPresenter] Ошибка загрузки счёта #{account_id}: {e}", exc_info=True)
+            self.view.show_error(f"Ошибка загрузки счёта: {e}")

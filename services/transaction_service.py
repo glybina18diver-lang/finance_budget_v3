@@ -7,15 +7,17 @@ from core.models import Transaction, Account, Category
 from typing import Tuple, List
 import re
 
+logger = logging.getLogger(__name__)
+
+
 class TransactionService:
     """Сервис управления транзакциями: валидация, расчёты, обновление балансов."""
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(message)s")
 
-    def __init__(self, tx_repo: TransactionRepository, acc_repo: AccountRepository, 
-                 cat_repo: CategoryRepository, credit_card_service= None):
+    def __init__(self, tx_repo: TransactionRepository, acc_repo: AccountRepository,
+                 cat_repo: CategoryRepository, credit_card_service=None):
         """
         Инициализация сервиса.
-        
+
         Args:
             tx_repo: репозиторий транзакций для CRUD-операций
             acc_repo: репозиторий счетов для проверки и обновления баланса
@@ -23,14 +25,14 @@ class TransactionService:
         self.tx_repo = tx_repo
         self.acc_repo = acc_repo
         self.cat_repo = cat_repo
-        self.credit_card_service = credit_card_service 
+        self.credit_card_service = credit_card_service
 
-    #------Работа с транзакциями------
-    def create_transaction(self, raw_amount: str, trans_type: str, account_id: int, 
+    # ------Работа с транзакциями------
+    def create_transaction(self, raw_amount: str, trans_type: str, account_id: int,
                            category_id: int, description: str, date_str: str) -> Transaction:
         """
         Создаёт транзакцию с парсингом суммы, валидацией и обновлением баланса счёта.
-        
+
         Args:
             raw_amount: строка суммы из UI (например, "100*3" или "10,50")
             trans_type: тип операции ("income", "expense", "correct")
@@ -38,115 +40,133 @@ class TransactionService:
             category_id: ID категории
             description: описание операции
             date_str: дата в формате YYYY-MM-DD
-            
+
         Returns:
             Сохранённый объект Transaction с присвоенным ID
-            
+
         Raises:
             ValueError: при некорректном формате суммы или данных
         """
-        if not isinstance(account_id, int) or account_id <= 0:
-            raise ValueError("Некорректный ID счёта")
-        if not isinstance(category_id, int) or category_id <= 0:
-            raise ValueError("Некорректный ID категории")
-            
-        # 1. Парсинг суммы и количества
-        amount_positive, quantity = self._parse_amount(raw_amount)
-        
-        # 2. Бизнес-валидация
-        self._validate_inputs(trans_type, account_id, category_id, amount_positive)
+        try:
+            if not isinstance(account_id, int) or account_id <= 0:
+                raise ValueError("Некорректный ID счёта")
+            if not isinstance(category_id, int) or category_id <= 0:
+                raise ValueError("Некорректный ID категории")
 
-        # 3. Применение знака по типу
-        signed_amount = amount_positive if trans_type == "income" else -amount_positive
-        
-        # 4. Сборка объекта
-        transaction = Transaction(
-            date=date_str,
-            amount=signed_amount,
-            trans_type=trans_type,
-            account_id=account_id,
-            category_id=category_id,
-            description=description.strip(),
-            quantity=quantity
-        )
-        
-        # 5. Сохранение в БД
-        saved_tx = self.tx_repo.create(transaction)
-        
-        # 6. ОБРАБОТКА КРЕДИТНОЙ КАРТЫ (если это расход с кредитки)
-        if trans_type == "expense":
-            self._handle_credit_card_expense(account_id, amount_positive, date_str)
-            # Передаём amount_positive, а не signed_amount так как метод add_purchase ожидает положительное число
-        
-        # 7. Обновление баланса счёта
-        self._update_account_balance(account_id, signed_amount)
-        
-        return saved_tx
+            # 1. Парсинг суммы и количества
+            amount_positive, quantity = self._parse_amount(raw_amount)
+
+            # 2. Бизнес-валидация
+            self._validate_inputs(trans_type, account_id, category_id, amount_positive)
+
+            # 3. Применение знака по типу
+            signed_amount = amount_positive if trans_type == "income" else -amount_positive
+
+            # 4. Сборка объекта
+            transaction = Transaction(
+                date=date_str,
+                amount=signed_amount,
+                trans_type=trans_type,
+                account_id=account_id,
+                category_id=category_id,
+                description=description.strip(),
+                quantity=quantity
+            )
+
+            # 5. Сохранение в БД
+            saved_tx = self.tx_repo.create(transaction)
+
+            # 6. ОБРАБОТКА КРЕДИТНОЙ КАРТЫ (если это расход с кредитки)
+            if trans_type == "expense":
+                self._handle_credit_card_expense(account_id, amount_positive, date_str)
+
+            # 7. Обновление баланса счёта
+            self._update_account_balance(account_id, signed_amount)
+
+            return saved_tx
+
+        except ValueError as e:
+            logger.warning(f"[TransactionService] Валидация: {e}")
+            raise
+        except Exception as e:
+            logger.error(f"[TransactionService] Критическая ошибка при создании транзакции: {e}")
+            logger.error("Ошибка: %s", e, exc_info=True)
+            raise RuntimeError(f"Системная ошибка при создании транзакции: {e}") from e
+
     def delete_transaction(self, tx_id: int) -> bool:
         """
-        Удаляет транзакцию и коррекцией баланса счёта.
-        
+        Удаляет транзакцию с коррекцией баланса счёта.
+
         Args:
             tx_id: ID транзакции для удаления
-            
+
         Returns:
             True при успешном удалении
         """
-        # Получаем транзакцию, чтобы вернуть баланс на место
-        tx = self.tx_repo.get_by_id(tx_id)
-        if not tx:
-            raise ValueError(f"Транзакция #{tx_id} не найдена")
-            
-        # Удаляем запись
-        self.tx_repo.delete(tx_id)
-        
-        # Возвращаем баланс: вычитаем сумму (т.к. она уже со знаком)
-        self._update_account_balance(tx.account_id, -tx.amount)
-        return True
+        try:
+            # Получаем транзакцию, чтобы вернуть баланс на место
+            tx = self.tx_repo.get_by_id(tx_id)
+            if not tx:
+                raise ValueError(f"Транзакция #{tx_id} не найдена")
+
+            # Удаляем запись
+            self.tx_repo.delete(tx_id)
+
+            # Возвращаем баланс: вычитаем сумму (т.к. она уже со знаком)
+            self._update_account_balance(tx.account_id, -tx.amount)
+            return True
+
+        except ValueError as e:
+            logger.warning(f"[TransactionService] Валидация при удалении: {e}")
+            raise
+        except Exception as e:
+            logger.error(f"[TransactionService] Критическая ошибка при удалении транзакции #{tx_id}: {e}")
+            logger.error("Ошибка: %s", e, exc_info=True)
+            raise RuntimeError(f"Системная ошибка при удалении транзакции: {e}") from e
 
     def _handle_credit_card_expense(self, account_id: int, amount: float, date: str):
         """
         Метод-посредник: если счёт — кредитная карта, добавляет покупку в период кредитки.
         Вызывается после создания расхода.
-        
+
         Args:
             account_id: ID счёта
             amount: сумма расхода (положительное число)
             date: дата транзакции (YYYY-MM-DD)
         """
         if not self.credit_card_service:
-            print("Сервис кредиток не подключён")
-            return 
-        
+            logger.warning("[TransactionService] Сервис кредиток не подключён")
+            return
+
         # Проверяем, является ли счёт кредитной картой
         account = self.acc_repo.get_by_id(account_id)
         if not account or account.account_type != 'CreditCard':
-            print(f"Счет ID: {account_id} не является CreditCard")
-            return 
-        print(f"Счет ID: {account_id} является CreditCard")
+            logger.debug(f"[TransactionService] Счёт ID {account_id} не является CreditCard")
+            return
+
+        logger.debug(f"[TransactionService] Счёт ID {account_id} является CreditCard, добавляем покупку")
         # Делегируем сервису кредиток — он сам найдёт карту и добавит покупку
         try:
             self.credit_card_service.add_purchase_by_account(account_id, date, amount)
         except Exception as e:
-            logging.info(f"️ Ошибка при добавлении покупки в период кредитки: {e}")
-            print(f"⚠️ Ошибка при добавлении покупки в период кредитки: {e}")
+            logger.warning(f"[TransactionService] Ошибка при добавлении покупки в период кредитки: {e}")
 
-    #------Проверки, валидация, преобразавание------
+    # ------Проверки, валидация, преобразование------
     def _parse_amount(self, raw: str) -> Tuple[float, float]:
         """
         Разбирает строку суммы: поддерживает "100*3", "10,50", "1000".
-        
+
         Args:
             raw: исходная строка из поля ввода
-            
+
         Returns:
             Кортеж (общая_сумма, количество)
-            
+
         Raises:
             ValueError: при недопустимом формате
         """
         normalized = raw.replace(",", ".").strip()
-        
+
         # Формат "сумма*количество"
         if "*" in normalized:
             parts = normalized.split("*", maxsplit=1)
@@ -157,7 +177,7 @@ class TransactionService:
             if quantity <= 0:
                 raise ValueError("Количество должно быть больше 0")
             return round(unit_price * quantity, 2), quantity
-            
+
         # Обычное число
         total = float(normalized)
         if total <= 0:
@@ -167,7 +187,7 @@ class TransactionService:
     def _validate_inputs(self, trans_type: str, account_id: int, category_id: int, amount: float):
         """
         Проверяет бизнес-правила перед сохранением транзакции.
-        
+
         Args:
             trans_type: тип операции
             account_id: ID счёта
@@ -176,69 +196,94 @@ class TransactionService:
         """
         if trans_type not in ("income", "expense", "correct"):
             raise ValueError(f"Недопустимый тип транзакции: {trans_type}")
-            
+
         if amount <= 0:
             raise ValueError("Сумма операции должна быть больше нуля")
-            
+
         account = self.acc_repo.get_by_id(account_id)
         if not account:
             raise ValueError(f"Счёт #{account_id} не найден")
         if not account.is_active:
             raise ValueError(f"Счёт '{account.name}' деактивирован")
-            
+
         # Корректировка может быть без категории, остальные требуют
         if trans_type != "correct" and not category_id:
             raise ValueError("Для доходов/расходов необходимо указать категорию")
 
-    #------Обработчики UI------
+    # ------Обработчики UI------
     def _update_account_balance(self, account_id: int, amount: float):
         """
         Обновляет текущий баланс счёта на указанную сумму.
-        
+
         Args:
             account_id: ID счёта для обновления
             amount: сумма с учётом знака (+ для дохода, - для расхода)
         """
-        account = self.acc_repo.get_by_id(account_id)
-        if account:
-            account.current_balance = round(account.current_balance + amount, 2)
-            self.acc_repo.update(account)
+        try:
+            account = self.acc_repo.get_by_id(account_id)
+            if account:
+                account.current_balance = round(account.current_balance + amount, 2)
+                self.acc_repo.update(account)
+        except Exception as e:
+            logger.error(f"[TransactionService] Ошибка обновления баланса счёта #{account_id}: {e}")
+            logger.error("Ошибка: %s", e, exc_info=True)
+            raise
 
     def get_accounts_for_ui(self) -> List[Account]:
         """
         Возвращает список активных счетов для заполнения комбобокса.
-        
+
         Returns:
             Список объектов Account
         """
-        return self.acc_repo.get_all_active()
-    
+        try:
+            return self.acc_repo.get_all_active()
+        except Exception as e:
+            logger.error(f"[TransactionService] Ошибка загрузки счетов: {e}")
+            logger.error("Ошибка: %s", e, exc_info=True)
+            raise
+
     def get_categories_by_type(self, ui_type: str) -> List[Category]:
         """
         Возвращает категории для указанного типа операции из UI.
-        
+
         Args:
             ui_type: строка из UI ("Доход" или "Расход")
-            
+
         Returns:
             Список объектов Category
         """
-        # Маппинг UI -> БД
-        db_type = "income" if ui_type == "Доход" else "expense"
-        return self.cat_repo.get_all_by_type(db_type)
-    
+        try:
+            # Маппинг UI -> БД
+            db_type = "income" if ui_type == "Доход" else "expense"
+            return self.cat_repo.get_all_by_type(db_type)
+        except Exception as e:
+            logger.error(f"[TransactionService] Ошибка загрузки категорий: {e}")
+            logger.error("Ошибка: %s", e, exc_info=True)
+            raise
+
     def get_latest_transactions(self, limit: int = 300) -> List[Transaction]:
         """
         Возвращает последние N транзакций для отображения в UI.
-        
+
         Args:
             limit: максимальное количество записей (по умолчанию 300)
-            
+
         Returns:
             Список объектов Transaction, отсортированный по дате (новые первыми)
         """
-        return self.tx_repo.get_latest(limit)
-    
+        try:
+            return self.tx_repo.get_latest(limit)
+        except Exception as e:
+            logger.error(f"[TransactionService] Ошибка загрузки транзакций: {e}")
+            logger.error("Ошибка: %s", e, exc_info=True)
+            raise
+
     def get_all_categories(self) -> List[Category]:
         """Возвращает все категории для UI (без фильтрации)."""
-        return self.cat_repo.get_all_categories()
+        try:
+            return self.cat_repo.get_all_categories()
+        except Exception as e:
+            logger.error(f"[TransactionService] Ошибка загрузки всех категорий: {e}")
+            logger.error("Ошибка: %s", e, exc_info=True)
+            raise

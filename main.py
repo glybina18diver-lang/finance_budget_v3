@@ -4,12 +4,18 @@ from PySide6.QtWidgets import QApplication, QMessageBox
 
 from config import APP_NAME, get_db_path  # ← используем функцию, а не константу
 from core.db import Database
+from core.logger import setup_logger
 from ui.main_window import MainWindow
 from services.navigation_service import NavigationService
 
+logger = logging.getLogger(__name__)
+
+
 def main():
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(message)s")
-    
+    # Инициализация системы логирования (до всех импортов UI)
+    setup_logger("DEBUG")
+    logger.info(f"Запуск {APP_NAME}")
+
     app = QApplication(sys.argv)
     app.setApplicationName(APP_NAME)
 
@@ -18,14 +24,15 @@ def main():
         db = Database(get_db_path())
         # Простая проверка подключения
         db.fetchone("SELECT 1")
-        logging.info(f"База данных успешно подключена: {get_db_path()}")
+        logger.info(f"База данных успешно подключена: {get_db_path()}")
     except Exception as e:
+        logger.critical(f"Не удалось подключиться к БД: {e}", exc_info=True)
         QMessageBox.critical(None, "Ошибка БД", f"Не удалось открыть базу данных:\n{e}")
         sys.exit(1)
 
     # 2. Создаём навигационный сервис
     nav_service = NavigationService(db=db)
-    
+
     # 3. Передаём его в главное окно
     main_window = MainWindow(navigation_service=nav_service)
     main_window.show()
@@ -33,7 +40,9 @@ def main():
     # 4. Корректное завершение
     exit_code = app.exec()
     db.close()  # ← закрываем соединение при выходе
+    logger.info(f"Завершение {APP_NAME} с кодом {exit_code}")
     sys.exit(exit_code)
+
 
 if __name__ == "__main__":
     main()

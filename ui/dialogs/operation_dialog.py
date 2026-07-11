@@ -1,4 +1,5 @@
 # ui/dialogs/operation_dialog.py
+import logging
 from datetime import datetime
 from typing import List
 from PySide6.QtWidgets import (
@@ -11,6 +12,8 @@ from PySide6.QtGui import QFont, QDoubleValidator
 from ui.widgets.colored_button import ColoredButton
 from ui.dialogs.base_dialog import BaseDialog
 from core.models import Transaction, Account, Category
+
+logger = logging.getLogger(__name__)
 
 
 class OperationDialog(BaseDialog):
@@ -296,9 +299,7 @@ class OperationDialog(BaseDialog):
                 date_str=date_str
             )
         except Exception as e:
-            import traceback
-            # 1. Выводит точный стек ошибки в консоль IDE
-            traceback.print_exc() 
+            logger.error("[OperationDialog] Ошибка при добавлении транзакции: %s", e, exc_info=True)
 
 
 

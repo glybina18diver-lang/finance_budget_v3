@@ -9,6 +9,8 @@ from PySide6.QtGui import QKeyEvent
 import logging
 from datetime import datetime, date
 
+logger = logging.getLogger(__name__)
+
 from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QTreeWidget, QTreeWidgetItem,
     QLabel, QLineEdit, QComboBox, QPushButton, QFrame, QMessageBox,
@@ -149,6 +151,9 @@ class AccountDialog(BaseDialog):
             self.presenter.add_account(account_data)
         except ValueError as e:
             self.show_status(str(e), "error")
+        except Exception as e:
+            logger.error("[AccountDialog] Ошибка при добавлении счёта: %s", e, exc_info=True)
+            self.show_status("Произошла ошибка при добавлении счёта", "error")
 
     def _on_edit_clicked(self):
         """Обработчик нажатия кнопки 'Сохранить'."""
@@ -160,6 +165,9 @@ class AccountDialog(BaseDialog):
             self.presenter.update_account(account_data)
         except ValueError as e:
             self.show_status(str(e), "error")
+        except Exception as e:
+            logger.error("[AccountDialog] Ошибка при сохранении счёта ID %s: %s", self.editing_account_id, e, exc_info=True)
+            self.show_status("Произошла ошибка при сохранении счёта", "error")
 
     def _on_account_select(self):
         """Обработчик выбора счёта в таблице."""
@@ -272,21 +280,25 @@ class AccountDialog(BaseDialog):
             return
         
         if self.presenter:
-            # Удаление одного счёта
-            result = self.presenter.delete_account(account_id)
-            if result.get('success'):
-                self.show_status(f"Счёт: {account_name} удалён", "success")
-            else:
-                if not result.get('can_delete', True):
-                    self._show_cannot_delete_message({
-                        'account_name': account_name,
-                        'total_operations': result.get('total_operations', 0)
-                    })
+            try:
+                # Удаление одного счёта
+                result = self.presenter.delete_account(account_id)
+                if result.get('success'):
+                    self.show_status(f"Счёт: {account_name} удалён", "success")
                 else:
-                    self.show_status(
-                        f"Ошибка удаления '{account_name}': {result.get('message', 'Неизвестная ошибка')}",
-                        "error"
-                    )
+                    if not result.get('can_delete', True):
+                        self._show_cannot_delete_message({
+                            'account_name': account_name,
+                            'total_operations': result.get('total_operations', 0)
+                        })
+                    else:
+                        self.show_status(
+                            f"Ошибка удаления '{account_name}': {result.get('message', 'Неизвестная ошибка')}",
+                            "error"
+                        )
+            except Exception as e:
+                logger.error("[AccountDialog] Ошибка при удалении счёта ID %s: %s", account_id, e, exc_info=True)
+                self.show_status("Произошла ошибка при удалении счёта", "error")
         else:
             self.show_status("Презентер не подключен", "error")
 

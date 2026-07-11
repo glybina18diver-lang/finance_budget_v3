@@ -3,6 +3,7 @@
 Отображает задолженность, периоды, минимальный платёж (как в приложении банка).
 Архитектура MVP: наследование от BaseDialog, работа через презентер.
 """
+import logging
 from typing import List, Dict
 from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QGroupBox, QLabel,
@@ -14,6 +15,8 @@ from PySide6.QtCore import QDate, Qt, Signal
 from PySide6.QtGui import QFont
 from ui.dialogs.base_dialog import BaseDialog
 from ui.widgets.colored_button import CompactButton
+
+logger = logging.getLogger(__name__)
 
 
 
@@ -217,7 +220,11 @@ class CreditCardDialog(BaseDialog):
         )
         
         if reply == QMessageBox.StandardButton.Yes and self.presenter:
-            self.presenter.delete_card()
+            try:
+                self.presenter.delete_card()
+            except Exception as e:
+                logger.error("[CreditCardDialog] Ошибка при удалении карты: %s", e, exc_info=True)
+                self.show_status("Произошла ошибка при удалении карты", "error")
 
     def _on_settings_card(self):
         """Открывает диалог настроек кредитной карты."""

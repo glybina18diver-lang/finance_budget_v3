@@ -1,7 +1,11 @@
 # core/repositories/transaction_repository.py
+import logging
 from typing import Optional, List, Dict, Any
 from core.db import Database
 from core.models import Transaction
+
+logger = logging.getLogger(__name__)
+
 
 class TransactionRepository:
     """Репозиторий для операций с таблицей транзакций (только CRUD)."""
@@ -50,23 +54,27 @@ class TransactionRepository:
         Returns:
             Обновлённый объект Transaction с заполненным полем id
         """
-        query = """
-            INSERT INTO transactions (
-                date, amount, trans_type, account_id, category_id,
-                description, quantity, original_transaction_id,
-                created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """
-        params = (
-            transaction.date, transaction.amount, transaction.trans_type,
-            transaction.account_id, transaction.category_id,
-            transaction.description, transaction.quantity,
-            transaction.original_transaction_id,
-            transaction.created_at, transaction.updated_at
-        )
-        new_id = self.db.execute(query, params)
-        transaction.id = new_id
-        return transaction
+        try:
+            query = """
+                INSERT INTO transactions (
+                    date, amount, trans_type, account_id, category_id,
+                    description, quantity, original_transaction_id,
+                    created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """
+            params = (
+                transaction.date, transaction.amount, transaction.trans_type,
+                transaction.account_id, transaction.category_id,
+                transaction.description, transaction.quantity,
+                transaction.original_transaction_id,
+                transaction.created_at, transaction.updated_at
+            )
+            new_id = self.db.execute(query, params)
+            transaction.id = new_id
+            return transaction
+        except Exception as e:
+            logger.error("[TransactionRepository] Ошибка при создании транзакции: %s", e, exc_info=True)
+            raise
 
     def get_by_id(self, transaction_id: int) -> Optional[Transaction]:
         """
@@ -78,9 +86,13 @@ class TransactionRepository:
         Returns:
             Объект Transaction или None, если запись не найдена
         """
-        query = "SELECT * FROM transactions WHERE id = ?"
-        row = self.db.fetchone(query, (transaction_id,))
-        return self._row_to_transaction(row) if row else None
+        try:
+            query = "SELECT * FROM transactions WHERE id = ?"
+            row = self.db.fetchone(query, (transaction_id,))
+            return self._row_to_transaction(row) if row else None
+        except Exception as e:
+            logger.error("[TransactionRepository] Ошибка при получении транзакции по ID %s: %s", transaction_id, e, exc_info=True)
+            raise
 
     def get_all(self, account_id: Optional[int] = None, limit: int = 200, offset: int = 0) -> List[Transaction]:
         """
@@ -94,15 +106,19 @@ class TransactionRepository:
         Returns:
             Список объектов Transaction, отсортированный по дате (новые первыми)
         """
-        if account_id is not None:
-            query = "SELECT * FROM transactions WHERE account_id = ? ORDER BY date DESC, created_at DESC LIMIT ? OFFSET ?"
-            params = (account_id, limit, offset)
-        else:
-            query = "SELECT * FROM transactions ORDER BY date DESC, created_at DESC LIMIT ? OFFSET ?"
-            params = (limit, offset)
-            
-        rows = self.db.fetchall(query, params)
-        return [self._row_to_transaction(row) for row in rows]
+        try:
+            if account_id is not None:
+                query = "SELECT * FROM transactions WHERE account_id = ? ORDER BY date DESC, created_at DESC LIMIT ? OFFSET ?"
+                params = (account_id, limit, offset)
+            else:
+                query = "SELECT * FROM transactions ORDER BY date DESC, created_at DESC LIMIT ? OFFSET ?"
+                params = (limit, offset)
+                
+            rows = self.db.fetchall(query, params)
+            return [self._row_to_transaction(row) for row in rows]
+        except Exception as e:
+            logger.error("[TransactionRepository] Ошибка при получении списка транзакций: %s", e, exc_info=True)
+            raise
 
     def delete(self, transaction_id: int) -> bool:
         """
@@ -114,9 +130,13 @@ class TransactionRepository:
         Returns:
             True если операция прошла успешно (ошибки БД пробрасываются выше)
         """
-        query = "DELETE FROM transactions WHERE id = ?"
-        self.db.execute(query, (transaction_id,))
-        return True
+        try:
+            query = "DELETE FROM transactions WHERE id = ?"
+            self.db.execute(query, (transaction_id,))
+            return True
+        except Exception as e:
+            logger.error("[TransactionRepository] Ошибка при удалении транзакции ID %s: %s", transaction_id, e, exc_info=True)
+            raise
     
     def get_latest(self, limit: int = 300) -> List[Transaction]:
         """
@@ -129,10 +149,14 @@ class TransactionRepository:
         Returns:
             Список объектов Transaction, отсортированный по дате (новые первыми)
         """
-        query = """
-            SELECT * FROM transactions 
-            ORDER BY date DESC, created_at DESC 
-            LIMIT ?
-        """
-        rows = self.db.fetchall(query, (limit,))
-        return [self._row_to_transaction(row) for row in rows]
+        try:
+            query = """
+                SELECT * FROM transactions
+                ORDER BY date DESC, created_at DESC
+                LIMIT ?
+            """
+            rows = self.db.fetchall(query, (limit,))
+            return [self._row_to_transaction(row) for row in rows]
+        except Exception as e:
+            logger.error("[TransactionRepository] Ошибка при получении последних транзакций: %s", e, exc_info=True)
+            raise
