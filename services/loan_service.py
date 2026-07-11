@@ -188,8 +188,11 @@ class LoanService:
             to_acc_id = my_account.id
             description = f"Возврат займа: {loan.contact_name}"
             
-            self.account_repo.update_balance(counterparty_acc.id, -amount)
-            self.account_repo.update_balance(my_account.id, +amount)
+            counterparty_acc.current_balance -= amount
+            self.account_repo.update(counterparty_acc)
+            
+            my_account.current_balance += amount
+            self.account_repo.update(my_account)
             
         else:  # received
             # Я возвращаю: мой счёт → контрагент
@@ -197,8 +200,11 @@ class LoanService:
             to_acc_id = counterparty_acc.id
             description = f"Платёж по займу: {loan.contact_name}"
             
-            self.account_repo.update_balance(my_account.id, -amount)
-            self.account_repo.update_balance(counterparty_acc.id, +amount)
+            my_account.current_balance -= amount
+            self.account_repo.update(my_account)
+            
+            counterparty_acc.current_balance += amount
+            self.account_repo.update(counterparty_acc)
         
         # 4. Обновляем статус
         if loan.remaining <= 0:

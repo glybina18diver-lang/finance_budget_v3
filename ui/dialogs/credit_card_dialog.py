@@ -49,6 +49,7 @@ class CreditCardDialog(BaseDialog):
         # Используем layout из BaseDialog
         self._main_layout.setSpacing(10)
         
+        
         # === Заголовок ===
         header_frame = QFrame()
         header_layout = QHBoxLayout(header_frame)
@@ -192,6 +193,10 @@ class CreditCardDialog(BaseDialog):
         close_btn = CompactButton("Закрыть")
         close_btn.clicked.connect(self.reject)
         self._main_layout.addWidget(close_btn)
+
+        # . Строка статуса
+        self._main_layout.addWidget(self.status_bar)
+
 
     def _open_payment_dialog(self):
         """Открывает диалог внесения платежа."""

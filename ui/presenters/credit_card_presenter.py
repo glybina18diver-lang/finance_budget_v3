@@ -5,6 +5,7 @@
 """
 from typing import List, Dict, Optional
 from datetime import date
+import traceback
 from PySide6.QtWidgets import QDialog
 
 from services.credit_card_service import CreditCardService
@@ -29,8 +30,8 @@ class CreditCardPresenter:
         self.service = service
         self.account_repo = account_repo
         self.view = None
-        self.current_card_id: Optional[int] = None
-        self.current_account_id: Optional[int] = None
+        self.current_card_id: Optional[int] = None #ID кредитки
+        self.current_account_id: Optional[int] = None #ID счает привязанорго кредитки
 
     def set_view(self, view):
         """
@@ -62,6 +63,7 @@ class CreditCardPresenter:
         try:
             # 1. Загружаем информацию о карте
             card = self.service.repo.get_card_by_id(self.current_card_id)
+            print(f"загружена карта ID: {self.current_card_id}")
             if not card:
                 self.view.show_status("Карта не найдена", "error")
                 return
@@ -69,10 +71,28 @@ class CreditCardPresenter:
             # 2. Загружаем периоды
             periods = self.service.get_periods(self.current_card_id)
             
+            # 🔍 ОТЛАДОЧНЫЙ ВЫВОД
+            print(f"=== ОТЛАДКА ===")
+            print(f"card_id: {self.current_card_id}")
+            print(f"Найдено периодов: {len(periods)}")
+            for p in periods:
+                print(f"  Период {p.period_month}:")
+                print(f"    total_purchases: {p.total_purchases}")
+                print(f"    total_transfers: {p.total_transfers}")
+                print(f"    paid_amount: {p.paid_amount}")
+                print(f"    is_paid: {p.is_paid}")
+                print(f"    interest_retroactive: {p.interest_retroactive}")
+            
             # 3. Рассчитываем задолженность на сегодня
             today = date.today().strftime("%Y-%m-%d")
+            print(f"Расчёт на дату: {today}")
+            
             min_payment = self.service.calculate_minimum_payment(self.current_card_id, today)
             full_payoff = self.service.calculate_full_payoff(self.current_card_id, today)
+            
+            print(f"full_payoff: {full_payoff}")
+            print(f"min_payment: {min_payment}")
+            print(f"===============")
             
             # 4. Загружаем список счетов для платежей
             accounts = self._get_active_accounts_as_dicts()
@@ -85,6 +105,7 @@ class CreditCardPresenter:
             
         except Exception as e:
             self.view.show_status(f"Ошибка загрузки: {e}", "error")
+            traceback.print_exc()
 
     def load_data_for_payment_dialog(self, dialog):
         """
@@ -131,7 +152,6 @@ class CreditCardPresenter:
         result = dialog.exec()
         
         if result == QDialog.Accepted:
-            self.view.show_status("Платеж успешно внесён", "success")
             self.load_initial_data() 
 
     def open_settings_dialog(self):
@@ -148,7 +168,6 @@ class CreditCardPresenter:
         
         result = dialog.exec()
         if result == QDialog.Accepted:
-            self.view.show_status("Настройки карты обновлены", "success")
             self.load_initial_data()  # Обновляем UI основного диалога
 
     
@@ -159,6 +178,7 @@ class CreditCardPresenter:
         """Сохраняет обновленные настройки карты."""
         try:
             self.service.update_card_settings(self.current_card_id, settings_data)
+            self.view.show_status("Настройки карты обновлены", "success")
         except ValueError as e:
             self.view.show_status(f"Ошибка сохранения: {e}", "error")
             raise
@@ -344,10 +364,10 @@ class CreditCardPresenter:
 
     def _get_active_accounts_as_dicts(self) -> List[Dict]:
         """Возвращает активные счета как словари (исключая саму кредитку)."""
-        accounts = self.account_repo.get_all()
+        accounts = self.account_repo.get_all_active()
         result = []
         for acc in accounts:
-            if acc.is_active and not acc.is_system and acc.id != self.current_card_id:
+            if acc.is_active and not acc.is_system and acc.id != self.current_account_id:
                 result.append({
                     "id": acc.id,
                     "name": acc.name,
