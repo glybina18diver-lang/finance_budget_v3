@@ -39,9 +39,9 @@ def setup_logger(log_level: str = "INFO") -> logging.Logger:
         datefmt='%Y-%m-%d %H:%M:%S'
     )
 
-    # 1. Консоль (INFO+)
+    # 1. Консоль (DEBUG+ для отладки)
     console = logging.StreamHandler(sys.stdout)
-    console.setLevel(logging.INFO)
+    console.setLevel(logging.DEBUG)  # ← ИСПРАВЛЕНО!
     console.setFormatter(formatter)
     root_logger.addHandler(console)
 

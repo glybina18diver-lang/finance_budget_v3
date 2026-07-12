@@ -14,6 +14,7 @@ logger = logging.getLogger(__name__)
 def main():
     # Инициализация системы логирования (до всех импортов UI)
     setup_logger("DEBUG")
+    # setup_logger("INFO")
     logger.info(f"Запуск {APP_NAME}")
 
     app = QApplication(sys.argv)

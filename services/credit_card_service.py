@@ -315,33 +315,19 @@ class CreditCardService:
     def make_payment(self, card_id: int, payment_data: dict) -> Dict:
         """
         Вносит платёж по кредитной карте с автораспределением.
-
-        Логика распределения:
-        1. Проценты (ретроактивные + ежедневные до конца предыдущего месяца)
-        2. Тело долга (FIFO — от старых периодов к новым)
-
-        Args:
-            card_id: ID карты
-            payment_data: {date, amount, from_account_id}
-
-        Returns:
-            Словарь с распределением платежа
         """
         try:
             amount = float(payment_data["amount"])
             payment_date = payment_data["date"]
             from_account_id = payment_data["from_account_id"]
 
-            # Получаем все периоды (от старых к новым)
             periods = sorted(
                 self.repo.get_periods_by_card(card_id),
                 key=lambda p: p.period_month
             )
 
-            # Рассчитываем проценты на текущий момент
             self._recalculate_interest(periods, payment_date)
 
-            # Распределение платежа
             allocation = {
                 "interest_paid": 0.0,
                 "principal_paid": 0.0,
@@ -350,10 +336,12 @@ class CreditCardService:
 
             remaining = amount
 
-            # 1. Гасим проценты (сначала ретроактивные, потом ежедневные)
+            # === 1. Гасим проценты ===
             for period in periods:
                 if remaining <= 0:
                     break
+
+                period_changed = False
 
                 # Гасим ретроактивные проценты
                 if period.interest_retroactive > 0:
@@ -361,15 +349,26 @@ class CreditCardService:
                     period.interest_retroactive -= to_pay
                     remaining -= to_pay
                     allocation["interest_paid"] += to_pay
+                    period_changed = True
 
-                # Гасим ежедневные проценты (только до конца предыдущего месяца)
+                # Гасим ежедневные проценты
                 if period.interest_daily_accrued > 0:
                     to_pay = min(remaining, period.interest_daily_accrued)
                     period.interest_daily_accrued -= to_pay
                     remaining -= to_pay
                     allocation["interest_paid"] += to_pay
+                    period_changed = True
 
-            # 2. Гасим тело долга (FIFO)
+                # ✅ СОХРАНЯЕМ изменения в БД
+                if period_changed:
+                    self.repo.update_period(period)
+                    if period.period_month not in [p["period_month"] for p in allocation["periods_updated"]]:
+                        allocation["periods_updated"].append({
+                            "period_month": period.period_month,
+                            "paid": allocation["interest_paid"]
+                        })
+
+            # === 2. Гасим тело долга (FIFO) ===
             for period in periods:
                 if remaining <= 0:
                     break
@@ -388,12 +387,20 @@ class CreditCardService:
                     period.is_paid = True
                     period.paid_amount = period.total_purchases + period.total_transfers
 
-                allocation["periods_updated"].append({
-                    "period_month": period.period_month,
-                    "paid": to_pay
-                })
-
+                # ✅ СОХРАНЯЕМ изменения в БД
                 self.repo.update_period(period)
+                
+                existing = next(
+                    (p for p in allocation["periods_updated"] if p["period_month"] == period.period_month),
+                    None
+                )
+                if existing:
+                    existing["paid"] += to_pay
+                else:
+                    allocation["periods_updated"].append({
+                        "period_month": period.period_month,
+                        "paid": to_pay
+                    })
 
             # Создаём запись платежа
             payment = CreditCardPayment(
@@ -410,7 +417,7 @@ class CreditCardService:
         except Exception as e:
             logger.error(f"[CreditCardService] Ошибка внесения платежа по карте #{card_id}: {e}", exc_info=True)
             raise
-
+        
     # =================== Расчёты ===================
 
     def calculate_transfer_commission(self, amount: float) -> float:

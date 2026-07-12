@@ -209,26 +209,40 @@ class CreditCardRepository:
             raise
 
     def update_period(self, period: CreditCardPeriod) -> bool:
-        """Обновляет период."""
+        """
+        Обновляет данные периода в БД.
+        
+        Args:
+            period: объект CreditCardPeriod с обновлёнными полями
+            
+        Returns:
+            True если успешно
+        """
         try:
             query = """
                 UPDATE credit_card_periods SET
-                    total_purchases = ?, total_transfers = ?,
-                    grace_period_end = ?, is_paid = ?, paid_amount = ?,
-                    interest_retroactive = ?, interest_daily_accrued = ?
+                    total_purchases = ?, 
+                    total_transfers = ?,
+                    grace_period_end = ?, 
+                    is_paid = ?,
+                    paid_amount = ?, 
+                    interest_retroactive = ?, 
+                    interest_daily_accrued = ?
                 WHERE id = ?
             """
             params = (
-                period.total_purchases, period.total_transfers,
-                period.grace_period_end,
-                1 if period.is_paid else 0,
-                period.paid_amount,
-                period.interest_retroactive,
+                period.total_purchases, 
+                period.total_transfers,
+                period.grace_period_end, 
+                int(period.is_paid),  # SQLite требует 0 или 1 для boolean
+                period.paid_amount, 
+                period.interest_retroactive, 
                 period.interest_daily_accrued,
                 period.id
             )
             self.db.execute(query, params)
             return True
+            
         except Exception as e:
             logger.error(f"[CreditCardRepository] Ошибка обновления периода #{period.id}: {e}", exc_info=True)
             raise
