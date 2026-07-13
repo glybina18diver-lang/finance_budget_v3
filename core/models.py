@@ -1,7 +1,8 @@
 # core/models.py
 from dataclasses import dataclass, field
 from typing import Optional, List, Any, Dict
-from datetime import datetime
+from datetime import datetime, date
+from decimal import Decimal
 
 @dataclass
 class BaseModel:
@@ -126,43 +127,83 @@ class Budget(BaseModel):
 
 @dataclass
 class CreditCard:
-    """Модель кредитной карты."""
+    """
+    Модель кредитной карты.
+    
+    Все пользовательские поля обязательны для заполнения при создании.
+    Системные поля (id, is_active, created_at) заполняются автоматически БД или кодом.
+    """
+    # --- Пользовательские поля (обязательные, без дефолтов) ---
+    account_id: int
+    name: str
+    annual_rate: Decimal
+    grace_months: int
+    min_payment_percent: Decimal
+    payment_day: int
+    statement_day: int
+    credit_limit: Decimal
+    
+    # --- Системные поля (необязательные, с дефолтами) ---
     id: Optional[int] = None
-    account_id: int = 0              # Счёт карты в accounts
+    is_active: bool = True
+    created_at: datetime = field(default_factory=datetime.now)
+@dataclass
+class Tranche:
+    """
+    Транш — независимая порция долга по кредитной карте.
     
-    # Основные настройки
-    name: str = "Кредитная карта"    # Название (по умолчанию берется от счета) уже нет 
-    annual_rate: float = 49.8        # Годовая ставка %
-    grace_months: int = 3            # Льготный период (месяцев)
-    min_payment_percent: float = 0.02  # 2% от долга
-    
-    # Дополнительные настройки
-    payment_day: int = 1             # День месяца для обязательного платежа
-    statement_day: int = 1           # День месяца для формирования выписки
-    credit_limit: int = 10000           # Кредитный лимит карты
+    Каждая операция (покупка/перевод/возврат) создаёт отдельный транш
+    со своим льготным периодом и статусом.
+    """
+    id: Optional[int] = None
+    card_id: int = 0
+    tranche_type: str = "purchase"  # purchase | transfer | refund
+    original_amount: Decimal = Decimal("0.00")
+    remaining_amount: Decimal = Decimal("0.00")
+    commission: Decimal = Decimal("0.00")  # для переводов
+    transaction_date: date = field(default_factory=date.today)
+    grace_end_date: Optional[date] = None
+    status: str = "in_grace"  # in_grace | grace_expired | partial | paid
+    is_retroactive_triggered: bool = False
+    linked_transaction_id: Optional[int] = None
+    created_at: datetime = field(default_factory=datetime.now)
+    updated_at: datetime = field(default_factory=datetime.now)
 
 
 @dataclass
-class CreditCardPeriod:
-    """Период кредитной карты (группировка покупок/переводов по месяцам)."""
+class InterestAccrual:
+    """
+    Снимок начисления процентов по траншу на определённую дату.
+    
+    Хранит историю начислений (ретроактивных и ежедневных).
+    """
     id: Optional[int] = None
-    card_id: int = 0
-    period_month: str = ""           # "2025-03"
-    total_purchases: float = 0.0     # Сумма покупок за период
-    total_transfers: float = 0.0     # Сумма переводов за период
-    grace_period_end: Optional[str] = None  # Конец льготного периода
-    is_paid: bool = False            # Полностью погашен
-    paid_amount: float = 0.0         # Сколько уже погашено
-    interest_retroactive: float = 0.0  # Ретроактивные проценты (начислены)
-    interest_daily_accrued: float = 0.0  # Ежедневные проценты после grace_period_end
+    tranche_id: int = 0
+    accrual_date: date = field(default_factory=date.today)
+    interest_type: str = "daily"  # retroactive | daily
+    amount: Decimal = Decimal("0.00")
+    paid_amount: Decimal = Decimal("0.00")
+    is_paid: bool = False
+    created_at: datetime = field(default_factory=datetime.now)
 
 
 @dataclass
-class CreditCardPayment:
-    """Платёж по кредитной карте."""
+class Statement:
+    """
+    Биллинговый цикл (выписка).
+    
+    Формируется 1-го числа каждого месяца.
+    Содержит сводку по долгу за предыдущий месяц.
+    """
     id: Optional[int] = None
     card_id: int = 0
-    date: str = ""
-    amount: float = 0.0
-    from_account_id: int = 0
-    allocation_json: Optional[str] = None  # JSON: как распределился платёж
+    statement_date: date = field(default_factory=date.today)
+    due_date: Optional[date] = None  # последний день месяца
+    opening_balance: Decimal = Decimal("0.00")
+    new_charges: Decimal = Decimal("0.00")
+    payments_received: Decimal = Decimal("0.00")
+    interest_charged: Decimal = Decimal("0.00")
+    closing_balance: Decimal = Decimal("0.00")
+    min_payment_required: Decimal = Decimal("0.00")
+    status: str = "open"  # open | closed | overdue
+    created_at: datetime = field(default_factory=datetime.now)

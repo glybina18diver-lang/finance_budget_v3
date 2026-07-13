@@ -1,381 +1,374 @@
 """
-Презентер для управления кредитной картой.
-Координирует взаимодействие между UI и CreditCardService.
-Архитектура MVP: вся бизнес-логика в сервисе, UI только отображает.
-"""
-from typing import List, Dict, Optional
-from datetime import date
-import logging
-from PySide6.QtWidgets import QDialog
+Презентер для модуля кредитных карт (CreditCardPresenter).
 
+Связующее звено между UI (CreditCardDialog) и бизнес-логикой (CreditCardService).
+Отвечает за валидацию ввода, конвертацию типов и подготовку данных для отображения.
+"""
+
+import logging
+from datetime import date
+from decimal import Decimal, InvalidOperation
+from typing import List, Dict, Any, Optional
+
+from core.models import CreditCard
 from services.credit_card_service import CreditCardService
-from core.repositories.account_repository import AccountRepository
-from ui.dialogs.credit_card_settings_dialog import CreditCardSettingsDialog
-from ui.dialogs.credit_card_payment_dialog import CreditCardPaymentDialog
+from services.account_service import AccountService
 
 logger = logging.getLogger(__name__)
 
 
 class CreditCardPresenter:
-    """Презентер кредитной карты."""
+    """
+    Презентер главного диалога кредитных карт.
+    
+    Инкапсулирует логику подготовки данных для UI и обработки пользовательских действий.
+    """
 
-    def __init__(self, service: CreditCardService, account_repo: AccountRepository):
+    def __init__(
+        self, 
+        credit_card_service: CreditCardService, 
+        account_service: AccountService
+    ):
         """
         Инициализация презентера.
-
+        
         Args:
-            service: экземпляр CreditCardService
-            account_repo: репозиторий счетов (для выбора счёта при платеже)
+            credit_card_service: экземпляр CreditCardService (Фасад)
+            account_service: экземпляр AccountService (для получения списка счетов)
         """
-        self.service = service
-        self.account_repo = account_repo
-        self.view = None
-        self.current_card_id: Optional[int] = None  # ID кредитки
-        self.current_account_id: Optional[int] = None  # ID счёта привязанного к кредитке
+        self.service = credit_card_service
+        self.account_service = account_service
 
-    def set_view(self, view):
+    # --- Загрузка данных для UI ---
+
+    def get_cards_list(self) -> List[Dict[str, Any]]:
         """
-        Устанавливает ссылку на UI и загружает начальные данные.
-
-        Args:
-            view: экземпляр CreditCardDialog
-        """
-        self.view = view
-        self.load_initial_data()
-
-    def set_current_card(self, card_id: int):
-        """
-        Устанавливает текущую карту для работы.
-
-        Args:
-            card_id: ID кредитной карты
-        """
-        self.current_card_id = card_id
-        self.load_initial_data()
-
-    # =================== Загрузка данных ===================
-
-    def load_initial_data(self):
-        """Загружает все данные для отображения в UI."""
-        if not self.view or not self.current_card_id:
-            return
-
-        try:
-            # 1. Загружаем информацию о карте
-            card = self.service.repo.get_card_by_id(self.current_card_id)
-            logger.debug(f"Загружена карта ID: {self.current_card_id}")
-            if not card:
-                self.view.show_status("Карта не найдена", "error")
-                return
-
-            # 2. Загружаем периоды
-            periods = self.service.get_periods(self.current_card_id)
-
-            # 3. Рассчитываем задолженность на сегодня
-            today = date.today().strftime("%Y-%m-%d")
-            logger.debug(f"Расчёт на дату: {today}")
-
-            min_payment = self.service.calculate_minimum_payment(self.current_card_id, today)
-            full_payoff = self.service.calculate_full_payoff(self.current_card_id, today)
-
-            # 4. Загружаем список счетов для платежей
-            accounts = self._get_active_accounts_as_dicts()
-
-            # 5. Передаём всё в UI
-            self.view.populate_card_info(self._card_to_dict(card))
-            self.view.populate_periods(self._periods_to_dicts(periods))
-            self.view.populate_debt_summary(min_payment, full_payoff)
-            self.view.populate_accounts_for_payment(accounts)
-
-        except Exception as e:
-            logger.error(f"[CreditCardPresenter] Ошибка загрузки данных: {e}", exc_info=True)
-            self.view.show_status(f"Ошибка загрузки: {e}", "error")
-
-    def load_data_for_payment_dialog(self, dialog):
-        """
-        Загружает данные для диалога внесения платежа.
-
-        Args:
-            dialog: экземпляр CreditCardPaymentDialog
+        Получает список всех активных кредитных карт для ComboBox.
+        
+        Returns:
+            Список словарей с базовой информацией о картах
         """
         try:
-            # Рассчитываем минимальный платёж и полную задолженность
-            today = date.today().strftime("%Y-%m-%d")
-            min_payment = self.service.calculate_minimum_payment(self.current_card_id, today)
-            full_payoff = self.service.calculate_full_payoff(self.current_card_id, today)
-
-            # Загружаем счета
-            accounts = self._get_active_accounts_as_dicts()
-
-            # Передаём в диалог
-            dialog.populate_payment_data(min_payment, full_payoff, accounts)
-
-        except Exception as e:
-            logger.error(f"[CreditCardPresenter] Ошибка загрузки данных для платежа: {e}", exc_info=True)
-            dialog.show_status(f"Ошибка загрузки: {e}", "error")
-
-    def set_current_card(self, card_id: int, account_id: int):
-        """
-        Устанавливает текущую карту для работы.
-
-        Args:
-            card_id: ID из таблицы credit_cards
-            account_id: ID счёта в таблице accounts
-        """
-        self.current_card_id = card_id
-        self.current_account_id = account_id
-        self.load_initial_data()
-
-    def get_all_credit_cards(self) -> List[Dict]:
-        """Возвращает список кредитных карт для UI выбора."""
-        try:
-            return self.service.get_all_credit_cards()
-        except Exception as e:
-            logger.error(f"[CreditCardPresenter] Ошибка получения списка карт: {e}", exc_info=True)
-            return []
-
-    # ================== Открытие диалогов ===================
-    def _open_payment_dialog(self):
-        """Открывает диалог внесения платежа."""
-        dialog = CreditCardPaymentDialog(parent=self.view, presenter=self)
-        result = dialog.exec()
-
-        if result == QDialog.Accepted:
-            self.load_initial_data()
-
-    def open_settings_dialog(self):
-        """Открывает диалог настроек текущей карты."""
-
-        # Получаем текущие данные карты
-        card_data = self._get_current_card_data()
-        if not card_data:
-            self.view.show_status("Данные карты не найдены", "error")
-            return
-
-        dialog = CreditCardSettingsDialog(parent=self.view, presenter=self)
-        dialog.populate_settings(card_data)
-
-        result = dialog.exec()
-        if result == QDialog.Accepted:
-            self.load_initial_data()  # Обновляем UI основного диалога
-
-    # =================== Действия пользователя ===================
-
-    def save_card_settings(self, settings_data: dict):
-        """Сохраняет обновленные настройки карты."""
-        try:
-            self.service.update_card_settings(self.current_card_id, settings_data)
-            self.view.show_status("Настройки карты обновлены", "success")
+            cards = self.service.get_all_active_cards()
+            return [
+                {
+                    "id": card.id,
+                    "name": card.name,
+                    "account_id": card.account_id
+                }
+                for card in cards
+            ]
         except ValueError as e:
-            self.view.show_status(f"Ошибка сохранения: {e}", "error")
+            logger.warning(f"[{self.__class__.__name__}] Валидация списка карт: {e}")
             raise
         except Exception as e:
-            logger.error(f"[CreditCardPresenter] Ошибка сохранения настроек: {e}", exc_info=True)
-            self.view.show_status(f"Системная ошибка при сохранении", "error")
+            logger.error(f"[{self.__class__.__name__}] Ошибка получения списка карт: {e}", exc_info=True)
+            raise
 
-    def _get_current_card_data(self) -> Optional[Dict]:
-        """Возвращает данные текущей карты в виде словаря."""
-        if not self.current_card_id:
-            return None
-        try:
-            card = self.service.repo.get_card_by_id(self.current_card_id)
-            if not card:
-                return None
-
-            return {
-                "id": card.id,
-                "name": card.name,
-                "annual_rate": card.annual_rate,
-                "grace_months": card.grace_months,
-                "min_payment_percent": card.min_payment_percent * 100,  # В UI показываем в %
-                "payment_day": card.payment_day,
-                "statement_day": card.statement_day,
-                "credit_limit": card.credit_limit
-            }
-        except Exception as e:
-            logger.error(f"[CreditCardPresenter] Ошибка получения данных карты: {e}", exc_info=True)
-            return None
-
-    def make_payment(self, payment_data: dict):
+    def get_dashboard_data(self, card_id: int) -> Dict[str, Any]:
         """
-        Обрабатывает внесение платежа.
-
+        Собирает все метрики для главного экрана (Дашборда).
+        
         Args:
-            payment_data: {date, amount, from_account_id}
-        """
-        try:
-            # Валидация
-            if not payment_data.get("amount") or payment_data["amount"] <= 0:
-                self.view.show_status("Укажите сумму платежа", "error")
-                return
-
-            if not payment_data.get("from_account_id"):
-                self.view.show_status("Выберите счёт для платежа", "error")
-                return
-
-            # Вносим платёж
-            allocation = self.service.make_payment(self.current_card_id, payment_data)
-
-            # Обновляем баланс счёта (с которого платим)
-            from_account = self.account_repo.get_by_id(payment_data["from_account_id"])
-            if from_account:
-                from_account.current_balance -= payment_data["amount"]
-                self.account_repo.update(from_account)
-
-            self.view.show_status(
-                f"Платёж {payment_data['amount']:,.2f} ₽ внесён успешно",
-                "success"
-            )
-
-            # Перезагружаем данные
-            self.load_initial_data()
-
-            # Возвращаем распределение платежа для отображения
-            return allocation
-
-        except ValueError as e:
-            self.view.show_status(str(e), "error")
-        except Exception as e:
-            logger.error(f"[CreditCardPresenter] Ошибка внесения платежа: {e}", exc_info=True)
-            self.view.show_status(f"Ошибка при внесении платежа: {e}", "error")
-
-    def add_purchase(self, purchase_date: str, amount: float):
-        """
-        Добавляет покупку по кредитной карте.
-
-        Args:
-            purchase_date: дата покупки (YYYY-MM-DD)
-            amount: сумма покупки
-        """
-        try:
-            if amount <= 0:
-                self.view.show_status("Сумма покупки должна быть положительной", "error")
-                return
-
-            period = self.service.add_purchase(self.current_card_id, purchase_date, amount)
-
-            self.view.show_status(
-                f"Покупка {amount:,.2f} ₽ добавлена в период {period.period_month}",
-                "success"
-            )
-
-            self.load_initial_data()
-
-        except Exception as e:
-            logger.error(f"[CreditCardPresenter] Ошибка добавления покупки: {e}", exc_info=True)
-            self.view.show_status(f"Ошибка при добавлении покупки: {e}", "error")
-
-    def add_transfer(self, transfer_date: str, amount: float) -> Optional[Dict]:
-        """
-        Добавляет перевод с кредитной карты.
-
-        Args:
-            transfer_date: дата перевода
-            amount: сумма перевода
-
+            card_id: ID выбранной кредитной карты
+            
         Returns:
-            Словарь {amount, commission, total} или None при ошибке
+            Словарь с метриками, алертами и общей информацией
         """
         try:
-            if amount <= 0:
-                self.view.show_status("Сумма перевода должна быть положительной", "error")
-                return None
-
-            result = self.service.add_transfer(self.current_card_id, transfer_date, amount)
-
-            self.view.show_status(
-                f"Перевод {amount:,.2f} ₽ + комиссия {result['commission']:,.2f} ₽",
-                "success"
-            )
-
-            self.load_initial_data()
-
-            return result
-
-        except Exception as e:
-            logger.error(f"[CreditCardPresenter] Ошибка добавления перевода: {e}", exc_info=True)
-            self.view.show_status(f"Ошибка при добавлении перевода: {e}", "error")
-            return None
-
-    def delete_card(self):
-        """
-        Обрабатывает удаление кредитной карты.
-        Проверяет операции и удаляет карту.
-        """
-        if not self.current_card_id:
-            self.view.show_status("Карта не выбрана", "error")
-            return
-
-        try:
-            self.service.delete_card(self.current_card_id)
-            self.view.show_status("Карта удалена", "success")
-            self.view.close()  # Закрываем диалог после удаления
-            # TODO: тут надо сделать всплывающие уведомления
-
+            if not card_id:
+                raise ValueError("Не выбрана кредитная карта")
+                
+            return self.service.get_dashboard_data(card_id)
         except ValueError as e:
-            self.view.show_status(str(e), "error")
+            logger.warning(f"[{self.__class__.__name__}] Валидация дашборда: {e}")
+            raise
         except Exception as e:
-            logger.error(f"[CreditCardPresenter] Ошибка удаления карты: {e}", exc_info=True)
-            self.view.show_status(f"Ошибка при удалении карты: {e}", "error")
+            logger.error(f"[{self.__class__.__name__}] Ошибка сбора данных дашборда: {e}", exc_info=True)
+            raise
 
-    def refresh_calculations(self):
-        """Пересчитывает проценты и обновляет UI."""
+    def get_tranches(self, card_id: int) -> List[Dict[str, Any]]:
+        """
+        Получает список активных траншей для таблицы.
+        
+        Args:
+            card_id: ID кредитной карты
+            
+        Returns:
+            Список словарей с данными траншей
+        """
         try:
-            today = date.today().strftime("%Y-%m-%d")
-            min_payment = self.service.calculate_minimum_payment(self.current_card_id, today)
-            full_payoff = self.service.calculate_full_payoff(self.current_card_id, today)
+            if not card_id:
+                raise ValueError("Не выбрана кредитная карта")
 
-            self.view.populate_debt_summary(min_payment, full_payoff)
-
+            tranches = self.service.tranche_service.get_active_tranches(card_id)
+            return [
+                {
+                    "id": t.id,
+                    "type": t.tranche_type,
+                    "original_amount": float(t.original_amount),
+                    "remaining_amount": float(t.remaining_amount),
+                    "commission": float(t.commission),
+                    "transaction_date": t.transaction_date.isoformat(),
+                    "grace_end_date": t.grace_end_date.isoformat() if t.grace_end_date else None,
+                    "status": t.status,
+                    "is_retroactive_triggered": t.is_retroactive_triggered
+                }
+                for t in tranches
+            ]
+        except ValueError as e:
+            logger.warning(f"[{self.__class__.__name__}] Валидация траншей: {e}")
+            raise
         except Exception as e:
-            logger.error(f"[CreditCardPresenter] Ошибка пересчёта: {e}", exc_info=True)
-            self.view.show_status(f"Ошибка пересчёта: {e}", "error")
+            logger.error(f"[{self.__class__.__name__}] Ошибка получения траншей: {e}", exc_info=True)
+            raise
 
-    # =================== Конвертация данных ===================
-
-    def _card_to_dict(self, card) -> Dict:
-        """Конвертирует объект CreditCard в словарь для UI."""
-        return {
-            "id": card.id,
-            "name": card.name,
-            "annual_rate": card.annual_rate,
-            "grace_months": card.grace_months,
-            "min_payment_percent": card.min_payment_percent
-        }
-
-    def _periods_to_dicts(self, periods) -> List[Dict]:
-        """Конвертирует список периодов в словари для UI."""
-        result = []
-        for period in periods:
-            unpaid = period.total_purchases + period.total_transfers - period.paid_amount
-            result.append({
-                "id": period.id,
-                "period_month": period.period_month,
-                "total_purchases": period.total_purchases,
-                "total_transfers": period.total_transfers,
-                "grace_period_end": period.grace_period_end,
-                "is_paid": period.is_paid,
-                "paid_amount": period.paid_amount,
-                "unpaid_amount": unpaid,
-                "interest_retroactive": period.interest_retroactive,
-                "interest_daily_accrued": period.interest_daily_accrued,
-                "total_interest": period.interest_retroactive + period.interest_daily_accrued
-            })
-        return result
-
-    def _get_active_accounts_as_dicts(self) -> List[Dict]:
-        """Возвращает активные счета как словари (исключая саму кредитку)."""
+    def get_statements(self, card_id: int) -> List[Dict[str, Any]]:
+        """
+        Получает историю выписок (биллинговых циклов).
+        
+        Args:
+            card_id: ID кредитной карты
+            
+        Returns:
+            Список словарей с данными выписок
+        """
         try:
-            accounts = self.account_repo.get_all_active()
-            result = []
-            for acc in accounts:
-                if acc.is_active and not acc.is_system and acc.id != self.current_account_id:
-                    result.append({
-                        "id": acc.id,
-                        "name": acc.name,
-                        "current_balance": acc.current_balance
-                    })
-            return result
+            if not card_id:
+                raise ValueError("Не выбрана кредитная карта")
+
+            statements = self.service.statement_service.statement_repo.get_by_card(card_id)
+            return [
+                {
+                    "id": s.id,
+                    "statement_date": s.statement_date.isoformat(),
+                    "due_date": s.due_date.isoformat() if s.due_date else None,
+                    "closing_balance": float(s.closing_balance),
+                    "min_payment_required": float(s.min_payment_required),
+                    "status": s.status
+                }
+                for s in statements
+            ]
+        except ValueError as e:
+            logger.warning(f"[{self.__class__.__name__}] Валидация выписок: {e}")
+            raise
         except Exception as e:
-            logger.error(f"[CreditCardPresenter] Ошибка загрузки счетов: {e}", exc_info=True)
-            return []
+            logger.error(f"[{self.__class__.__name__}] Ошибка получения выписок: {e}", exc_info=True)
+            raise
+
+    def get_available_accounts(self) -> List[Dict[str, Any]]:
+        """
+        Получает список доступных счетов для внесения платежа (исключая саму кредитку).
+        
+        Returns:
+            Список словарей со счетами
+        """
+        try:
+            accounts = self.account_service.get_all_active_accounts()
+            return [
+                {
+                    "id": acc.id,
+                    "name": acc.name,
+                    "balance": float(acc.current_balance),
+                    "type": acc.account_type
+                }
+                for acc in accounts
+                if acc.account_type != "CreditCard" # Нельзя платить с кредитки на кредитку в этом диалоге
+            ]
+        except ValueError as e:
+            logger.warning(f"[{self.__class__.__name__}] Валидация счетов: {e}")
+            raise
+        except Exception as e:
+            logger.error(f"[{self.__class__.__name__}] Ошибка получения счетов: {e}", exc_info=True)
+            raise
+
+    # --- Обработка действий пользователя ---
+
+    def make_payment(
+        self, 
+        card_id: int, 
+        amount_str: str, 
+        payment_date_str: str, 
+        from_account_id: int
+    ) -> Dict[str, Any]:
+        """
+        Вносит платёж по кредитной карте.
+        
+        Args:
+            card_id: ID кредитной карты
+            amount_str: сумма платежа (строка из UI)
+            payment_date_str: дата платежа в формате YYYY-MM-DD
+            from_account_id: ID счёта-источника
+            
+        Returns:
+            Словарь с детализацией распределения платежа (allocation)
+            
+        Raises:
+            ValueError: при невалидном вводе (сумма, дата)
+        """
+        try:
+            if not card_id:
+                raise ValueError("Не выбрана кредитная карта")
+            if not from_account_id:
+                raise ValueError("Не выбран счёт для списания")
+
+            # Конвертация и валидация ввода
+            amount = self._parse_decimal(amount_str, "Сумма платежа")
+            payment_date = self._parse_date(payment_date_str, "Дата платежа")
+
+            # Вызов сервиса
+            return self.service.make_payment(
+                card_id=card_id,
+                amount=amount,
+                payment_date=payment_date,
+                from_account_id=from_account_id
+            )
+        except ValueError as e:
+            logger.warning(f"[{self.__class__.__name__}] Валидация платежа: {e}")
+            raise
+        except Exception as e:
+            logger.error(f"[{self.__class__.__name__}] Ошибка внесения платежа: {e}", exc_info=True)
+            raise
+
+    def recalculate_interest(self, card_id: int, as_of_date_str: str) -> Dict[int, float]:
+        """
+        Вручную пересчитывает проценты по кнопке в UI.
+        
+        Args:
+            card_id: ID кредитной карты
+            as_of_date_str: дата среза в формате YYYY-MM-DD
+            
+        Returns:
+            Словарь {tranche_id: сумма неоплаченных процентов}
+        """
+        try:
+            if not card_id:
+                raise ValueError("Не выбрана кредитная карта")
+
+            as_of_date = self._parse_date(as_of_date_str, "Дата пересчёта")
+            card = self.service.card_repo.get_by_id(card_id)
+            
+            if not card:
+                raise ValueError(f"Карта ID {card_id} не найдена")
+
+            result = self.service.interest_engine.recalculate_all_interests(
+                card_id=card_id,
+                annual_rate=card.annual_rate,
+                as_of_date=as_of_date
+            )
+            # Конвертируем Decimal в float для UI
+            return {k: float(v) for k, v in result.items()}
+        except ValueError as e:
+            logger.warning(f"[{self.__class__.__name__}] Валидация пересчёта: {e}")
+            raise
+        except Exception as e:
+            logger.error(f"[{self.__class__.__name__}] Ошибка пересчёта процентов: {e}", exc_info=True)
+            raise
+
+    def generate_statement(self, card_id: int, year: int, month: int) -> Dict[str, Any]:
+        """
+        Формирует выписку за указанный месяц.
+        
+        Args:
+            card_id: ID кредитной карты
+            year: год выписки
+            month: месяц выписки (1-12)
+            
+        Returns:
+            Словарь с данными созданной выписки
+        """
+        try:
+            if not card_id:
+                raise ValueError("Не выбрана кредитная карта")
+            if not (1 <= month <= 12):
+                raise ValueError("Месяц должен быть от 1 до 12")
+
+            statement = self.service.statement_service.generate_statement(card_id, year, month)
+            return {
+                "id": statement.id,
+                "statement_date": statement.statement_date.isoformat(),
+                "due_date": statement.due_date.isoformat(),
+                "closing_balance": float(statement.closing_balance),
+                "min_payment_required": float(statement.min_payment_required),
+                "status": statement.status
+            }
+        except ValueError as e:
+            logger.warning(f"[{self.__class__.__name__}] Валидация выписки: {e}")
+            raise
+        except Exception as e:
+            logger.error(f"[{self.__class__.__name__}] Ошибка генерации выписки: {e}", exc_info=True)
+            raise
+
+    def update_card_settings(self, card_data: Dict[str, Any]):
+        """
+        Обновляет настройки кредитной карты.
+        
+        Args:
+            card_data: словарь с полями карты из UI
+        """
+        try:
+            if "id" not in card_data or not card_data["id"]:
+                raise ValueError("ID карты отсутствует")
+
+            card = CreditCard(
+                id=card_data["id"],
+                account_id=card_data["account_id"],
+                name=card_data["name"],
+                annual_rate=self._parse_decimal(card_data["annual_rate"], "Годовая ставка"),
+                grace_months=int(card_data["grace_months"]),
+                min_payment_percent=self._parse_decimal(card_data["min_payment_percent"], "Мин. платёж %") / Decimal("100"),
+                payment_day=int(card_data["payment_day"]),
+                statement_day=int(card_data["statement_day"]),
+                credit_limit=self._parse_decimal(card_data["credit_limit"], "Кредитный лимит")
+            )
+            self.service.update_card_settings(card)
+        except ValueError as e:
+            logger.warning(f"[{self.__class__.__name__}] Валидация настроек: {e}")
+            raise
+        except Exception as e:
+            logger.error(f"[{self.__class__.__name__}] Ошибка обновления настроек: {e}", exc_info=True)
+            raise
+
+    # --- Приватные методы-хелперы ---
+
+    def _parse_decimal(self, value: Any, field_name: str) -> Decimal:
+        """
+        Безопасно парсит строку/число в Decimal.
+        
+        Args:
+            value: исходное значение
+            field_name: название поля для сообщения об ошибке
+            
+        Returns:
+            Объект Decimal
+            
+        Raises:
+            ValueError: если значение некорректно
+        """
+        try:
+            if value is None or str(value).strip() == "":
+                raise ValueError(f"{field_name} не может быть пустым")
+            return Decimal(str(value).replace(",", "."))
+        except InvalidOperation:
+            raise ValueError(f"{field_name} должна быть корректным числом")
+
+    def _parse_date(self, value: str, field_name: str) -> date:
+        """
+        Безопасно парсит строку в объект date.
+        
+        Args:
+            value: строка в формате YYYY-MM-DD
+            field_name: название поля для сообщения об ошибке
+            
+        Returns:
+            Объект date
+            
+        Raises:
+            ValueError: если формат даты неверный
+        """
+        try:
+            if not value:
+                raise ValueError(f"{field_name} не может быть пустой")
+            return date.fromisoformat(value)
+        except ValueError:
+            raise ValueError(f"{field_name} должна быть в формате ГГГГ-ММ-ДД")

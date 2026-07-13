@@ -6,7 +6,7 @@
 from typing import Dict, Optional, List
 import logging
 from core.repositories.account_repository import AccountRepository
-from services.credit_card_service import CreditCardService
+# from services.credit_card_service import CreditCardService
 from core.models import Account
 
 logger = logging.getLogger(__name__)
@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 class AccountService:
     """Сервис для управления счетами: валидация, CRUD, бизнес-логика."""
 
-    def __init__(self, acc_repo: AccountRepository, credit_card_service: CreditCardService = None):
+    def __init__(self, acc_repo: AccountRepository):
         """
         Инициализация сервиса счетов.
 
@@ -24,7 +24,6 @@ class AccountService:
             credit_card_service: сервис кредитных карт (для проверки зависимостей)
         """
         self.acc_repo = acc_repo
-        self.credit_card_service = credit_card_service
 
     def create_account(self, account_data: Dict) -> Account:
         """

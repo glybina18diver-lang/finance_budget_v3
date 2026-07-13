@@ -3,8 +3,14 @@ import logging
 from core.repositories.transaction_repository import TransactionRepository
 from core.repositories.account_repository import AccountRepository
 from core.repositories.category_repository import CategoryRepository
+from core.repositories.credit_card_repository import CreditCardRepository
+from services.credit_card_service import CreditCardService
+
+from services.tranche_service import TrancheService
 from core.models import Transaction, Account, Category
 from typing import Tuple, List
+from datetime import date, datetime
+from decimal import Decimal
 import re
 
 logger = logging.getLogger(__name__)
@@ -14,7 +20,7 @@ class TransactionService:
     """Сервис управления транзакциями: валидация, расчёты, обновление балансов."""
 
     def __init__(self, tx_repo: TransactionRepository, acc_repo: AccountRepository,
-                 cat_repo: CategoryRepository, credit_card_service=None):
+                 cat_repo: CategoryRepository, tranche_service=TrancheService, credit_card_service=CreditCardService):
         """
         Инициализация сервиса.
 
@@ -25,6 +31,7 @@ class TransactionService:
         self.tx_repo = tx_repo
         self.acc_repo = acc_repo
         self.cat_repo = cat_repo
+        self.tranche_service = tranche_service
         self.credit_card_service = credit_card_service
 
     # ------Работа с транзакциями------
@@ -76,13 +83,16 @@ class TransactionService:
             # 5. Сохранение в БД
             saved_tx = self.tx_repo.create(transaction)
 
-            # 6. ОБРАБОТКА КРЕДИТНОЙ КАРТЫ (если это расход с кредитки)
-            if trans_type == "expense":
-                self._handle_credit_card_expense(account_id, amount_positive, date_str)
-
             # 7. Обновление баланса счёта
             self._update_account_balance(account_id, signed_amount)
+            
+            # конвертируем перед вызовом
+            amount_decimal = Decimal(str(amount_positive))
+            date_obj = datetime.strptime(date_str, "%Y-%m-%d").date()
 
+            # 6. ОБРАБОТКА КРЕДИТНОЙ КАРТЫ (если это расход с кредитки)
+            if trans_type == "expense":
+                self._handle_credit_card_expense(account_id, amount_decimal, date_obj, saved_tx.id)
             return saved_tx
 
         except ValueError as e:
@@ -124,32 +134,56 @@ class TransactionService:
             logger.error("Ошибка: %s", e, exc_info=True)
             raise RuntimeError(f"Системная ошибка при удалении транзакции: {e}") from e
 
-    def _handle_credit_card_expense(self, account_id: int, amount: float, date: str):
+    def _handle_credit_card_expense(
+        self, 
+        account_id: int, 
+        amount: Decimal, 
+        date: date, 
+        transaction_id: int
+    ):
         """
-        Метод-посредник: если счёт — кредитная карта, добавляет покупку в период кредитки.
+        Метод-посредник: если счёт — кредитная карта, создаёт транш покупки.
         Вызывается после создания расхода.
 
         Args:
             account_id: ID счёта
-            amount: сумма расхода (положительное число)
-            date: дата транзакции (YYYY-MM-DD)
+            amount: сумма расхода (положительное число, Decimal)
+            date: дата транзакции (объект date)
+            transaction_id: ID созданной транзакции (для связи)
+            
+        Raises:
+            ValueError: при ошибках валидации данных транша
+            Exception: при системных ошибках БД или сервиса
         """
-        if not self.credit_card_service:
-            logger.warning("[TransactionService] Сервис кредиток не подключён")
+        if not self.tranche_service:
+            logger.debug("[TransactionService] TrancheService не подключён, пропускаем создание транша")
             return
 
-        # Проверяем, является ли счёт кредитной картой
-        account = self.acc_repo.get_by_id(account_id)
-        if not account or account.account_type != 'CreditCard':
-            logger.debug(f"[TransactionService] Счёт ID {account_id} не является CreditCard")
-            return
-
-        logger.debug(f"[TransactionService] Счёт ID {account_id} является CreditCard, добавляем покупку")
-        # Делегируем сервису кредиток — он сам найдёт карту и добавит покупку
         try:
-            self.credit_card_service.add_purchase_by_account(account_id, date, amount)
+            # Проверяем, является ли счёт кредитной картой
+            account = self.acc_repo.get_by_id(account_id)
+            if not account or account.account_type != 'CreditCard':
+                logger.debug(f"[TransactionService] Счёт ID {account_id} не является CreditCard")
+                return
+
+            # Создаём транш покупки
+            self.credit_card_service.add_purchase_by_account(
+                account_id=account_id,
+                amount=amount,
+                transaction_date=date,
+                linked_transaction_id=transaction_id
+            )
+            logger.info(
+                f"[TransactionService] Создан транш покупки для транзакции ID {transaction_id} "
+                f"на сумму {amount} ₽"
+            )
+
+        except ValueError as e:
+            logger.warning(f"[TransactionService] Ошибка валидации при создании транша: {e}")
+            raise
         except Exception as e:
-            logger.warning(f"[TransactionService] Ошибка при добавлении покупки в период кредитки: {e}")
+            logger.error(f"[TransactionService] Системная ошибка при создании транша: {e}", exc_info=True)
+            raise
 
     # ------Проверки, валидация, преобразование------
     def _parse_amount(self, raw: str) -> Tuple[float, float]:

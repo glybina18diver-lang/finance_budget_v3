@@ -1,332 +1,389 @@
 """
-Основной диалог управления кредитной картой.
-Отображает задолженность, периоды, минимальный платёж (как в приложении банка).
-Архитектура MVP: наследование от BaseDialog, работа через презентер.
+Главный диалог управления кредитными картами (CreditCardDialog).
+
+Отображает дашборд, список траншей и историю выписок.
+Связывает действия пользователя с CreditCardPresenter.
 """
+
 import logging
-from typing import List, Dict
+from datetime import date
+from decimal import Decimal
+
 from PySide6.QtWidgets import (
-    QDialog, QVBoxLayout, QHBoxLayout, QGroupBox, QLabel,
-    QPushButton, QTableWidget, QTableWidgetItem, QHeaderView,
-    QComboBox, QDateEdit, QLineEdit, QFormLayout, QMessageBox,
-    QFrame, QTabWidget, QWidget, QProgressBar
+    QVBoxLayout, QHBoxLayout, QComboBox, QPushButton, 
+    QTabWidget, QWidget, QLabel, QTableWidget, QTableWidgetItem,
+    QListWidget, QHeaderView, QMessageBox, QGroupBox, QGridLayout
 )
-from PySide6.QtCore import QDate, Qt, Signal
-from PySide6.QtGui import QFont
+from PySide6.QtCore import Qt, Signal
+
 from ui.dialogs.base_dialog import BaseDialog
-from ui.widgets.colored_button import CompactButton
 
 logger = logging.getLogger(__name__)
 
 
-
 class CreditCardDialog(BaseDialog):
-    """Основной диалог управления кредитной картой."""
+    """
+    Главное окно модуля кредитных карт.
+    
+    Сигналы:
+        data_updated: Вызывается при успешном изменении данных (для обновления родительского окна).
+    """
+    
+    data_updated = Signal()
 
-    def __init__(self, parent=None, presenter=None, card_id: int = None, account_id: int = None):
+    def __init__(self, parent, presenter):
         """
-        Инициализация диалога.
+        Инициализация диалога кредитных карт.
         
         Args:
             parent: родительское окно
             presenter: экземпляр CreditCardPresenter
-            card_id: ID из таблицы credit_cards
-            account_id: ID счёта в таблице accounts
         """
         super().__init__(parent)
         self.presenter = presenter
-        self.card_id = card_id
-        self.account_id = account_id
+        self.current_card_id = None
         
-        self.setWindowTitle("Кредитная карта beta")
-        self.resize(900, 700)
+        self.setWindowTitle("Управление кредитными картами")
+        self.resize(800, 600)
         
-        self._init_ui()
-        
-        if self.presenter and self.card_id and self.account_id:
-            self.presenter.set_current_card(self.card_id, self.account_id)
-            self.presenter.set_view(self)
+        self._setup_ui()
+        self._load_cards()
 
-    def _init_ui(self):
-        """Инициализация интерфейса."""
-        # Используем layout из BaseDialog
-        self._main_layout.setSpacing(10)
+    def _setup_ui(self):
+        """Настраивает интерфейс диалога."""
+        # Верхняя панель: выбор карты и кнопки действий
+        top_layout = QHBoxLayout()
         
+        self.card_combo = QComboBox()
+        self.card_combo.currentIndexChanged.connect(self._on_card_changed)
+        top_layout.addWidget(QLabel("Карта:"), 1)
+        top_layout.addWidget(self.card_combo, 3)
         
-        # === Заголовок ===
-        header_frame = QFrame()
-        header_layout = QHBoxLayout(header_frame)
-        header_layout.setContentsMargins(0, 0, 0, 0)
+        self.btn_add_card = QPushButton("➕ Добавить карту")
+        self.btn_add_card.clicked.connect(self._on_add_card)
+        top_layout.addWidget(self.btn_add_card)
         
-        self.card_name_label = QLabel("Сбер Молодёжная")
-        self.card_name_label.setFont(QFont("Arial", 16, QFont.Bold))
-        header_layout.addWidget(self.card_name_label)
+        self.btn_settings = QPushButton("⚙️ Настройки")
+        self.btn_settings.clicked.connect(self._on_open_settings)
+        self.btn_settings.setEnabled(False)
+        top_layout.addWidget(self.btn_settings)
         
-        header_layout.addStretch()
-        
-        # Кнопака настроек  карты
-        self.settings_btn = CompactButton("Настройки")
-        self.settings_btn.clicked.connect(self._on_settings_card)
-        header_layout.addWidget(self.settings_btn)
+        self.btn_payment = QPushButton("💳 Внести платёж")
+        self.btn_payment.clicked.connect(self._on_make_payment)
+        self.btn_payment.setEnabled(False)
+        top_layout.addWidget(self.btn_payment)
 
-        # Кнопка внесения платежа
-        self.payment_btn = CompactButton("💳 Внести платёж")
-        self.payment_btn.clicked.connect(self._open_payment_dialog)
-        header_layout.addWidget(self.payment_btn)
+        self.btn_recalc = QPushButton("🔄 Пересчитать %")
+        self.btn_recalc.clicked.connect(self._on_recalculate_interest)
+        self.btn_recalc.setEnabled(False)
+        top_layout.addWidget(self.btn_recalc)
+        
+        self.btn_delete = QPushButton("🗑️ Удалить")
+        self.btn_delete.clicked.connect(self._on_delete_card)
+        self.btn_delete.setEnabled(False)
+        self.btn_delete.setStyleSheet("QPushButton { color: red; }")
+        top_layout.addWidget(self.btn_delete)
+        
+        self._main_layout.addLayout(top_layout)
+        
+        # Вкладки
+        self.tabs = QTabWidget()
+        self._main_layout.addWidget(self.tabs)
+        
+        self._setup_dashboard_tab()
+        self._setup_tranches_tab()
+        self._setup_statements_tab()
 
-        self.delete_card_btn = CompactButton("🗑️ Удалить карту")
-        self.delete_card_btn.clicked.connect(self._on_delete_card)
-        header_layout.addWidget(self.delete_card_btn)
+    def _setup_dashboard_tab(self):
+        """Настраивает вкладку 'Обзор' (Дашборд)."""
+        tab = QWidget()
+        layout = QVBoxLayout(tab)
+        
+        # Метрики
+        metrics_group = QGroupBox("Финансовые показатели")
+        metrics_layout = QGridLayout()
+        
+        self.lbl_total_debt = QLabel("0.00 ₽")
+        self.lbl_available_limit = QLabel("0.00 ₽")
+        self.lbl_burn_rate = QLabel("0.00 ₽/день")
+        self.lbl_min_payment = QLabel("0.00 ₽")
+        
+        metrics_layout.addWidget(QLabel("Общий долг:"), 0, 0)
+        metrics_layout.addWidget(self.lbl_total_debt, 0, 1)
+        metrics_layout.addWidget(QLabel("Доступный лимит:"), 1, 0)
+        metrics_layout.addWidget(self.lbl_available_limit, 1, 1)
+        metrics_layout.addWidget(QLabel("Стоимость дня (Burn Rate):"), 2, 0)
+        metrics_layout.addWidget(self.lbl_burn_rate, 2, 1)
+        metrics_layout.addWidget(QLabel("Мин. платёж до конца месяца:"), 3, 0)
+        metrics_layout.addWidget(self.lbl_min_payment, 3, 1)
+        
+        metrics_group.setLayout(metrics_layout)
+        layout.addWidget(metrics_group)
+        
+        # Алерты Grace Saver
+        alerts_group = QGroupBox("⚠️ Спасение грейс-периода")
+        alerts_layout = QVBoxLayout()
+        self.lst_alerts = QListWidget()
+        self.lst_alerts.setAlternatingRowColors(True)
+        alerts_layout.addWidget(self.lst_alerts)
+        alerts_group.setLayout(alerts_layout)
+        layout.addWidget(alerts_group)
+        
+        self.tabs.addTab(tab, "📊 Обзор")
 
-        self._main_layout.addWidget(header_frame)
+    def _setup_tranches_tab(self):
+        """Настраивает вкладку 'Транши'."""
+        tab = QWidget()
+        layout = QVBoxLayout(tab)
         
-        # === Блок общей задолженности ===
-        debt_frame = QFrame()
-        debt_frame.setStyleSheet("""
-            QFrame {
-                background-color: #f8f9fa;
-                border-radius: 10px;
-                padding: 15px;
-            }
-        """)
-        debt_layout = QVBoxLayout(debt_frame)
-        
-        self.total_debt_label = QLabel("Вся задолженность: 0.00 ₽")
-        self.total_debt_label.setFont(QFont("Arial", 20, QFont.Bold))
-        self.total_debt_label.setStyleSheet("color: #dc3545;")
-        debt_layout.addWidget(self.total_debt_label)
-        
-        self.debt_hint_label = QLabel("Если внести эту сумму, то полностью погасите задолженность")
-        self.debt_hint_label.setStyleSheet("color: #6c757d; font-size: 9pt;")
-        debt_layout.addWidget(self.debt_hint_label)
-        
-        # Блок с советом (как в банке: "Чтобы перестали начисляться проценты...")
-        self.advice_frame = QFrame()
-        self.advice_frame.setStyleSheet("""
-            QFrame {
-                background-color: #1e3a5f;
-                border-radius: 8px;
-                padding: 10px;
-            }
-        """)
-        advice_layout = QHBoxLayout(self.advice_frame)
-        
-        bulb_label = QLabel("💡")
-        bulb_label.setFont(QFont("Arial", 24))
-        advice_layout.addWidget(bulb_label)
-        
-        self.advice_label = QLabel("Чтобы перестали начисляться проценты, внесите 0.00 ₽")
-        self.advice_label.setStyleSheet("color: white; font-weight: bold;")
-        self.advice_label.setWordWrap(True)
-        advice_layout.addWidget(self.advice_label)
-        
-        debt_layout.addWidget(self.advice_frame)
-        
-        self._main_layout.addWidget(debt_frame)
-        
-        # === Табы: Детализация и Периоды ===
-        tabs = QTabWidget()
-        
-        # Вкладка 1: Детализация задолженности
-        details_widget = QWidget()
-        details_layout = QVBoxLayout(details_widget)
-        
-        # Основной долг
-        self.principal_group = QGroupBox("Основной долг")
-        self.principal_layout = QFormLayout()
-        self.principal_label = QLabel("0.00 ₽")
-        self.principal_label.setStyleSheet("font-weight: bold; color: #28a745;")
-        self.principal_layout.addRow("", self.principal_label)
-        self.principal_group.setLayout(self.principal_layout)
-        details_layout.addWidget(self.principal_group)
-        
-        # Проценты
-        self.interest_group = QGroupBox("Начисленные проценты")
-        self.interest_layout = QFormLayout()
-        self.interest_retro_label = QLabel("Ретроактивные: 0.00 ₽")
-        self.interest_daily_label = QLabel("Ежедневные: 0.00 ₽")
-        self.interest_layout.addRow(self.interest_retro_label)
-        self.interest_layout.addRow(self.interest_daily_label)
-        self.interest_group.setLayout(self.interest_layout)
-        details_layout.addWidget(self.interest_group)
-        
-        # Минимальный платёж
-        self.min_payment_group = QGroupBox("Минимальный платёж")
-        self.min_payment_layout = QFormLayout()
-        self.min_payment_label = QLabel("0.00 ₽")
-        self.min_payment_label.setStyleSheet("font-weight: bold; color: #007bff; font-size: 14pt;")
-        self.min_payment_layout.addRow("Обязательный платёж:", self.min_payment_label)
-        self.min_payment_group.setLayout(self.min_payment_layout)
-        details_layout.addWidget(self.min_payment_group)
-        
-        details_layout.addStretch()
-        tabs.addTab(details_widget, "📊 Детализация")
-        
-        # Вкладка 2: Периоды
-        periods_widget = QWidget()
-        periods_layout = QVBoxLayout(periods_widget)
-        
-        self.periods_table = QTableWidget()
-        self.periods_table.setColumnCount(7)
-        self.periods_table.setHorizontalHeaderLabels([
-            "Период", "Покупки", "Переводы", "Льгота до", "Погашено", "Проценты", "Статус"
+        self.tbl_tranches = QTableWidget()
+        self.tbl_tranches.setColumnCount(7)
+        self.tbl_tranches.setHorizontalHeaderLabels([
+            "Дата", "Тип", "Сумма", "Остаток", "Комиссия", "Конец грейса", "Статус"
         ])
+        self.tbl_tranches.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self.tbl_tranches.setEditTriggers(QTableWidget.NoEditTriggers)
         
-        # Настройка колонок
-        header = self.periods_table.horizontalHeader()
-        header.setSectionResizeMode(0, QHeaderView.ResizeToContents)  # Период
-        header.setSectionResizeMode(1, QHeaderView.ResizeToContents)  # Покупки
-        header.setSectionResizeMode(2, QHeaderView.ResizeToContents)  # Переводы
-        header.setSectionResizeMode(3, QHeaderView.ResizeToContents)  # Льгота до
-        header.setSectionResizeMode(4, QHeaderView.ResizeToContents)  # Погашено
-        header.setSectionResizeMode(5, QHeaderView.ResizeToContents)  # Проценты
-        header.setSectionResizeMode(6, QHeaderView.Stretch)           # Статус
-        
-        self.periods_table.setSelectionBehavior(QTableWidget.SelectRows)
-        self.periods_table.setSelectionMode(QTableWidget.SingleSelection)
-        self.periods_table.setAlternatingRowColors(True)
-        self.periods_table.verticalHeader().setVisible(False)
-        
-        periods_layout.addWidget(self.periods_table)
-        tabs.addTab(periods_widget, "📅 Периоды")
-        
-        self._main_layout.addWidget(tabs, 1)
-        
-        # === Кнопка закрытия ===
-        close_btn = CompactButton("Закрыть")
-        close_btn.clicked.connect(self.reject)
-        self._main_layout.addWidget(close_btn)
+        layout.addWidget(self.tbl_tranches)
+        self.tabs.addTab(tab, "📦 Транши")
 
-        # . Строка статуса
-        self._main_layout.addWidget(self.status_bar)
+    def _setup_statements_tab(self):
+        """Настраивает вкладку 'Выписки'."""
+        tab = QWidget()
+        layout = QVBoxLayout(tab)
+        
+        self.tbl_statements = QTableWidget()
+        self.tbl_statements.setColumnCount(5)
+        self.tbl_statements.setHorizontalHeaderLabels([
+            "Дата выписки", "Дата платежа", "Закрывающий баланс", "Мин. платёж", "Статус"
+        ])
+        self.tbl_statements.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self.tbl_statements.setEditTriggers(QTableWidget.NoEditTriggers)
+        
+        layout.addWidget(self.tbl_statements)
+        self.tabs.addTab(tab, "📄 Выписки")
 
+    # --- Загрузка данных ---
 
-    def _open_payment_dialog(self):
+    def _load_cards(self):
+        """Загружает список карт в ComboBox."""
+        try:
+            self.card_combo.blockSignals(True)
+            self.card_combo.clear()
+            
+            cards = self.presenter.get_cards_list()
+            for card in cards:
+                self.card_combo.addItem(card["name"], card["id"])
+                
+            if cards:
+                self.current_card_id = cards[0]["id"]
+                self._enable_card_actions(True)
+                self._load_dashboard()
+                self._load_tranches()
+                self._load_statements()
+            else:
+                self.current_card_id = None
+                self._enable_card_actions(False)
+                
+        except ValueError as e:
+            self.show_status(str(e), "error")
+        except Exception as e:
+            logger.error(f"Ошибка UI при загрузке карт: {e}", exc_info=True)
+            self.show_status("Произошла ошибка при загрузке списка карт", "error")
+        finally:
+            self.card_combo.blockSignals(False)
+
+    def _on_card_changed(self, index):
+        """Обрабатывает смену выбранной карты."""
+        if index < 0:
+            return
+            
+        self.current_card_id = self.card_combo.currentData()
+        if self.current_card_id:
+            self._enable_card_actions(True)
+            self._load_dashboard()
+            self._load_tranches()
+            self._load_statements()
+
+    def _enable_card_actions(self, enabled: bool):
+        """Включает или отключает кнопки действий для карты."""
+        self.btn_settings.setEnabled(enabled)
+        self.btn_payment.setEnabled(enabled)
+        self.btn_recalc.setEnabled(enabled)
+        self.btn_delete.setEnabled(enabled)
+
+    def _load_dashboard(self):
+        """Загружает и отображает данные вкладки 'Обзор'."""
+        try:
+            data = self.presenter.get_dashboard_data(self.current_card_id)
+            
+            metrics = data["metrics"]
+            self.lbl_total_debt.setText(self._format_currency(metrics["total_debt"]))
+            self.lbl_available_limit.setText(self._format_currency(metrics["available_limit"]))
+            self.lbl_burn_rate.setText(f"{self._format_currency(metrics['burn_rate'])} / день")
+            self.lbl_min_payment.setText(self._format_currency(metrics["min_payment"]))
+            
+            self.lst_alerts.clear()
+            for alert in data.get("grace_alerts", []):
+                text = (
+                    f"Транш ID {alert['tranche_id']}: {self._format_currency(alert['amount'])} ₽. "
+                    f"Осталось {alert['days_left']} дн. (до {alert['grace_end_date']}). "
+                    f"Цена ошибки: ~{self._format_currency(alert['retroactive_cost'])} ₽"
+                )
+                self.lst_alerts.addItem(text)
+                
+        except ValueError as e:
+            self.show_status(str(e), "error")
+        except Exception as e:
+            logger.error(f"Ошибка UI при загрузке дашборда: {e}", exc_info=True)
+            self.show_status("Произошла ошибка при загрузке обзора", "error")
+
+    def _load_tranches(self):
+        """Загружает и отображает список траншей."""
+        try:
+            tranches = self.presenter.get_tranches(self.current_card_id)
+            self.tbl_tranches.setRowCount(len(tranches))
+            
+            for row, t in enumerate(tranches):
+                self.tbl_tranches.setItem(row, 0, QTableWidgetItem(t["transaction_date"]))
+                self.tbl_tranches.setItem(row, 1, QTableWidgetItem(self._translate_tranche_type(t["type"])))
+                self.tbl_tranches.setItem(row, 2, QTableWidgetItem(self._format_currency(t["original_amount"])))
+                self.tbl_tranches.setItem(row, 3, QTableWidgetItem(self._format_currency(t["remaining_amount"])))
+                self.tbl_tranches.setItem(row, 4, QTableWidgetItem(self._format_currency(t["commission"])))
+                self.tbl_tranches.setItem(row, 5, QTableWidgetItem(t["grace_end_date"] or "-"))
+                self.tbl_tranches.setItem(row, 6, QTableWidgetItem(self._translate_status(t["status"])))
+                
+        except ValueError as e:
+            self.show_status(str(e), "error")
+        except Exception as e:
+            logger.error(f"Ошибка UI при загрузке траншей: {e}", exc_info=True)
+            self.show_status("Произошла ошибка при загрузке траншей", "error")
+
+    def _load_statements(self):
+        """Загружает и отображает историю выписок."""
+        try:
+            statements = self.presenter.get_statements(self.current_card_id)
+            self.tbl_statements.setRowCount(len(statements))
+            
+            for row, s in enumerate(statements):
+                self.tbl_statements.setItem(row, 0, QTableWidgetItem(s["statement_date"]))
+                self.tbl_statements.setItem(row, 1, QTableWidgetItem(s["due_date"] or "-"))
+                self.tbl_statements.setItem(row, 2, QTableWidgetItem(self._format_currency(s["closing_balance"])))
+                self.tbl_statements.setItem(row, 3, QTableWidgetItem(self._format_currency(s["min_payment_required"])))
+                self.tbl_statements.setItem(row, 4, QTableWidgetItem(self._translate_status(s["status"])))
+                
+        except ValueError as e:
+            self.show_status(str(e), "error")
+        except Exception as e:
+            logger.error(f"Ошибка UI при загрузке выписок: {e}", exc_info=True)
+            self.show_status("Произошла ошибка при загрузке выписок", "error")
+
+    # --- Обработчики кнопок ---
+
+    def _on_add_card(self):
+        """Открывает диалог создания новой карты."""
+        # TODO: Реализовать вызов CreditCardCreateDialog
+        self.show_status("Диалог создания карты будет добавлен на следующем этапе", "info")
+
+    def _on_open_settings(self):
+        """Открывает диалог настроек текущей карты."""
+        try:
+            # TODO: Реализовать вызов CreditCardSettingsDialog
+            # После закрытия диалога настроек:
+            self.show_status("Настройки сохранены (заглушка)", "success")
+            self._load_cards() # Перезагрузить, если изменилось название
+            self.data_updated.emit()
+        except ValueError as e:
+            self.show_status(str(e), "error")
+        except Exception as e:
+            logger.error(f"Ошибка UI при открытии настроек: {e}", exc_info=True)
+            self.show_status("Произошла ошибка при сохранении настроек", "error")
+
+    def _on_make_payment(self):
         """Открывает диалог внесения платежа."""
-        if self.presenter:
-            self.presenter._open_payment_dialog()
-        
+        try:
+            # TODO: Реализовать вызов CreditCardPaymentDialog
+            # После успешного платежа:
+            self.show_status("Платёж внесён (заглушка)", "success")
+            self._load_dashboard()
+            self._load_tranches()
+            self.data_updated.emit()
+        except ValueError as e:
+            self.show_status(str(e), "error")
+        except Exception as e:
+            logger.error(f"Ошибка UI при внесении платежа: {e}", exc_info=True)
+            self.show_status("Произошла ошибка при внесении платежа", "error")
+
+    def _on_recalculate_interest(self):
+        """Вручную пересчитывает проценты на текущую дату."""
+        try:
+            today_str = date.today().isoformat()
+            result = self.presenter.recalculate_interest(self.current_card_id, today_str)
+            
+            if result:
+                self.show_status(f"Проценты пересчитаны. Затронуто траншей: {len(result)}", "success")
+            else:
+                self.show_status("Нечего пересчитывать (нет активных траншей вне грейса)", "info")
+                
+            self._load_dashboard()
+            self._load_tranches()
+        except ValueError as e:
+            self.show_status(str(e), "error")
+        except Exception as e:
+            logger.error(f"Ошибка UI при пересчёте процентов: {e}", exc_info=True)
+            self.show_status("Произошла ошибка при пересчёте процентов", "error")
+
     def _on_delete_card(self):
-        """Обработчик нажатия кнопки 'Удалить карту'."""
-        from PySide6.QtWidgets import QMessageBox
-        
-        reply = QMessageBox.question(
-            self,
-            "Удаление карты",
-            "Вы уверены, что хотите удалить эту кредитную карту?\n\n"
-            "Все данные о периодах и платежах будут удалены безвозвратно.",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-            QMessageBox.StandardButton.No
-        )
-        
-        if reply == QMessageBox.StandardButton.Yes and self.presenter:
-            try:
-                self.presenter.delete_card()
-            except Exception as e:
-                logger.error("[CreditCardDialog] Ошибка при удалении карты: %s", e, exc_info=True)
-                self.show_status("Произошла ошибка при удалении карты", "error")
-
-    def _on_settings_card(self):
-        """Открывает диалог настроек кредитной карты."""
-        if self.presenter:
-            self.presenter.open_settings_dialog()
-
-    # =================== Контракт View <-> Presenter ===================
-
-    def populate_card_info(self, card_data: Dict):
-        """
-        Заполняет информацию о карте.
-        
-        Args:
-            card_data: {id, name, annual_rate, grace_months, min_payment_percent}
-        """
-        self.card_name_label.setText(card_data.get("name", "Кредитная карта"))
-
-    def populate_periods(self, periods: List[Dict]):
-        """
-        Заполняет таблицу периодов.
-        
-        Args:
-            periods: список словарей с данными периодов
-        """
-        self.periods_table.setRowCount(0)
-        
-        for i, period in enumerate(periods):
-            self.periods_table.insertRow(i)
-            
-            # Период
-            period_item = QTableWidgetItem(period.get("period_month", ""))
-            self.periods_table.setItem(i, 0, period_item)
-            
-            # Покупки
-            purchases = period.get("total_purchases", 0)
-            self.periods_table.setItem(i, 1, QTableWidgetItem(f"{purchases:,.2f} ₽"))
-            
-            # Переводы
-            transfers = period.get("total_transfers", 0)
-            self.periods_table.setItem(i, 2, QTableWidgetItem(f"{transfers:,.2f} ₽"))
-            
-            # Льгота до
-            grace_end = period.get("grace_period_end", "")
-            self.periods_table.setItem(i, 3, QTableWidgetItem(grace_end))
-            
-            # Погашено
-            paid = period.get("paid_amount", 0)
-            self.periods_table.setItem(i, 4, QTableWidgetItem(f"{paid:,.2f} ₽"))
-            
-            # Проценты
-            interest = period.get("total_interest", 0)
-            self.periods_table.setItem(i, 5, QTableWidgetItem(f"{interest:,.2f} ₽"))
-            
-            # Статус
-            is_paid = period.get("is_paid", False)
-            status = "✅ Погашено" if is_paid else "⏳ Активен"
-            status_item = QTableWidgetItem(status)
-            if not is_paid:
-                status_item.setForeground(Qt.red)
-            self.periods_table.setItem(i, 6, status_item)
-
-    def populate_debt_summary(self, min_payment: Dict, full_payoff: Dict):
-        """
-        Заполняет сводку по задолженности.
-        
-        Args:
-            min_payment: {min_payment, principal_part, interest_part, total_debt, ...}
-            full_payoff: {total, principal, interest_retroactive, interest_daily}
-        """
-        # Общая задолженность
-        total_deft = full_payoff.get("total", 0)
-        self.total_debt_label.setText(f"Вся задолженность: {total_deft:,.2f} ₽")
-        
-        # Основной долг
-        principal = full_payoff.get("principal", 0)
-        self.principal_label.setText(f"{principal:,.2f} ₽")
-        
-        # Проценты
-        interest_retro = full_payoff.get("interest_retroactive", 0)
-        interest_daily = full_payoff.get("interest_daily", 0)
-        self.interest_retro_label.setText(f"Ретроактивные: {interest_retro:,.2f} ₽")
-        self.interest_daily_label.setText(f"Ежедневные: {interest_daily:,.2f} ₽")
-        
-        # Минимальный платёж
-        min_pay = min_payment.get("min_payment", 0)
-        self.min_payment_label.setText(f"{min_pay:,.2f} ₽")
-        
-        # Совет (как в банке)
-        if interest_retro > 0 or interest_daily > 0:
-            self.advice_label.setText(
-                f"Чтобы перестали начисляться проценты, внесите {interest_retro + interest_daily:,.2f} ₽"
+        """Мягко удаляет текущую карту."""
+        try:
+            card_name = self.card_combo.currentText()
+            reply = QMessageBox.question(
+                self, 
+                "Подтверждение удаления", 
+                f"Вы уверены, что хотите удалить карту '{card_name}'?\n"
+                f"Все транши и история выписок будут удалены.",
+                QMessageBox.Yes | QMessageBox.No
             )
-            self.advice_frame.setVisible(True)
-        else:
-            self.advice_frame.setVisible(False)
+            
+            if reply == QMessageBox.Yes:
+                self.presenter.delete_card(self.current_card_id)
+                self.show_status(f"Карта '{card_name}' удалена", "success")
+                self._load_cards()
+                self.data_updated.emit()
+                
+        except ValueError as e:
+            self.show_status(str(e), "error")
+        except Exception as e:
+            logger.error(f"Ошибка UI при удалении карты: {e}", exc_info=True)
+            self.show_status("Произошла ошибка при удалении карты", "error")
 
-    def populate_accounts_for_payment(self, accounts: List[Dict]):
-        """
-        Заполняет список счетов для платежа (используется в payment_dialog).
-        Этот метод может быть вызван из payment_dialog через presenter.
-        
-        Args:
-            accounts: список {id, name, current_balance}
-        """
-        pass  # Реализуется в CreditCardPaymentDialog
+    # --- Хелперы ---
+
+    def _format_currency(self, value) -> str:
+        """Форматирует число в строку с валютой."""
+        try:
+            return f"{value:,.2f} ₽".replace(",", " ")
+        except (ValueError, TypeError):
+            return "0.00 ₽"
+
+    def _translate_tranche_type(self, tranche_type: str) -> str:
+        """Переводит тип транша на русский."""
+        types = {
+            "purchase": "Покупка",
+            "transfer": "Перевод",
+            "refund": "Возврат"
+        }
+        return types.get(tranche_type, tranche_type)
+
+    def _translate_status(self, status: str) -> str:
+        """Переводит статус на русский."""
+        statuses = {
+            "in_grace": "В грейсе",
+            "grace_expired": "Грейс истёк",
+            "partial": "Частично погашен",
+            "paid": "Погашен",
+            "open": "Открыта",
+            "closed": "Закрыта",
+            "overdue": "Просрочена"
+        }
+        return statuses.get(status, status)

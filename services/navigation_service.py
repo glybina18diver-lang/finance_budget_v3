@@ -36,6 +36,11 @@ from services.category_service import CategoryService
 from services.transfer_service import TransferService
 from services.loan_service import LoanService
 from services.credit_card_service import CreditCardService
+from services.tranche_service import TrancheService
+from services.interest_engine import InterestEngine
+from services.payment_waterfall import PaymentWaterfall, PaymentAllocation
+from services.statement_service import StatementService
+from services.forecast_service import ForecastService
 
 
 # Репозитории
@@ -45,7 +50,11 @@ from core.repositories.category_repository import CategoryRepository
 from core.repositories.transfer_repository import TransferRepository
 from core.repositories.loan_repository import LoanRepository
 from core.repositories.credit_card_repository import CreditCardRepository
-from core.repositories.account_repository import AccountRepository
+from core.repositories.tranche_repository import TrancheRepository
+from core.repositories.interest_accrual_repository import InterestAccrualRepository
+from core.repositories.statement_repository import StatementRepository
+
+
 
 logger = logging.getLogger(__name__)
 
@@ -65,7 +74,7 @@ class NavigationService:
         self._init_shared_repositories()
 
     def _init_shared_repositories(self):
-        """Инициализирует репозитории, общие для всех диалогов."""
+        """Инициализирует репозитории и сервисы, общие для всех диалогов."""
         try:
             self.acc_repo = AccountRepository(self.db)
             self.tx_repo = TransactionRepository(self.db)
@@ -73,8 +82,24 @@ class NavigationService:
             self.tr_repo = TransferRepository(self.db)
             self.loan_repo = LoanRepository(self.db)
             self.credit_card_repo = CreditCardRepository(self.db)
+            self.tranche_repo = TrancheRepository(self.db)
+            self.accrual_repo = InterestAccrualRepository(self.db)
+            self.statement_repo = StatementRepository(self.db)
 
-            self.credit_card_service = CreditCardService(self.credit_card_repo, self.acc_repo)
+            self.interest_engine = InterestEngine(self.tranche_repo, self.accrual_repo)
+            self.payment_waterfall = PaymentWaterfall(self.tranche_repo, self.accrual_repo)
+            self.statement_service = StatementService(self.statement_repo, self.tranche_repo, self.accrual_repo, self.credit_card_repo)
+            self.forecast_service = ForecastService(self.tranche_repo, self.accrual_repo, self.credit_card_repo)
+            self.tranche_service = TrancheService(self.tranche_repo, self.credit_card_repo)
+            self.credit_card_service = CreditCardService(
+                self.credit_card_repo, 
+                self.tranche_repo,
+                self.tranche_service,
+                self.interest_engine,
+                self.payment_waterfall,
+                self.statement_service,
+                self.forecast_service
+                )
         except Exception as e:
             logger.error(f"[NavigationService] Ошибка инициализации репозиториев: {e}", exc_info=True)
             raise
@@ -95,7 +120,9 @@ class NavigationService:
                 tx_repo=self.tx_repo,
                 acc_repo=self.acc_repo,
                 cat_repo=self.cat_repo,
+                tranche_service=self.tranche_service,
                 credit_card_service=self.credit_card_service
+                # credit_card_repo=self.credit_card_repo
             )
             # Создаём презентер
             presenter = TransactionPresenter(tx_service=tx_service)
@@ -119,7 +146,7 @@ class NavigationService:
         """
         try:
             # Создаём сервис для счетов
-            acc_service = AccountService(acc_repo=self.acc_repo, credit_card_service=self.credit_card_service)
+            acc_service = AccountService(acc_repo=self.acc_repo)
             # Создаём презентер
             presenter = AccountPresenter(service=acc_service)
             # Создаём и показываем диалог
@@ -201,53 +228,20 @@ class NavigationService:
             logger.error(f"[NavigationService] Ошибка открытия диалога займов: {e}", exc_info=True)
             raise
 
-    def open_credit_card_dialog(self, parent: QWidget, card_id: int = None):
+    def open_credit_card_dialog(self, parent: QWidget) -> Optional[LoanDialog]:
         """
         Открывает диалог управления кредитной картой.
 
         Args:
             parent: родительское окно
-            card_id: ID кредитной карты (если None, будет запрошен выбор)
         """
         try:
-            # Получаем все кредитные карты (счета типа CreditCard)
-            cards = self.credit_card_service.get_all_credit_cards()
-
-            if not cards:
-                QMessageBox.information(
-                    parent,
-                    "Информация",
-                    "Кредитные карты не найдены.\n\n"
-                    "Сначала создайте счёт с типом 'CreditCard' в диалоге счетов."
-                )
-                return
-
-            # Диалог выбора карты
-            card_names = [f"{c['name']} (баланс: {c['current_balance']:,.2f} ₽)" for c in cards]
-
-            selected, ok = QInputDialog.getItem(
-                parent,
-                "Выберите кредитную карту",
-                "Доступные карты:",
-                card_names,
-                0,
-                False
-            )
-
-            if not ok:
-                return
-
-            # Находим выбранную карту
-            idx = card_names.index(selected)
-            card = cards[idx]
-
+            
             # Создаём презентер и открываем диалог
             presenter = CreditCardPresenter(self.credit_card_service, self.acc_repo)
             dialog = CreditCardDialog(
                 parent=parent,
                 presenter=presenter,
-                card_id=card["card_id"],
-                account_id=card["account_id"]
             )
             dialog.show()
             return dialog
