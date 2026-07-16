@@ -79,7 +79,7 @@ class TrancheService:
         card_id: int, 
         amount: Decimal, 
         transaction_date: date, 
-        linked_transaction_id: Optional[int] = None
+        linked_transaction_id: int = None
     ) -> Tranche:
         """
         Создаёт транш для обычной покупки.
@@ -88,7 +88,7 @@ class TrancheService:
             card_id: ID кредитной карты
             amount: сумма покупки (положительное число)
             transaction_date: дата покупки
-            linked_transaction_id: ID связанной транзакции в таблице transactions (опционально)
+            linked_transaction_id: ID связанной транзакции в таблице transactions
             
         Returns:
             Созданный объект Tranche

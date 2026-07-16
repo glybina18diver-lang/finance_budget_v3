@@ -26,19 +26,21 @@ class InterestAccrualRepository:
                     amount, paid_amount, is_paid
                 ) VALUES (?, ?, ?, ?, ?, ?)
             """
-            cursor = self.db.execute(query, (
+            params = (
                 accrual.tranche_id,
                 accrual.accrual_date.isoformat(),
                 accrual.interest_type,
                 float(accrual.amount),
                 float(accrual.paid_amount),
                 1 if accrual.is_paid else 0
-            ))
+            )
+            new_id = self.db.execute(query, params)
+            accrual.id = new_id
             logger.info(
-                f"[{self.__class__.__name__}] Создано начисление ID={cursor.lastrowid}, "
+                f"[{self.__class__.__name__}] Создано начисление ID = {new_id}, "
                 f"tranche_id={accrual.tranche_id}, тип={accrual.interest_type}, сумма={accrual.amount}"
             )
-            return cursor.lastrowid
+            return new_id
         except Exception as e:
             logger.error(f"[{self.__class__.__name__}] Ошибка создания начисления процентов: {e}", exc_info=True)
             raise

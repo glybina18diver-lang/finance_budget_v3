@@ -33,7 +33,7 @@ class TrancheRepository:
                     is_retroactive_triggered, linked_transaction_id
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """
-            cursor = self.db.execute(query, (
+            params = (
                 tranche.card_id,
                 tranche.tranche_type,
                 float(tranche.original_amount),
@@ -44,8 +44,10 @@ class TrancheRepository:
                 tranche.status,
                 1 if tranche.is_retroactive_triggered else 0,
                 tranche.linked_transaction_id
-            ))
-            return cursor.lastrowid
+            )
+            new_id = self.db.execute(query, params)
+            tranche.id = new_id
+            return new_id
         except Exception as e:
             logger.error(f"[TrancheRepository] Ошибка создания транша: {e}", exc_info=True)
             raise

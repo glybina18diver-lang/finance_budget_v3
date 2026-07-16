@@ -83,6 +83,8 @@ class TransactionService:
             # 5. Сохранение в БД
             saved_tx = self.tx_repo.create(transaction)
 
+            logger.debug(f"[TransactionService] ID создаваемой транзакции = {saved_tx.id}")
+
             # 7. Обновление баланса счёта
             self._update_account_balance(account_id, signed_amount)
             
@@ -171,7 +173,7 @@ class TransactionService:
                 account_id=account_id,
                 amount=amount,
                 transaction_date=date,
-                linked_transaction_id=transaction_id
+                transaction_id=transaction_id
             )
             logger.info(
                 f"[TransactionService] Создан транш покупки для транзакции ID {transaction_id} "

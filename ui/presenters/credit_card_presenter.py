@@ -182,6 +182,79 @@ class CreditCardPresenter:
             logger.error(f"[{self.__class__.__name__}] Ошибка получения счетов: {e}", exc_info=True)
             raise
 
+    def get_available_accounts_for_card_creation(self) -> List[Dict[str, Any]]:
+        """
+        Получает список счетов типа CreditCard, к которым ещё не привязана карта.
+        
+        Returns:
+            Список словарей со счетами
+        """
+        try:
+            # Получаем все счета типа CreditCard
+            all_credit_accounts = self.account_service.get_accounts_by_type("CreditCard")
+            # Получаем ID счетов, которые уже имеют карту
+            used_account_ids = self.service.card_repo.get_all_card_account_ids()
+            
+            # Фильтруем
+            available_accounts = [
+                acc for acc in all_credit_accounts if acc.id not in used_account_ids
+            ]
+            
+            return [
+                {
+                    "id": acc.id,
+                    "name": acc.name,
+                    "balance": float(acc.current_balance)
+                }
+                for acc in available_accounts
+            ]
+        except ValueError as e:
+            logger.warning(f"[{self.__class__.__name__}] Валидация счетов для карты: {e}")
+            raise
+        except Exception as e:
+            logger.error(f"[{self.__class__.__name__}] Ошибка получения счетов для карты: {e}", exc_info=True)
+            raise
+
+    def create_card(self, card_data: Dict[str, Any]) -> int:
+        """
+        Создаёт новую кредитную карту.
+        
+        Args:
+            card_data: словарь с полями карты из UI
+            
+        Returns:
+            ID созданной карты
+            
+        Raises:
+            ValueError: при невалидном вводе
+        """
+        try:
+            if not card_data.get("account_id"):
+                raise ValueError("Не выбран счёт")
+            if not card_data.get("name", "").strip():
+                raise ValueError("Название карты не может быть пустым")
+
+            card = CreditCard(
+                account_id=card_data["account_id"],
+                name=card_data["name"].strip(),
+                annual_rate=self._parse_decimal(card_data["annual_rate"], "Годовая ставка"),
+                grace_months=int(card_data["grace_months"]),
+                min_payment_percent=self._parse_decimal(card_data["min_payment_percent"], "Мин. платёж %") / Decimal("100"),
+                payment_day=int(card_data["payment_day"]),
+                statement_day=int(card_data["statement_day"]),
+                credit_limit=self._parse_decimal(card_data["credit_limit"], "Кредитный лимит")
+            )
+            
+            card_id = self.service.create_card(card)
+            logger.info(f"[{self.__class__.__name__}] Создана карта ID={card_id}")
+            return card_id
+        except ValueError as e:
+            logger.warning(f"[{self.__class__.__name__}] Валидация создания карты: {e}")
+            raise
+        except Exception as e:
+            logger.error(f"[{self.__class__.__name__}] Ошибка создания карты: {e}", exc_info=True)
+            raise
+
     # --- Обработка действий пользователя ---
 
     def make_payment(

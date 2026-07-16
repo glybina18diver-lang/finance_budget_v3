@@ -61,6 +61,7 @@ class LoanService:
             raise
 
     def get_all_accounts_active(self):
+        """Возвращает все активные счета"""
         try:
             return self.account_repo.get_all_active()
         except Exception as e:

@@ -260,15 +260,15 @@ class Database:
 
     # --- Методы доступа к данным ---
 
-    def execute(self, query: str, params: tuple = ()) -> sqlite3.Cursor:
-        """Выполняет SQL-запрос с автокоммитом."""
+    def execute(self, query: str, params: tuple = ()) -> int:
+        """Выполняет SQL-запрос и возвращает lastrowid для INSERT."""
         try:
             cursor = self._conn.cursor()
             cursor.execute(query, params)
             self._conn.commit()
-            return cursor
+            return cursor.lastrowid  # <-- Возвращаем ID вместо курсора
         except Exception as e:
-            logger.error(f"[Database] Ошибка выполнения запроса: {e}", exc_info=True)
+            logger.error(f"[{self.__class__.__name__}] Ошибка выполнения запроса: {e}", exc_info=True)
             raise
 
     def fetch_all(self, query: str, params: tuple = ()) -> list:

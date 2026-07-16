@@ -238,15 +238,56 @@ class AccountService:
 
     def get_all_accounts(self) -> List[Account]:
         """
+        Возвращает список всех счетов (не только активных).
+
+        Returns:
+            Список объектов Account
+        """
+        logger.debug(f"[AccountService] Получение всех счетов не реализовано")
+        try:
+            # self.acc_repo.get_all() # релизовать метод
+            return 
+        except Exception as e:
+            logger.error(f"[AccountService] Ошибка загрузки счетов (метод 'get_all_accounts' не реализован): {e}", exc_info=True)
+            raise
+
+    def get_all_active_accounts(self) -> List[Account]:
+        """
         Возвращает список всех активных счетов.
 
         Returns:
             Список объектов Account
         """
         try:
-            return self.acc_repo.get_all_active()
+            self._all_active_accounts = self.acc_repo.get_all_active()
+            return self._all_active_accounts
         except Exception as e:
-            logger.error(f"[AccountService] Ошибка загрузки счетов: {e}", exc_info=True)
+            logger.error(f"[{self.__class__.__name__}] Ошибка загрузки активных счетов: {e}", exc_info=True)
+            raise
+    
+    def get_accounts_by_type(self, account_type: str) -> List[Account]:
+        """
+        Возвращает список активных счетов по типу.
+
+        Args:
+            account_type: тип счета
+
+        Returns:
+            Список объектов Account
+        """
+        try:
+            # Гарантируем, что список счетов загружен
+            if not hasattr(self, '_all_active_accounts'):
+                self.get_all_active_accounts()
+            
+            # Фильтруем по типу
+            filtered_accounts = [
+                acc for acc in self._all_active_accounts 
+                if acc.account_type == account_type
+            ]
+            return filtered_accounts
+        except Exception as e:
+            logger.error(f"[{self.__class__.__name__}] Ошибка фильтрации счетов по типу {account_type}: {e}", exc_info=True)
             raise
 
     def get_account(self, account_id: int) -> Optional[Account]:

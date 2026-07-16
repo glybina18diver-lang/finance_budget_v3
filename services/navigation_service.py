@@ -100,6 +100,7 @@ class NavigationService:
                 self.statement_service,
                 self.forecast_service
                 )
+            self.acc_service = AccountService(acc_repo=self.acc_repo)
         except Exception as e:
             logger.error(f"[NavigationService] Ошибка инициализации репозиториев: {e}", exc_info=True)
             raise
@@ -145,10 +146,8 @@ class NavigationService:
             Экземпляр AccountDialog
         """
         try:
-            # Создаём сервис для счетов
-            acc_service = AccountService(acc_repo=self.acc_repo)
             # Создаём презентер
-            presenter = AccountPresenter(service=acc_service)
+            presenter = AccountPresenter(service=self.acc_service)
             # Создаём и показываем диалог
             dialog = AccountDialog(parent=parent, presenter=presenter)
             dialog.show()
@@ -238,7 +237,7 @@ class NavigationService:
         try:
             
             # Создаём презентер и открываем диалог
-            presenter = CreditCardPresenter(self.credit_card_service, self.acc_repo)
+            presenter = CreditCardPresenter(self.credit_card_service, self.acc_service)
             dialog = CreditCardDialog(
                 parent=parent,
                 presenter=presenter,

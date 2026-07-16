@@ -39,7 +39,7 @@ class AccountPresenter:
         if not self.view:
             return
         try:
-            accounts = self.service.get_all_accounts()
+            accounts = self.service.get_all_active_accounts()
             self.view.load_accounts(accounts)
         except Exception as e:
             logger.error(f"[AccountPresenter] Ошибка загрузки счетов: {e}", exc_info=True)

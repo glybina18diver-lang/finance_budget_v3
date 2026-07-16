@@ -12,7 +12,7 @@ from decimal import Decimal
 from PySide6.QtWidgets import (
     QVBoxLayout, QHBoxLayout, QComboBox, QPushButton, 
     QTabWidget, QWidget, QLabel, QTableWidget, QTableWidgetItem,
-    QListWidget, QHeaderView, QMessageBox, QGroupBox, QGridLayout
+    QListWidget, QHeaderView, QMessageBox, QGroupBox, QGridLayout, QDialog
 )
 from PySide6.QtCore import Qt, Signal
 
@@ -94,6 +94,9 @@ class CreditCardDialog(BaseDialog):
         self._setup_tranches_tab()
         self._setup_statements_tab()
 
+        #  Строка статуса
+        self._main_layout.addWidget(self.status_bar)
+
     def _setup_dashboard_tab(self):
         """Настраивает вкладку 'Обзор' (Дашборд)."""
         tab = QWidget()
@@ -171,12 +174,18 @@ class CreditCardDialog(BaseDialog):
             self.card_combo.blockSignals(True)
             self.card_combo.clear()
             
-            cards = self.presenter.get_cards_list()
-            for card in cards:
+            credit_cards = self.presenter.get_cards_list()
+
+            if not credit_cards:
+                self.card_combo.addItem("Нет доступных карт", None)
+                self.card_combo.setEnabled(False)
+                return
+            
+            for card in credit_cards:
                 self.card_combo.addItem(card["name"], card["id"])
                 
-            if cards:
-                self.current_card_id = cards[0]["id"]
+            if credit_cards:
+                self.current_card_id = credit_cards[0]["id"]
                 self._enable_card_actions(True)
                 self._load_dashboard()
                 self._load_tranches()
@@ -282,8 +291,22 @@ class CreditCardDialog(BaseDialog):
 
     def _on_add_card(self):
         """Открывает диалог создания новой карты."""
-        # TODO: Реализовать вызов CreditCardCreateDialog
-        self.show_status("Диалог создания карты будет добавлен на следующем этапе", "info")
+        try:
+            from ui.dialogs.credit_card_create_dialog import CreditCardCreateDialog
+            
+            dialog = CreditCardCreateDialog(self, self.presenter)
+            dialog.card_created.connect(self._load_cards) # Перезагрузить список после создания
+            
+            # TODO: если нажал OK но нет достпунх счето (счет не выбран) то выдавть ошибку выберете счет
+            if dialog.exec() == QDialog.Accepted:
+                self.show_status("Карта успешно создана", "success")
+                self.data_updated.emit()
+                
+        except ValueError as e:
+            self.show_status(str(e), "error")
+        except Exception as e:
+            logger.error(f"Ошибка UI при открытии диалога создания: {e}", exc_info=True)
+            self.show_status("Произошла ошибка", "error")
 
     def _on_open_settings(self):
         """Открывает диалог настроек текущей карты."""
