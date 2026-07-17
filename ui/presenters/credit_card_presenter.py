@@ -156,10 +156,14 @@ class CreditCardPresenter:
             logger.error(f"[{self.__class__.__name__}] Ошибка получения выписок: {e}", exc_info=True)
             raise
 
-    def get_available_accounts(self) -> List[Dict[str, Any]]:
+    def get_accounts_for_payment(self, exclude_account_id: int) -> List[Dict[str, Any]]:
         """
-        Получает список доступных счетов для внесения платежа (исключая саму кредитку).
+        Получает список активных счетов для внесения платежа.
+        Исключает счёт самой кредитной карты и счета типа CreditCard.
         
+        Args:
+            exclude_account_id: ID счёта текущей кредитной карты (для исключения)
+            
         Returns:
             Список словарей со счетами
         """
@@ -173,13 +177,13 @@ class CreditCardPresenter:
                     "type": acc.account_type
                 }
                 for acc in accounts
-                if acc.account_type != "CreditCard" # Нельзя платить с кредитки на кредитку в этом диалоге
+                if acc.id != exclude_account_id and acc.account_type != "CreditCard"
             ]
         except ValueError as e:
-            logger.warning(f"[{self.__class__.__name__}] Валидация счетов: {e}")
+            logger.warning(f"[{self.__class__.__name__}] Валидация счетов для платежа: {e}")
             raise
         except Exception as e:
-            logger.error(f"[{self.__class__.__name__}] Ошибка получения счетов: {e}", exc_info=True)
+            logger.error(f"[{self.__class__.__name__}] Ошибка получения счетов для платежа: {e}", exc_info=True)
             raise
 
     def get_available_accounts_for_card_creation(self) -> List[Dict[str, Any]]:
@@ -213,6 +217,45 @@ class CreditCardPresenter:
             raise
         except Exception as e:
             logger.error(f"[{self.__class__.__name__}] Ошибка получения счетов для карты: {e}", exc_info=True)
+            raise
+
+    def get_card_settings(self, card_id: int) -> Dict[str, Any]:
+        """
+        Получает текущие настройки кредитной карты для формы редактирования.
+        
+        Args:
+            card_id: ID кредитной карты
+            
+        Returns:
+            Словарь с настройками карты (проценты умножены на 100 для UI)
+            
+        Raises:
+            ValueError: если карта не найдена
+        """
+        try:
+            if not card_id:
+                raise ValueError("Не выбрана карта")
+                
+            card = self.service.card_repo.get_by_id(card_id)
+            if not card:
+                raise ValueError(f"Карта ID {card_id} не найдена")
+
+            return {
+                "id": card.id,
+                "account_id": card.account_id,
+                "name": card.name,
+                "annual_rate": float(card.annual_rate),
+                "grace_months": card.grace_months,
+                "min_payment_percent": float(card.min_payment_percent * 100), # 0.02 -> 2.0
+                "payment_day": card.payment_day,
+                "statement_day": card.statement_day,
+                "credit_limit": float(card.credit_limit)
+            }
+        except ValueError as e:
+            logger.warning(f"[{self.__class__.__name__}] Валидация настроек: {e}")
+            raise
+        except Exception as e:
+            logger.error(f"[{self.__class__.__name__}] Ошибка получения настроек: {e}", exc_info=True)
             raise
 
     def create_card(self, card_data: Dict[str, Any]) -> int:
@@ -383,23 +426,57 @@ class CreditCardPresenter:
             if "id" not in card_data or not card_data["id"]:
                 raise ValueError("ID карты отсутствует")
 
+            # 1. Получаем текущую карту, чтобы сохранить неизменяемые поля (account_id, is_active)
+            existing_card = self.service.card_repo.get_by_id(card_data["id"])
+            if not existing_card:
+                raise ValueError(f"Карта ID {card_data['id']} не найдена")
+
+            # 2. Создаем объект с обновленными настройками, но старым account_id
             card = CreditCard(
                 id=card_data["id"],
-                account_id=card_data["account_id"],
-                name=card_data["name"],
+                account_id=existing_card.account_id,  # <-- БЕРЕМ ИЗ СУЩЕСТВУЮЩЕЙ ЗАПИСИ
+                name=card_data["name"].strip(),
                 annual_rate=self._parse_decimal(card_data["annual_rate"], "Годовая ставка"),
                 grace_months=int(card_data["grace_months"]),
                 min_payment_percent=self._parse_decimal(card_data["min_payment_percent"], "Мин. платёж %") / Decimal("100"),
                 payment_day=int(card_data["payment_day"]),
                 statement_day=int(card_data["statement_day"]),
-                credit_limit=self._parse_decimal(card_data["credit_limit"], "Кредитный лимит")
+                credit_limit=self._parse_decimal(card_data["credit_limit"], "Кредитный лимит"),
+                is_active=existing_card.is_active     # <-- СОХРАНЯЕМ СТАТУС
             )
+            
             self.service.update_card_settings(card)
+            logger.info(f"[{self.__class__.__name__}] Настройки карты ID={card.id} успешно обновлены")
+            
         except ValueError as e:
             logger.warning(f"[{self.__class__.__name__}] Валидация настроек: {e}")
             raise
         except Exception as e:
             logger.error(f"[{self.__class__.__name__}] Ошибка обновления настроек: {e}", exc_info=True)
+            raise
+
+    def delete_card(self, card_id: int):
+        """
+        Мягко удаляет кредитную карту (устанавливает is_active = 0).
+        
+        Args:
+            card_id: ID кредитной карты для удаления
+            
+        Raises:
+            ValueError: если не передан card_id
+            Exception: при системных ошибках БД или сервиса
+        """
+        try:
+            if not card_id:
+                raise ValueError("Не выбрана карта для удаления")
+                
+            self.service.delete_card(card_id)
+            logger.info(f"[{self.__class__.__name__}] Карта ID={card_id} успешно удалена")
+        except ValueError as e:
+            logger.warning(f"[{self.__class__.__name__}] Валидация удаления: {e}")
+            raise
+        except Exception as e:
+            logger.error(f"[{self.__class__.__name__}] Ошибка удаления карты: {e}", exc_info=True)
             raise
 
     # --- Приватные методы-хелперы ---

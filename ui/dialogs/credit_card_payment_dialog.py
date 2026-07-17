@@ -1,209 +1,186 @@
 """
-Диалог внесения платежа по кредитной карте.
-Показывает минимальный платёж, полную задолженность, распределение.
+Диалог внесения платежа по кредитной карте (CreditCardPaymentDialog).
+
+Позволяет выбрать сумму, дату и счёт-источник. 
+После оплаты отображает детализацию распределения платежа (Payment Waterfall).
 """
-from typing import List, Dict
+
+import logging
+from datetime import date
+from decimal import Decimal
+
 from PySide6.QtWidgets import (
-    QDialog, QVBoxLayout, QFormLayout, QGroupBox, QLabel,
-    QComboBox, QLineEdit, QDateEdit, QDialogButtonBox, QMessageBox,
-    QFrame, QHBoxLayout
+    QComboBox, QPushButton, QLabel, QDoubleSpinBox, 
+    QDateEdit, QFormLayout, QDialogButtonBox, QTextEdit, QGroupBox, QVBoxLayout
 )
-from PySide6.QtCore import QDate
-from PySide6.QtGui import QDoubleValidator
+from PySide6.QtCore import Signal, Qt
+
 from ui.dialogs.base_dialog import BaseDialog
-from ui.widgets.colored_button import CompactButton
+
+logger = logging.getLogger(__name__)
 
 
 class CreditCardPaymentDialog(BaseDialog):
-    """Диалог внесения платежа по кредитной карте."""
+    """
+    Диалог внесения платежа по кредитной карте.
+    
+    Сигналы:
+        payment_made: Вызывается после успешного внесения платежа.
+    """
+    
+    payment_made = Signal()
 
-    def __init__(self, parent=None, presenter=None):
+    def __init__(self, parent, presenter, card_id: int, card_name: str, card_account_id: int):
         """
-        Инициализация диалога.
+        Инициализация диалога платежа.
         
         Args:
             parent: родительское окно
             presenter: экземпляр CreditCardPresenter
+            card_id: ID кредитной карты
+            card_name: Название карты (для заголовка)
+            card_account_id: ID счёта карты (чтобы исключить его из списка источников)
         """
         super().__init__(parent)
         self.presenter = presenter
+        self.card_id = card_id
+        self.card_account_id = card_account_id
         
-        self.setWindowTitle("Внести платёж")
-        self.setFixedSize(500, 550)
+        self.setWindowTitle(f"Внесение платежа: {card_name}")
+        self.resize(450, 500)
         
-        self._init_ui()
-        
-        if self.presenter:
-            self.presenter.load_data_for_payment_dialog(self)
+        self._setup_ui()
+        self._load_accounts()
 
-    def _init_ui(self):
-        """Инициализация интерфейса."""
-        self._main_layout.setSpacing(10)
-        
-        # === Информация о платеже ===
-        info_group = QGroupBox("Текущая задолженность")
-        info_layout = QFormLayout()
-        
-        self.min_payment_label = QLabel("0.00 ₽")
-        self.min_payment_label.setStyleSheet("font-weight: bold; color: #007bff; font-size: 12pt;")
-        info_layout.addRow("Минимальный платёж:", self.min_payment_label)
-        
-        self.total_debt_label = QLabel("0.00 ₽")
-        self.total_debt_label.setStyleSheet("font-weight: bold; color: #dc3545;")
-        info_layout.addRow("Вся задолженность:", self.total_debt_label)
-        
-        info_group.setLayout(info_layout)
-        self._main_layout.addWidget(info_group)
-        
-        # === Данные платежа ===
-        form_group = QGroupBox("Данные платежа")
+    def _setup_ui(self):
+        """Настраивает интерфейс диалога."""
+        # Форма ввода
+        form_group = QGroupBox("Параметры платежа")
         form_layout = QFormLayout()
-        form_layout.setSpacing(10)
         
-        # Счёт для списания
+        # Сумма
+        self.amount_spin = QDoubleSpinBox()
+        self.amount_spin.setRange(0.01, 10000000.00)
+        # self.amount_spin.setPlaceholderText("1000")
+        self.amount_spin.setDecimals(2)
+        self.amount_spin.setPrefix("₽ ")
+        form_layout.addRow("Сумма платежа:", self.amount_spin)
+        
+        # Дата
+        self.date_edit = QDateEdit()
+        self.date_edit.setDate(date.today())
+        self.date_edit.setCalendarPopup(True)
+        form_layout.addRow("Дата платежа:", self.date_edit)
+        
+        # Счёт списания
         self.account_combo = QComboBox()
-        form_layout.addRow("Счёт списания:", self.account_combo)
-        
-        # Дата платежа
-        self.date_input = QDateEdit(QDate.currentDate())
-        self.date_input.setCalendarPopup(True)
-        self.date_input.setDisplayFormat("dd.MM.yyyy")
-        form_layout.addRow("Дата платежа:", self.date_input)
-        
-        # Сумма платежа
-        self.amount_input = QLineEdit()
-        self.amount_input.setPlaceholderText("0.00")
-        validator = QDoubleValidator(0.0, 9999999.0, 2)
-        validator.setNotation(QDoubleValidator.StandardNotation)
-        self.amount_input.setValidator(validator)
-        form_layout.addRow("Сумма платежа:", self.amount_input)
-        
-        # Быстрые кнопки
-        quick_frame = QFrame()
-        quick_layout = QHBoxLayout(quick_frame)
-        quick_layout.setContentsMargins(0, 0, 0, 0)
-        
-        self.min_payment_btn = CompactButton("Минимум")
-        self.min_payment_btn.clicked.connect(self._set_min_payment)
-        quick_layout.addWidget(self.min_payment_btn)
-        
-        self.full_payment_btn = CompactButton("Полностью")
-        self.full_payment_btn.clicked.connect(self._set_full_payment)
-        quick_layout.addWidget(self.full_payment_btn)
-        
-        form_layout.addRow("", quick_frame)
-        
-        # Распределение платежа (preview)
-        self.allocation_group = QGroupBox("Распределение платежа")
-        self.allocation_layout = QFormLayout()
-        
-        self.allocation_interest_label = QLabel("На проценты: 0.00 ₽")
-        self.allocation_principal_label = QLabel("На долг: 0.00 ₽")
-        
-        self.allocation_layout.addRow(self.allocation_interest_label)
-        self.allocation_layout.addRow(self.allocation_principal_label)
-        
-        self.allocation_group.setLayout(self.allocation_layout)
-        self.allocation_group.setVisible(False)
-        form_layout.addRow("", self.allocation_group)
+        form_layout.addRow("Списать со счёта:", self.account_combo)
         
         form_group.setLayout(form_layout)
         self._main_layout.addWidget(form_group)
         
-        # Подсказка
-        hint = QLabel("💡 Платёж распределяется: сначала проценты, затем основной долг")
-        hint.setStyleSheet("color: gray; font-size: 9pt;")
-        self._main_layout.addWidget(hint)
+        # Кнопка оплаты
+        self.btn_pay = QPushButton("💳 Внести платёж")
+        self.btn_pay.setStyleSheet("QPushButton { font-weight: bold; padding: 8px; background-color: #4CAF50; color: white; }")
+        self.btn_pay.clicked.connect(self._on_pay)
+        self._main_layout.addWidget(self.btn_pay)
         
-        self._main_layout.addStretch()
+        # Блок результата (изначально скрыт)
+        self.result_group = QGroupBox("Распределение платежа (Waterfall)")
+        result_layout = QVBoxLayout()
+        self.result_text = QTextEdit()
+        self.result_text.setReadOnly(True)
+        self.result_text.setStyleSheet("QTextEdit { background-color: #f0f0f0; font-family: monospace; }")
+        result_layout.addWidget(self.result_text)
+        self.result_group.setLayout(result_layout)
+        self.result_group.setVisible(False)
+        self._main_layout.addWidget(self.result_group)
         
-        # Кнопки
-        button_box = QDialogButtonBox(
-            QDialogButtonBox.Ok | QDialogButtonBox.Cancel
-        )
-        button_box.accepted.connect(self._on_accept)
-        button_box.rejected.connect(self.reject)
-        self._main_layout.addWidget(button_box)
+        # Кнопка закрытия
+        self.btn_close = QPushButton("Закрыть")
+        self.btn_close.clicked.connect(self.accept)
+        self.btn_close.setVisible(False)
+        self._main_layout.addWidget(self.btn_close)
 
-    def _on_amount_changed(self, text):
-        """Обновляет preview распределения платежа."""
-        # Здесь можно добавить логику предпросмотра распределения
-        pass
-
-    def _set_min_payment(self):
-        """Устанавливает сумму минимального платежа."""
-        # Будет установлено из populate_payment_data
-        pass
-
-    def _set_full_payment(self):
-        """Устанавливает сумму полного погашения."""
-        # Будет установлено из populate_payment_data
-        pass
-
-    def _on_accept(self):
-        """Обработчик нажатия OK."""
-        amount_str = self.amount_input.text().strip().replace(',', '.')
-        if not amount_str:
-            QMessageBox.warning(self, "Ошибка", "Укажите сумму платежа")
-            return
-        
+    def _load_accounts(self):
+        """Загружает доступные счета в ComboBox."""
         try:
-            amount = float(amount_str)
-            if amount <= 0:
-                raise ValueError("Сумма должна быть положительной")
+            self.account_combo.clear()
+            accounts = self.presenter.get_accounts_for_payment(self.card_account_id)
+            
+            if not accounts:
+                self.account_combo.addItem("Нет доступных счетов", None)
+                self.btn_pay.setEnabled(False)
+                return
+                
+            for acc in accounts:
+                balance_str = f"{acc['balance']:,.2f} ₽".replace(",", " ")
+                self.account_combo.addItem(f"{acc['name']} ({balance_str})", acc["id"])
+                
         except ValueError as e:
-            QMessageBox.warning(self, "Ошибка", str(e))
-            return
-        
-        account_id = self.account_combo.currentData()
-        if not account_id:
-            QMessageBox.warning(self, "Ошибка", "Выберите счёт")
-            return
-        
-        payment_data = {
-            "date": self.date_input.date().toString("yyyy-MM-dd"),
-            "amount": amount,
-            "from_account_id": account_id
-        }
-        
-        if self.presenter:
-            allocation = self.presenter.make_payment(payment_data)
-            if allocation:
-                self.accept()
+            self.show_status(str(e), "error")
+        except Exception as e:
+            logger.error(f"Ошибка UI при загрузке счетов для платежа: {e}", exc_info=True)
+            self.show_status("Произошла ошибка при загрузке счетов", "error")
 
-    # =================== Контракт ===================
-
-    def populate_payment_data(self, min_payment: Dict, full_payoff: Dict, accounts: List[Dict]):
-        """
-        Заполняет форму данными для платежа.
-        
-        Args:
-            min_payment: {min_payment, principal_part, interest_part, ...}
-            full_payoff: {total, principal, ...}
-            accounts: список {id, name, current_balance}
-        """
-        # Счета
-        self.account_combo.clear()
-        for acc in accounts:
-            self.account_combo.addItem(
-                f"{acc['name']} ({acc['current_balance']:,.2f} ₽)",
-                acc['id']
+    def _on_pay(self):
+        """Обрабатывает нажатие кнопки 'Внести платёж'."""
+        try:
+            amount = self.amount_spin.value()
+            if amount <= 0:
+                raise ValueError("Сумма платежа должна быть больше нуля")
+                
+            account_id = self.account_combo.currentData()
+            if not account_id:
+                raise ValueError("Не выбран счёт для списания")
+                
+            payment_date = self.date_edit.date().toString("yyyy-MM-dd")
+            
+            # Вызов презентера
+            result = self.presenter.make_payment(
+                card_id=self.card_id,
+                amount_str=str(amount),
+                payment_date_str=payment_date,
+                from_account_id=account_id
             )
-        
-        # Сохраняем значения для кнопок
-        self._min_payment_value = min_payment.get("min_payment", 0)
-        self._full_payment_value = full_payoff.get("total", 0)
-        
-        # Labels
-        self.min_payment_label.setText(f"{min_payment.get('min_payment', 0):,.2f} ₽")
-        self.total_debt_label.setText(f"{full_payoff.get('total', 0):,.2f} ₽")
+            
+            # Отображение результата
+            self._display_allocation(result)
+            
+            # Блокируем форму и показываем кнопку закрытия
+            self.amount_spin.setEnabled(False)
+            self.date_edit.setEnabled(False)
+            self.account_combo.setEnabled(False)
+            self.btn_pay.setVisible(False)
+            self.result_group.setVisible(True)
+            self.btn_close.setVisible(True)
+            
+            self.payment_made.emit()
+            self.show_status("Платёж успешно распределён", "success")
+            
+        except ValueError as e:
+            self.show_status(str(e), "error")
+        except Exception as e:
+            logger.error(f"Ошибка UI при внесении платежа: {e}", exc_info=True)
+            self.show_status("Произошла ошибка при внесении платежа", "error")
 
-    def set_min_payment_value(self, value: float):
-        """Устанавливает значение минимального платежа для кнопки."""
-        self._min_payment_value = value
-        self.amount_input.setText(f"{value:.2f}")
-
-    def set_full_payment_value(self, value: float):
-        """Устанавливает значение полного погашения для кнопки."""
-        self._full_payment_value = value
-        self.amount_input.setText(f"{value:.2f}")
+    def _display_allocation(self, result: dict):
+        """Форматирует и отображает распределение платежа."""
+        try:
+            allocation = result.get("allocation", {})
+            amount = result.get("amount", 0)
+            
+            text = f"Внесено: {amount:,.2f} ₽\n"
+            text += "─" * 30 + "\n"
+            text += f"Комиссии:  {allocation.get('commissions_paid', 0):>10,.2f} ₽\n"
+            text += f"Проценты:  {allocation.get('interest_paid', 0):>10,.2f} ₽\n"
+            text += f"Тело долга: {allocation.get('principal_paid', 0):>10,.2f} ₽\n"
+            
+            remaining = allocation.get('remaining_amount', 0)
+            if remaining > 0:
+                text += "─" * 30 + "\n"
+                text += f"⚠️ Сдача (не распределена): {remaining:,.2f} ₽\n"
+                
+            self.result_text.setPlainText(text)
+        except Exception as e:
+            logger.error(f"Ошибка UI при отображении аллокации: {e}", exc_info=True)

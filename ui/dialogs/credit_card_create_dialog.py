@@ -113,6 +113,9 @@ class CreditCardCreateDialog(BaseDialog):
         button_box.rejected.connect(self.reject)
         self._main_layout.addWidget(button_box)
 
+        #  Строка статуса
+        self._main_layout.addWidget(self.status_bar)
+
     def _load_accounts(self):
         """Загружает доступные счета в ComboBox."""
         try:

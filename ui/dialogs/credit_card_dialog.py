@@ -311,31 +311,57 @@ class CreditCardDialog(BaseDialog):
     def _on_open_settings(self):
         """Открывает диалог настроек текущей карты."""
         try:
-            # TODO: Реализовать вызов CreditCardSettingsDialog
-            # После закрытия диалога настроек:
-            self.show_status("Настройки сохранены (заглушка)", "success")
-            self._load_cards() # Перезагрузить, если изменилось название
-            self.data_updated.emit()
+            from PySide6.QtWidgets import QDialog
+            from ui.dialogs.credit_card_settings_dialog import CreditCardSettingsDialog
+            
+            dialog = CreditCardSettingsDialog(self, self.presenter, self.current_card_id)
+            dialog.settings_updated.connect(self._load_dashboard) # Обновляем дашборд, если изменился лимит/ставка
+            
+            if dialog.exec() == QDialog.Accepted:
+                self.show_status("Настройки карты успешно обновлены", "success")
+                self._load_cards() # Перезагружаем список (на случай, если изменилось название)
+                self.data_updated.emit()
+                
         except ValueError as e:
             self.show_status(str(e), "error")
         except Exception as e:
             logger.error(f"Ошибка UI при открытии настроек: {e}", exc_info=True)
-            self.show_status("Произошла ошибка при сохранении настроек", "error")
+            self.show_status("Произошла ошибка при открытии настроек", "error")
 
     def _on_make_payment(self):
         """Открывает диалог внесения платежа."""
         try:
-            # TODO: Реализовать вызов CreditCardPaymentDialog
-            # После успешного платежа:
-            self.show_status("Платёж внесён (заглушка)", "success")
-            self._load_dashboard()
-            self._load_tranches()
-            self.data_updated.emit()
+            from PySide6.QtWidgets import QDialog
+            from ui.dialogs.credit_card_payment_dialog import CreditCardPaymentDialog
+            
+            # Получаем account_id текущей карты, чтобы исключить его из списка
+            current_card_data = next(
+                (c for c in self.presenter.get_cards_list() if c["id"] == self.current_card_id), 
+                None
+            )
+            if not current_card_data:
+                raise ValueError("Данные текущей карты не найдены")
+                
+            dialog = CreditCardPaymentDialog(
+                self, 
+                self.presenter, 
+                self.current_card_id, 
+                self.card_combo.currentText(),
+                current_card_data["account_id"]
+            )
+            dialog.payment_made.connect(self._load_dashboard)
+            
+            if dialog.exec() == QDialog.Accepted:
+                self.show_status("Окно платежа закрыто", "info")
+                self._load_dashboard()
+                self._load_tranches()
+                self.data_updated.emit()
+                
         except ValueError as e:
             self.show_status(str(e), "error")
         except Exception as e:
-            logger.error(f"Ошибка UI при внесении платежа: {e}", exc_info=True)
-            self.show_status("Произошла ошибка при внесении платежа", "error")
+            logger.error(f"Ошибка UI при открытии диалога платежа: {e}", exc_info=True)
+            self.show_status("Произошла ошибка при открытии диалога платежа", "error")
 
     def _on_recalculate_interest(self):
         """Вручную пересчитывает проценты на текущую дату."""
@@ -364,7 +390,7 @@ class CreditCardDialog(BaseDialog):
                 self, 
                 "Подтверждение удаления", 
                 f"Вы уверены, что хотите удалить карту '{card_name}'?\n"
-                f"Все транши и история выписок будут удалены.",
+                f"Это действие только скроет карту из списка",
                 QMessageBox.Yes | QMessageBox.No
             )
             

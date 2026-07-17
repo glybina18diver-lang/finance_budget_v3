@@ -48,7 +48,7 @@ class CreditCardRepository:
                     credit_limit, is_active
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """
-            cursor = self.db.execute(query, (
+            params = (
                 card.account_id,
                 card.name,
                 float(card.annual_rate),
@@ -58,13 +58,14 @@ class CreditCardRepository:
                 card.statement_day,
                 float(card.credit_limit),
                 1 if card.is_active else 0
-            ))
-            card_id = cursor.lastrowid
+            )
+            new_id = self.db.execute(query, params)
+            card.id = new_id
             logger.info(
-                f"[{self.__class__.__name__}] Создана карта ID={card_id}, "
+                f"[{self.__class__.__name__}] Создана карта ID={new_id}, "
                 f"name='{card.name}', account_id={card.account_id}"
             )
-            return card_id
+            return new_id
         except ValueError as e:
             logger.warning(f"[{self.__class__.__name__}] Валидация при создании: {e}")
             raise
@@ -145,7 +146,8 @@ class CreditCardRepository:
 
     def update(self, card: CreditCard):
         """
-        Обновляет данные кредитной карты.
+        Обновляет настройки кредитной карты.
+        account_id не обновляется, так как привязка к счёту неизменна.
         
         Args:
             card: объект CreditCard с обновлёнными полями (id обязателен)
@@ -160,7 +162,6 @@ class CreditCardRepository:
 
             query = """
                 UPDATE credit_cards SET
-                    account_id = ?,
                     name = ?,
                     annual_rate = ?,
                     grace_months = ?,
@@ -171,8 +172,7 @@ class CreditCardRepository:
                     is_active = ?
                 WHERE id = ?
             """
-            self.db.execute(query, (
-                card.account_id,
+            params = (
                 card.name,
                 float(card.annual_rate),
                 card.grace_months,
@@ -182,7 +182,8 @@ class CreditCardRepository:
                 float(card.credit_limit),
                 1 if card.is_active else 0,
                 card.id
-            ))
+            )
+            self.db.execute(query, params)
             logger.info(f"[{self.__class__.__name__}] Обновлена карта ID={card.id}, name='{card.name}'")
         except ValueError as e:
             logger.warning(f"[{self.__class__.__name__}] Валидация при обновлении: {e}")

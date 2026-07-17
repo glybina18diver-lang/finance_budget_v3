@@ -1,7 +1,8 @@
-# core/db.py
+"""Фасад для работы с SQLite (полная схема как в V2, обновлено до V3)."""
+
 import sqlite3
 import logging
-from typing import List, Dict, Any, Optional
+from typing import Optional
 
 from core.migration import migrate_schema
 
@@ -9,14 +10,14 @@ logger = logging.getLogger(__name__)
 
 
 class Database:
-    """Фасад для работы с SQLite (полная схема как в V2)."""
+    """Фасад для работы с SQLite."""
 
     def __init__(self, db_path: str):
         self.db_path = db_path
         self._conn: Optional[sqlite3.Connection] = None
         self._connect()
         self._init_tables()
-        migrate_schema(self._conn)  # ← миграция сразу после создания таблиц
+        # migrate_schema(self._conn)  # ← миграция сразу после создания таблиц (для старых БД)
 
     def _connect(self):
         """Устанавливает соединение с БД."""
@@ -30,10 +31,9 @@ class Database:
             raise
 
     def _init_tables(self):
-        """Создание всех таблиц согласно схеме V2, но обновлено до V3."""
+        """Создание всех таблиц согласно актуальной схеме V3."""
         if not self._conn:
             return
-
         cursor = self._conn.cursor()
 
         # 1. Accounts (Счета)
@@ -108,14 +108,18 @@ class Database:
                 from_account_id INTEGER NOT NULL,
                 to_account_id INTEGER NOT NULL,
                 description TEXT,
+                type TEXT DEFAULT 'internal',
+                is_system INTEGER DEFAULT 0,
+                loan_id INTEGER DEFAULT NULL,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (from_account_id) REFERENCES accounts(id),
                 FOREIGN KEY (to_account_id) REFERENCES accounts(id),
+                FOREIGN KEY (loan_id) REFERENCES loans(id) ON DELETE SET NULL,
                 CHECK (from_account_id != to_account_id)
             )
         """)
 
-        # 5. Loans (Займы)
+        # 5. Loans (Займы) 
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS loans (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -124,7 +128,7 @@ class Database:
                 contact_name TEXT NOT NULL,
                 loan_type TEXT NOT NULL CHECK (loan_type IN ('issued', 'received')),
                 loan_amount REAL NOT NULL,
-                outstanding_amount REAL NOT NULL,
+                remaining REAL NOT NULL,
                 interest_rate REAL DEFAULT 0.0,
                 issue_date TEXT NOT NULL,
                 due_date TEXT,
@@ -151,7 +155,7 @@ class Database:
             )
         """)
 
-        # Таблица 7: tranches (Транш)
+        # 7. Tranches (Транши кредитной карты)
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS tranches (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -170,8 +174,8 @@ class Database:
                 FOREIGN KEY (card_id) REFERENCES credit_cards(id) ON DELETE CASCADE
             )
         """)
-        
-        # Таблица 8: interest_accruals (Проценты на дату)
+
+        # 8. Interest Accruals (Начисления процентов)
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS interest_accruals (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -185,8 +189,8 @@ class Database:
                 FOREIGN KEY (tranche_id) REFERENCES tranches(id) ON DELETE CASCADE
             )
         """)
-        
-        # Таблица 9: statements (Биллинговый цикл (выписка))
+
+        # 9. Statements (Биллинговые циклы / выписки)
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS statements (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -205,58 +209,43 @@ class Database:
             )
         """)
 
-        # 10. credit_cards (Кредитная карта)
+        # 10. Credit Cards (Кредитные карты)
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS credit_cards (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            account_id INTEGER NOT NULL,
-            name TEXT NOT NULL,
-            annual_rate REAL NOT NULL,
-            grace_months INTEGER NOT NULL,
-            min_payment_percent REAL NOT NULL,
-            payment_day INTEGER NOT NULL,
-            statement_day INTEGER NOT NULL,
-            credit_limit REAL NOT NULL,
-            is_active INTEGER NOT NULL DEFAULT 1,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (account_id) REFERENCES accounts(id) ON DELETE CASCADE
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                account_id INTEGER NOT NULL,
+                name TEXT NOT NULL,
+                annual_rate REAL NOT NULL,
+                grace_months INTEGER NOT NULL,
+                min_payment_percent REAL NOT NULL,
+                payment_day INTEGER NOT NULL,
+                statement_day INTEGER NOT NULL,
+                credit_limit REAL NOT NULL,
+                is_active INTEGER NOT NULL DEFAULT 1,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (account_id) REFERENCES accounts(id) ON DELETE CASCADE
             )
         """)
 
-        # 7. Budgets (Бюджеты)
-        # пока не создаем так как это не исползкется 
-        # cursor.execute("""
-        #     CREATE TABLE IF NOT EXISTS budgets (
-        #         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        #         category_id INTEGER NOT NULL,
-        #         month_year TEXT NOT NULL,
-        #         planned_amount REAL NOT NULL,
-        #         actual_amount REAL DEFAULT 0.0,
-        #         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        #         UNIQUE(category_id, month_year),
-        #         FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE CASCADE
-        #     )
-        # """)
-
         self._conn.commit()
-        logger.info("Все таблицы схемы V2 успешно созданы/проверены")
+        logger.info("[Database] Все таблицы схемы V3 успешно созданы/проверены")
 
     def index_tables(self):
-        """Создание индексов для таблиц"""
-        cursor = self._conn.cursor()
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_tranches_card_id ON tranches(card_id)")
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_tranches_status ON tranches(status)")
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_tranches_grace_end ON tranches(grace_end_date)")
-        
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_interest_accruals_tranche_id ON interest_accruals(tranche_id)")
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_interest_accruals_date ON interest_accruals(accrual_date)")
-        
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_statements_card_id ON statements(card_id)")
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_statements_date ON statements(statement_date)")
-        
-        self._conn.commit()
-        
-        logger.info("[Database] Таблицы tranches, interest_accruals, statements созданы/проверены")
+        """Создание индексов для таблиц."""
+        try:
+            cursor = self._conn.cursor()
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_tranches_card_id ON tranches(card_id)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_tranches_status ON tranches(status)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_tranches_grace_end ON tranches(grace_end_date)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_interest_accruals_tranche_id ON interest_accruals(tranche_id)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_interest_accruals_date ON interest_accruals(accrual_date)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_statements_card_id ON statements(card_id)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_statements_date ON statements(statement_date)")
+            self._conn.commit()
+            logger.info("[Database] Индексы для таблиц tranches, interest_accruals, statements созданы/проверены")
+        except Exception as e:
+            logger.error(f"[Database] Ошибка создания индексов: {e}", exc_info=True)
+            raise
 
     # --- Методы доступа к данным ---
 
@@ -266,7 +255,7 @@ class Database:
             cursor = self._conn.cursor()
             cursor.execute(query, params)
             self._conn.commit()
-            return cursor.lastrowid  # <-- Возвращаем ID вместо курсора
+            return cursor.lastrowid
         except Exception as e:
             logger.error(f"[{self.__class__.__name__}] Ошибка выполнения запроса: {e}", exc_info=True)
             raise
@@ -278,9 +267,9 @@ class Database:
             cursor.execute(query, params)
             return cursor.fetchall()
         except Exception as e:
-            logger.error(f"[Database] Ошибка выборки данных: {e}", exc_info=True)
+            logger.error(f"[{self.__class__.__name__}] Ошибка выборки данных: {e}", exc_info=True)
             raise
-    
+
     def fetch_one(self, query: str, params: tuple = ()) -> Optional[dict]:
         """Выполняет SELECT и возвращает одну строку."""
         try:
@@ -289,26 +278,36 @@ class Database:
             row = cursor.fetchone()
             return dict(row) if row else None
         except Exception as e:
-            logger.error(f"[Database] Ошибка выборки одной записи: {e}", exc_info=True)
+            logger.error(f"[{self.__class__.__name__}] Ошибка выборки одной записи: {e}", exc_info=True)
             raise
 
-    def fetchall(self, query: str, params: tuple = ()) -> List[Dict[str, Any]]:
-        if not self._conn:
-            raise RuntimeError("Нет подключения к БД")
-        cursor = self._conn.cursor()
-        cursor.execute(query, params)
-        return [dict(row) for row in cursor.fetchall()]
+    def fetchall(self, query: str, params: tuple = ()) -> list:
+        """Выполняет SELECT и возвращает все строки (альтернативный метод)."""
+        try:
+            cursor = self._conn.cursor()
+            cursor.execute(query, params)
+            return [dict(row) for row in cursor.fetchall()]
+        except Exception as e:
+            logger.error(f"[{self.__class__.__name__}] Ошибка выборки данных: {e}", exc_info=True)
+            raise
 
-    def fetchone(self, query: str, params: tuple = ()) -> Optional[Dict[str, Any]]:
-        if not self._conn:
-            raise RuntimeError("Нет подключения к БД")
-        cursor = self._conn.cursor()
-        cursor.execute(query, params)
-        row = cursor.fetchone()
-        return dict(row) if row else None
+    def fetchone(self, query: str, params: tuple = ()) -> Optional[dict]:
+        """Выполняет SELECT и возвращает одну строку (альтернативный метод)."""
+        try:
+            cursor = self._conn.cursor()
+            cursor.execute(query, params)
+            row = cursor.fetchone()
+            return dict(row) if row else None
+        except Exception as e:
+            logger.error(f"[{self.__class__.__name__}] Ошибка выборки одной записи: {e}", exc_info=True)
+            raise
 
     def close(self):
         """Закрывает соединение с БД."""
-        if self._conn:
-            self._conn.close()
-            logger.info("[Database] Соединение с БД закрыто")
+        try:
+            if self._conn:
+                self._conn.close()
+                logger.info("[Database] Соединение с БД закрыто")
+        except Exception as e:
+            logger.error(f"[Database] Ошибка закрытия соединения: {e}", exc_info=True)
+            raise

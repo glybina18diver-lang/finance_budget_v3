@@ -286,7 +286,7 @@ class CategoryDialog(BaseDialog):
         self.name_input.clear()
         #self.type_combo.setCurrentIndex(0)
         self.parent_combo.setCurrentIndex(0)
-        self.budget_input.setText("0.0")
+        self.budget_input.clear()
         self.editing_category_id = None
         self.add_button.setEnabled(True)
         self.edit_button.setEnabled(False)

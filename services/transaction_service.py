@@ -175,10 +175,6 @@ class TransactionService:
                 transaction_date=date,
                 transaction_id=transaction_id
             )
-            logger.info(
-                f"[TransactionService] Создан транш покупки для транзакции ID {transaction_id} "
-                f"на сумму {amount} ₽"
-            )
 
         except ValueError as e:
             logger.warning(f"[TransactionService] Ошибка валидации при создании транша: {e}")
