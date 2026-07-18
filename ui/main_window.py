@@ -13,7 +13,7 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QAction, QFont, QIcon
 
-from config import WINDOW_TITLE
+from config import WINDOW_TITLE, ICON_DIR
 from core.db import Database
 from ui.widgets.colored_button import ColoredButton
 from services.navigation_service import NavigationService
@@ -25,7 +25,7 @@ class MainWindow(QMainWindow):
         self.operations_dialog = None  
 
         self.setWindowTitle(WINDOW_TITLE)
-        self.setWindowIcon(QIcon('./assets/icon.png'))
+        self.setWindowIcon(QIcon(ICON_DIR))
         self.setMinimumSize(1300, 680)
         self.resize(1300, 680)
 

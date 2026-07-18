@@ -68,6 +68,20 @@ class Database:
             )
         """)
 
+        # Инициализация системных категорий (безопасная вставка)
+        cursor.execute("""
+            INSERT INTO categories (name, cat_type, is_system, is_active)
+            SELECT 'Комиссии по кредитным картам', 'expense', 1, 1
+            WHERE NOT EXISTS (SELECT 1 FROM categories WHERE name = 'Комиссии по кредитным картам' AND is_system = 1);
+        """)
+        logger.debug(f"Создана системная категория 'Комиссии по кредитным картам'")
+        cursor.execute("""
+            INSERT INTO categories (name, cat_type, is_system, is_active)
+            SELECT 'Проценты по кредитным картам', 'expense', 1, 1
+            WHERE NOT EXISTS (SELECT 1 FROM categories WHERE name = 'Проценты по кредитным картам' AND is_system = 1);
+        """)
+        logger.debug(f"Создана системная категория 'Проценты по кредитным картам'")
+
         # 3. Transactions (Транзакции)
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS transactions (
@@ -155,72 +169,20 @@ class Database:
             )
         """)
 
-        # 7. Tranches (Транши кредитной карты)
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS tranches (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                card_id INTEGER NOT NULL,
-                tranche_type TEXT NOT NULL DEFAULT 'purchase',
-                original_amount REAL NOT NULL DEFAULT 0.0,
-                remaining_amount REAL NOT NULL DEFAULT 0.0,
-                commission REAL NOT NULL DEFAULT 0.0,
-                transaction_date DATE NOT NULL,
-                grace_end_date DATE,
-                status TEXT NOT NULL DEFAULT 'in_grace',
-                is_retroactive_triggered INTEGER NOT NULL DEFAULT 0,
-                linked_transaction_id INTEGER,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (card_id) REFERENCES credit_cards(id) ON DELETE CASCADE
-            )
-        """)
-
-        # 8. Interest Accruals (Начисления процентов)
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS interest_accruals (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                tranche_id INTEGER NOT NULL,
-                accrual_date DATE NOT NULL,
-                interest_type TEXT NOT NULL DEFAULT 'daily',
-                amount REAL NOT NULL DEFAULT 0.0,
-                paid_amount REAL NOT NULL DEFAULT 0.0,
-                is_paid INTEGER NOT NULL DEFAULT 0,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (tranche_id) REFERENCES tranches(id) ON DELETE CASCADE
-            )
-        """)
-
-        # 9. Statements (Биллинговые циклы / выписки)
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS statements (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                card_id INTEGER NOT NULL,
-                statement_date DATE NOT NULL,
-                due_date DATE,
-                opening_balance REAL NOT NULL DEFAULT 0.0,
-                new_charges REAL NOT NULL DEFAULT 0.0,
-                payments_received REAL NOT NULL DEFAULT 0.0,
-                interest_charged REAL NOT NULL DEFAULT 0.0,
-                closing_balance REAL NOT NULL DEFAULT 0.0,
-                min_payment_required REAL NOT NULL DEFAULT 0.0,
-                status TEXT NOT NULL DEFAULT 'open',
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (card_id) REFERENCES credit_cards(id) ON DELETE CASCADE
-            )
-        """)
-
         # 10. Credit Cards (Кредитные карты)
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS credit_cards (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                account_id INTEGER NOT NULL,
-                name TEXT NOT NULL,
-                annual_rate REAL NOT NULL,
-                grace_months INTEGER NOT NULL,
-                min_payment_percent REAL NOT NULL,
-                payment_day INTEGER NOT NULL,
-                statement_day INTEGER NOT NULL,
-                credit_limit REAL NOT NULL,
+                account_id INTEGER NOT NULL UNIQUE,
+                
+                -- Опциональные параметры (NULL по умолчанию)
+                credit_limit REAL,
+                annual_rate REAL,
+                grace_months INTEGER,
+                min_payment_percent REAL,
+                payment_day INTEGER,
+                statement_day INTEGER,
+                
                 is_active INTEGER NOT NULL DEFAULT 1,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (account_id) REFERENCES accounts(id) ON DELETE CASCADE
@@ -261,11 +223,11 @@ class Database:
             raise
 
     def fetch_all(self, query: str, params: tuple = ()) -> list:
-        """Выполняет SELECT и возвращает все строки."""
+        """Выполняет SELECT и возвращает все строки как список словарей."""
         try:
             cursor = self._conn.cursor()
             cursor.execute(query, params)
-            return cursor.fetchall()
+            return [dict(row) for row in cursor.fetchall()]  # ← конвертация в dict
         except Exception as e:
             logger.error(f"[{self.__class__.__name__}] Ошибка выборки данных: {e}", exc_info=True)
             raise

@@ -94,6 +94,26 @@ class CategoryRepository:
             logger.error(f"[CategoryRepository] Ошибка получения категории #{category_id}: {e}", exc_info=True)
             raise
 
+    def get_by_name(self, name: str) -> Optional[Category]:
+        """
+        Возвращает категорию по ее названию.
+
+        Args:
+            name: название категории
+
+        Returns:
+            Объект Category, если найден, иначе None
+        """
+        try:
+            query = "SELECT * FROM categories WHERE name = ?"
+            row = self.db.fetchone(query, (name,))
+            if row:
+                return self._row_to_category(row)
+            return None
+        except Exception as e:
+            logger.error(f"[CategoryRepository] Ошибка получения категории '{name}': {e}", exc_info=True)
+            raise
+        
     def create(self, category: Category) -> Category:
         """
         Создаёт новую категорию.

@@ -36,11 +36,11 @@ from services.category_service import CategoryService
 from services.transfer_service import TransferService
 from services.loan_service import LoanService
 from services.credit_card_service import CreditCardService
-from services.tranche_service import TrancheService
-from services.interest_engine import InterestEngine
-from services.payment_waterfall import PaymentWaterfall, PaymentAllocation
-from services.statement_service import StatementService
-from services.forecast_service import ForecastService
+# from services.tranche_service import TrancheService
+# from services.interest_engine import InterestEngine
+# from services.payment_waterfall import PaymentWaterfall, PaymentAllocation
+# from services.statement_service import StatementService
+# from services.forecast_service import ForecastService
 
 
 # Репозитории
@@ -50,9 +50,9 @@ from core.repositories.category_repository import CategoryRepository
 from core.repositories.transfer_repository import TransferRepository
 from core.repositories.loan_repository import LoanRepository
 from core.repositories.credit_card_repository import CreditCardRepository
-from core.repositories.tranche_repository import TrancheRepository
-from core.repositories.interest_accrual_repository import InterestAccrualRepository
-from core.repositories.statement_repository import StatementRepository
+# from core.repositories.tranche_repository import TrancheRepository
+# from core.repositories.interest_accrual_repository import InterestAccrualRepository
+# from core.repositories.statement_repository import StatementRepository
 
 
 
@@ -82,25 +82,31 @@ class NavigationService:
             self.tr_repo = TransferRepository(self.db)
             self.loan_repo = LoanRepository(self.db)
             self.credit_card_repo = CreditCardRepository(self.db)
-            self.tranche_repo = TrancheRepository(self.db)
-            self.accrual_repo = InterestAccrualRepository(self.db)
-            self.statement_repo = StatementRepository(self.db)
+            # self.tranche_repo = TrancheRepository(self.db)
+            # self.accrual_repo = InterestAccrualRepository(self.db)
+            # self.statement_repo = StatementRepository(self.db)
 
-            self.interest_engine = InterestEngine(self.tranche_repo, self.accrual_repo)
-            self.payment_waterfall = PaymentWaterfall(self.tranche_repo, self.accrual_repo)
-            self.statement_service = StatementService(self.statement_repo, self.tranche_repo, self.accrual_repo, self.credit_card_repo)
-            self.forecast_service = ForecastService(self.tranche_repo, self.accrual_repo, self.credit_card_repo)
-            self.tranche_service = TrancheService(self.tranche_repo, self.credit_card_repo)
+            # self.interest_engine = InterestEngine(self.tranche_repo, self.accrual_repo)
+            # self.payment_waterfall = PaymentWaterfall(self.tranche_repo, self.accrual_repo)
+            # self.statement_service = StatementService(self.statement_repo, self.tranche_repo, self.accrual_repo, self.credit_card_repo)
+            # self.forecast_service = ForecastService(self.tranche_repo, self.accrual_repo, self.credit_card_repo)
+            # self.tranche_service = TrancheService(self.tranche_repo, self.credit_card_repo)
+
+            self.acc_service = AccountService(self.acc_repo, self.credit_card_repo)
+            self.tr_service = TransferService(self.tr_repo, self.acc_repo)
+            self.tx_service = TransactionService(
+                tx_repo=self.tx_repo,
+                acc_repo=self.acc_repo,
+                cat_repo=self.cat_repo
+                # credit_card_service=.credit_card_service
+            )
             self.credit_card_service = CreditCardService(
                 self.credit_card_repo, 
-                self.tranche_repo,
-                self.tranche_service,
-                self.interest_engine,
-                self.payment_waterfall,
-                self.statement_service,
-                self.forecast_service
+                self.cat_repo,
+                self.tr_service,
+                self.tx_service,
+                self.acc_repo
                 )
-            self.acc_service = AccountService(acc_repo=self.acc_repo)
         except Exception as e:
             logger.error(f"[NavigationService] Ошибка инициализации репозиториев: {e}", exc_info=True)
             raise
@@ -116,17 +122,8 @@ class NavigationService:
             Экземпляр OperationDialog
         """
         try:
-            # Создаём сервис с нужными репозиториями
-            tx_service = TransactionService(
-                tx_repo=self.tx_repo,
-                acc_repo=self.acc_repo,
-                cat_repo=self.cat_repo,
-                tranche_service=self.tranche_service,
-                credit_card_service=self.credit_card_service
-                # credit_card_repo=self.credit_card_repo
-            )
-            # Создаём презентер
-            presenter = TransactionPresenter(tx_service=tx_service)
+                        # Создаём презентер
+            presenter = TransactionPresenter(tx_service=self.tx_service)
             # Создаём и показываем диалог
             dialog = OperationDialog(parent=parent, presenter=presenter)
             dialog.show()  # Не modal!
@@ -193,8 +190,7 @@ class NavigationService:
             Объект TransferDialog
         """
         try:
-            tr_service = TransferService(self.tr_repo, self.acc_repo)
-            presenter = TransferPresenter(tr_service)
+            presenter = TransferPresenter(self.tr_service)
             dialog = TransferDialog(parent=parent, presenter=presenter)
             dialog.show()
             return dialog

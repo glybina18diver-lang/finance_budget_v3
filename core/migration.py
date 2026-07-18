@@ -83,6 +83,23 @@ def migrate_schema(conn: Optional[sqlite3.Connection]) -> None:
     cursor.execute("PRAGMA table_info(transfers)")
     cols = {row[1] for row in cursor.fetchall()}
 
+    # --- categories: добавление системных категорий (если отсутствуют) ---
+    system_categories = [
+        ('Комиссии по кредитным картам', 'expense'),
+        ('Проценты по кредитным картам', 'expense'),
+    ]
+    
+    for name, cat_type in system_categories:
+        cursor.execute("SELECT id FROM categories WHERE name = ? AND is_system = 1", (name,))
+        if not cursor.fetchone():
+            cursor.execute(
+                "INSERT INTO categories (name, cat_type, is_system, is_active) VALUES (?, ?, 1, 1)",
+                (name, cat_type)
+            )
+            logger.info(f"Миграция: добавлена системная категория '{name}'")
+            
+    conn.commit()
+
     
 
     conn.commit()

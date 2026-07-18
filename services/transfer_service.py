@@ -104,7 +104,15 @@ class TransferService:
             raise
 
     def _create_internal_transfer(self, data: dict) -> Transfer:
-        """Логика внутреннего перевода (Счёт → Счёт)."""
+        """
+        Логика внутреннего перевода (Счёт → Счёт).
+
+        Args:
+            data: данные перевода 
+
+        Returns:
+            Созданный объект Transfer
+        """
         if data["from_account_id"] == data["to_account_id"]:
             raise ValueError("Счета не могут совпадать")
 

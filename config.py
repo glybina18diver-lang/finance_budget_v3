@@ -43,6 +43,7 @@ def _get_version() -> str:
 APP_NAME = "Finance Budget V3 (beta)"
 APP_VERSION = _get_version()
 WINDOW_TITLE = f"{APP_NAME} (PySide6 v{APP_VERSION}) - SQLite"
+ICON_DIR = './assets/icon.ico'
 
 # ========== ПУТИ ==========
 # LOGS_DIR = BASE_DIR / "logs"  # TODO: также как и для БД, сделать верный путь
@@ -77,7 +78,7 @@ def get_db_path() -> str:
     return str(data_dir / DB_FILENAME)
 
 # ========== ЛОГИРОВАНИЕ ==========
-LOGS_DIR_NAME = "logs"
+LOGS_DIR_NAME = "logs" # Название директории с логами
 
 def get_logs_dir() -> Path:
     """

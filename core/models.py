@@ -130,23 +130,28 @@ class CreditCard:
     """
     Модель кредитной карты.
     
-    Все пользовательские поля обязательны для заполнения при создании.
-    Системные поля (id, is_active, created_at) заполняются автоматически БД или кодом.
+    account_id обязателен. Все параметры карты опциональны.
+    Системные поля (id, is_active, created_at) заполняются автоматически.
     """
-    # --- Пользовательские поля (обязательные, без дефолтов) ---
+    # --- Обязательные поля ---
     account_id: int
-    name: str
-    annual_rate: Decimal
-    grace_months: int
-    min_payment_percent: Decimal
-    payment_day: int
-    statement_day: int
-    credit_limit: Decimal
+    
+    # --- Опциональные параметры карты ---
+    credit_limit: Optional[Decimal] = None
+    annual_rate: Optional[Decimal] = None
+    grace_months: Optional[int] = None
+    min_payment_percent: Optional[Decimal] = None
+    payment_day: Optional[int] = None
+    statement_day: Optional[int] = None
     
     # --- Системные поля (необязательные, с дефолтами) ---
     id: Optional[int] = None
     is_active: bool = True
     created_at: datetime = field(default_factory=datetime.now)
+    
+    # --- Поля только для чтения (не сохраняются в эту таблицу, приходят из JOIN) ---
+    account_name: Optional[str] = None
+    
 @dataclass
 class Tranche:
     """

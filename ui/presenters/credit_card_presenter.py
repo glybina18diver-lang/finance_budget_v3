@@ -1,8 +1,8 @@
 """
 Презентер для модуля кредитных карт (CreditCardPresenter).
 
-Связующее звено между UI (CreditCardDialog) и бизнес-логикой (CreditCardService).
-Отвечает за валидацию ввода, конвертацию типов и подготовку данных для отображения.
+Связующее звено между UI и бизнес-логикой (CreditCardService).
+Отвечает за валидацию ввода, конвертацию типов и подготовку данных для UI.
 """
 
 import logging
@@ -33,7 +33,7 @@ class CreditCardPresenter:
         Инициализация презентера.
         
         Args:
-            credit_card_service: экземпляр CreditCardService (Фасад)
+            credit_card_service: экземпляр CreditCardService
             account_service: экземпляр AccountService (для получения списка счетов)
         """
         self.service = credit_card_service
@@ -46,14 +46,14 @@ class CreditCardPresenter:
         Получает список всех активных кредитных карт для ComboBox.
         
         Returns:
-            Список словарей с базовой информацией о картах
+            Список словарей с базовой информацией о картах (id, account_name)
         """
         try:
-            cards = self.service.get_all_active_cards()
+            cards = self.service.get_all_cards()
             return [
                 {
                     "id": card.id,
-                    "name": card.name,
+                    "account_name": card.account_name or f"Карта ID {card.id}",
                     "account_id": card.account_id
                 }
                 for card in cards
@@ -65,95 +65,26 @@ class CreditCardPresenter:
             logger.error(f"[{self.__class__.__name__}] Ошибка получения списка карт: {e}", exc_info=True)
             raise
 
-    def get_dashboard_data(self, card_id: int) -> Dict[str, Any]:
+    def get_card_dashboard(self, card_id: int) -> Dict[str, Any]:
         """
-        Собирает все метрики для главного экрана (Дашборда).
+        Собирает метрики для главного экрана (долг, лимит, % использования).
         
         Args:
             card_id: ID выбранной кредитной карты
             
         Returns:
-            Словарь с метриками, алертами и общей информацией
+            Словарь с метриками для UI
         """
         try:
             if not card_id:
                 raise ValueError("Не выбрана кредитная карта")
                 
-            return self.service.get_dashboard_data(card_id)
+            return self.service.get_card_dashboard(card_id)
         except ValueError as e:
             logger.warning(f"[{self.__class__.__name__}] Валидация дашборда: {e}")
             raise
         except Exception as e:
             logger.error(f"[{self.__class__.__name__}] Ошибка сбора данных дашборда: {e}", exc_info=True)
-            raise
-
-    def get_tranches(self, card_id: int) -> List[Dict[str, Any]]:
-        """
-        Получает список активных траншей для таблицы.
-        
-        Args:
-            card_id: ID кредитной карты
-            
-        Returns:
-            Список словарей с данными траншей
-        """
-        try:
-            if not card_id:
-                raise ValueError("Не выбрана кредитная карта")
-
-            tranches = self.service.tranche_service.get_active_tranches(card_id)
-            return [
-                {
-                    "id": t.id,
-                    "type": t.tranche_type,
-                    "original_amount": float(t.original_amount),
-                    "remaining_amount": float(t.remaining_amount),
-                    "commission": float(t.commission),
-                    "transaction_date": t.transaction_date.isoformat(),
-                    "grace_end_date": t.grace_end_date.isoformat() if t.grace_end_date else None,
-                    "status": t.status,
-                    "is_retroactive_triggered": t.is_retroactive_triggered
-                }
-                for t in tranches
-            ]
-        except ValueError as e:
-            logger.warning(f"[{self.__class__.__name__}] Валидация траншей: {e}")
-            raise
-        except Exception as e:
-            logger.error(f"[{self.__class__.__name__}] Ошибка получения траншей: {e}", exc_info=True)
-            raise
-
-    def get_statements(self, card_id: int) -> List[Dict[str, Any]]:
-        """
-        Получает историю выписок (биллинговых циклов).
-        
-        Args:
-            card_id: ID кредитной карты
-            
-        Returns:
-            Список словарей с данными выписок
-        """
-        try:
-            if not card_id:
-                raise ValueError("Не выбрана кредитная карта")
-
-            statements = self.service.statement_service.statement_repo.get_by_card(card_id)
-            return [
-                {
-                    "id": s.id,
-                    "statement_date": s.statement_date.isoformat(),
-                    "due_date": s.due_date.isoformat() if s.due_date else None,
-                    "closing_balance": float(s.closing_balance),
-                    "min_payment_required": float(s.min_payment_required),
-                    "status": s.status
-                }
-                for s in statements
-            ]
-        except ValueError as e:
-            logger.warning(f"[{self.__class__.__name__}] Валидация выписок: {e}")
-            raise
-        except Exception as e:
-            logger.error(f"[{self.__class__.__name__}] Ошибка получения выписок: {e}", exc_info=True)
             raise
 
     def get_accounts_for_payment(self, exclude_account_id: int) -> List[Dict[str, Any]]:
@@ -186,37 +117,126 @@ class CreditCardPresenter:
             logger.error(f"[{self.__class__.__name__}] Ошибка получения счетов для платежа: {e}", exc_info=True)
             raise
 
-    def get_available_accounts_for_card_creation(self) -> List[Dict[str, Any]]:
+    # --- Обработка действий пользователя ---
+
+    def make_payment(
+        self, 
+        card_id: int, 
+        amount_str: str, 
+        interest_str: str, 
+        commission_str: str, 
+        payment_date_str: str, 
+        from_account_id: int
+    ) -> Dict[str, Any]:
         """
-        Получает список счетов типа CreditCard, к которым ещё не привязана карта.
+        Вносит платёж по кредитной карте (разбивка на тело, проценты и комиссии).
         
+        Args:
+            card_id: ID кредитной карты
+            amount_str: общая сумма платежа (строка из UI)
+            interest_str: сумма на погашение процентов (строка из UI)
+            commission_str: сумма на погашение комиссий (строка из UI)
+            payment_date_str: дата платежа в формате YYYY-MM-DD
+            from_account_id: ID счёта-источника
+            
         Returns:
-            Список словарей со счетами
+            Словарь с детализацией распределения платежа
+            
+        Raises:
+            ValueError: при невалидном вводе (суммы, дата)
         """
         try:
-            # Получаем все счета типа CreditCard
-            all_credit_accounts = self.account_service.get_accounts_by_type("CreditCard")
-            # Получаем ID счетов, которые уже имеют карту
-            used_account_ids = self.service.card_repo.get_all_card_account_ids()
-            
-            # Фильтруем
-            available_accounts = [
-                acc for acc in all_credit_accounts if acc.id not in used_account_ids
-            ]
-            
-            return [
-                {
-                    "id": acc.id,
-                    "name": acc.name,
-                    "balance": float(acc.current_balance)
-                }
-                for acc in available_accounts
-            ]
+            if not card_id:
+                raise ValueError("Не выбрана кредитная карта")
+            if not from_account_id:
+                raise ValueError("Не выбран счёт для списания")
+
+            # Конвертация и валидация ввода
+            amount = self._parse_decimal(amount_str, "Общая сумма платежа")
+            interest = self._parse_decimal(interest_str or "0", "Сумма процентов")
+            commission = self._parse_decimal(commission_str or "0", "Сумма комиссий")
+            payment_date = self._parse_date(payment_date_str, "Дата платежа")
+
+            # Вызов сервиса
+            return self.service.make_payment(
+                card_id=card_id,
+                amount=amount,
+                interest_amount=interest,
+                commission_amount=commission,
+                payment_date=payment_date,
+                from_account_id=from_account_id
+            )
         except ValueError as e:
-            logger.warning(f"[{self.__class__.__name__}] Валидация счетов для карты: {e}")
+            logger.warning(f"[{self.__class__.__name__}] Валидация платежа: {e}")
             raise
         except Exception as e:
-            logger.error(f"[{self.__class__.__name__}] Ошибка получения счетов для карты: {e}", exc_info=True)
+            logger.error(f"[{self.__class__.__name__}] Ошибка внесения платежа: {e}", exc_info=True)
+            raise
+
+    def create_card(self, card_data: Dict[str, Any]) -> int:
+        """
+        Создаёт новую кредитную карту.
+        
+        Args:
+            card_data: словарь с полями карты из UI
+            
+        Returns:
+            ID созданной карты
+        """
+        try:
+            if not card_data.get("account_id"):
+                raise ValueError("Не выбран счёт")
+
+            card = CreditCard(
+                account_id=card_data["account_id"],
+                credit_limit=self._parse_decimal(card_data.get("credit_limit"), "Кредитный лимит") if card_data.get("credit_limit") else None,
+                annual_rate=self._parse_decimal(card_data.get("annual_rate"), "Годовая ставка") if card_data.get("annual_rate") else None,
+                grace_months=int(card_data["grace_months"]) if card_data.get("grace_months") else None,
+                min_payment_percent=self._parse_decimal(card_data.get("min_payment_percent"), "Мин. платёж %") / Decimal("100") if card_data.get("min_payment_percent") else None,
+                payment_day=int(card_data["payment_day"]) if card_data.get("payment_day") else None,
+                statement_day=int(card_data["statement_day"]) if card_data.get("statement_day") else None
+            )
+            
+            return self.service.create_card(card)
+        except ValueError as e:
+            logger.warning(f"[{self.__class__.__name__}] Валидация создания карты: {e}")
+            raise
+        except Exception as e:
+            logger.error(f"[{self.__class__.__name__}] Ошибка создания карты: {e}", exc_info=True)
+            raise
+
+    def update_card(self, card_data: Dict[str, Any]):
+        """
+        Обновляет настройки кредитной карты.
+        
+        Args:
+            card_data: словарь с полями карты из UI (все поля опциональные)
+        """
+        try:
+            if "id" not in card_data or not card_data["id"]:
+                raise ValueError("ID карты отсутствует")
+
+            # Получаем существующую карту для сохранения account_id
+            existing_card = self.service.card_repo.get_by_id(card_data["id"])
+            if not existing_card:
+                raise ValueError(f"Карта ID {card_data['id']} не найдена")
+
+            card = CreditCard(
+                id=card_data["id"],
+                account_id=existing_card.account_id,  # Не меняем привязку к счёту
+                credit_limit=self._parse_decimal(card_data.get("credit_limit"), "Кредитный лимит") if card_data.get("credit_limit") is not None else None,
+                annual_rate=self._parse_decimal(card_data.get("annual_rate"), "Годовая ставка") if card_data.get("annual_rate") is not None else None,
+                grace_months=int(card_data["grace_months"]) if card_data.get("grace_months") is not None else None,
+                min_payment_percent=self._parse_decimal(card_data.get("min_payment_percent"), "Мин. платёж %") / Decimal("100") if card_data.get("min_payment_percent") is not None else None,
+                payment_day=int(card_data["payment_day"]) if card_data.get("payment_day") is not None else None,
+                statement_day=int(card_data["statement_day"]) if card_data.get("statement_day") is not None else None
+            )
+            self.service.update_card(card)
+        except ValueError as e:
+            logger.warning(f"[{self.__class__.__name__}] Валидация настроек: {e}")
+            raise
+        except Exception as e:
+            logger.error(f"[{self.__class__.__name__}] Ошибка обновления настроек: {e}", exc_info=True)
             raise
 
     def get_card_settings(self, card_id: int) -> Dict[str, Any]:
@@ -227,7 +247,7 @@ class CreditCardPresenter:
             card_id: ID кредитной карты
             
         Returns:
-            Словарь с настройками карты (проценты умножены на 100 для UI)
+            Словарь с настройками карты (все поля опциональные, могут быть None)
             
         Raises:
             ValueError: если карта не найдена
@@ -243,13 +263,13 @@ class CreditCardPresenter:
             return {
                 "id": card.id,
                 "account_id": card.account_id,
-                "name": card.name,
-                "annual_rate": float(card.annual_rate),
+                "account_name": card.account_name,
+                "credit_limit": float(card.credit_limit) if card.credit_limit is not None else None,
+                "annual_rate": float(card.annual_rate) if card.annual_rate is not None else None,
                 "grace_months": card.grace_months,
-                "min_payment_percent": float(card.min_payment_percent * 100), # 0.02 -> 2.0
+                "min_payment_percent": float(card.min_payment_percent) * 100 if card.min_payment_percent is not None else None,
                 "payment_day": card.payment_day,
-                "statement_day": card.statement_day,
-                "credit_limit": float(card.credit_limit)
+                "statement_day": card.statement_day
             }
         except ValueError as e:
             logger.warning(f"[{self.__class__.__name__}] Валидация настроек: {e}")
@@ -258,202 +278,7 @@ class CreditCardPresenter:
             logger.error(f"[{self.__class__.__name__}] Ошибка получения настроек: {e}", exc_info=True)
             raise
 
-    def create_card(self, card_data: Dict[str, Any]) -> int:
-        """
-        Создаёт новую кредитную карту.
-        
-        Args:
-            card_data: словарь с полями карты из UI
-            
-        Returns:
-            ID созданной карты
-            
-        Raises:
-            ValueError: при невалидном вводе
-        """
-        try:
-            if not card_data.get("account_id"):
-                raise ValueError("Не выбран счёт")
-            if not card_data.get("name", "").strip():
-                raise ValueError("Название карты не может быть пустым")
-
-            card = CreditCard(
-                account_id=card_data["account_id"],
-                name=card_data["name"].strip(),
-                annual_rate=self._parse_decimal(card_data["annual_rate"], "Годовая ставка"),
-                grace_months=int(card_data["grace_months"]),
-                min_payment_percent=self._parse_decimal(card_data["min_payment_percent"], "Мин. платёж %") / Decimal("100"),
-                payment_day=int(card_data["payment_day"]),
-                statement_day=int(card_data["statement_day"]),
-                credit_limit=self._parse_decimal(card_data["credit_limit"], "Кредитный лимит")
-            )
-            
-            card_id = self.service.create_card(card)
-            logger.info(f"[{self.__class__.__name__}] Создана карта ID={card_id}")
-            return card_id
-        except ValueError as e:
-            logger.warning(f"[{self.__class__.__name__}] Валидация создания карты: {e}")
-            raise
-        except Exception as e:
-            logger.error(f"[{self.__class__.__name__}] Ошибка создания карты: {e}", exc_info=True)
-            raise
-
-    # --- Обработка действий пользователя ---
-
-    def make_payment(
-        self, 
-        card_id: int, 
-        amount_str: str, 
-        payment_date_str: str, 
-        from_account_id: int
-    ) -> Dict[str, Any]:
-        """
-        Вносит платёж по кредитной карте.
-        
-        Args:
-            card_id: ID кредитной карты
-            amount_str: сумма платежа (строка из UI)
-            payment_date_str: дата платежа в формате YYYY-MM-DD
-            from_account_id: ID счёта-источника
-            
-        Returns:
-            Словарь с детализацией распределения платежа (allocation)
-            
-        Raises:
-            ValueError: при невалидном вводе (сумма, дата)
-        """
-        try:
-            if not card_id:
-                raise ValueError("Не выбрана кредитная карта")
-            if not from_account_id:
-                raise ValueError("Не выбран счёт для списания")
-
-            # Конвертация и валидация ввода
-            amount = self._parse_decimal(amount_str, "Сумма платежа")
-            payment_date = self._parse_date(payment_date_str, "Дата платежа")
-
-            # Вызов сервиса
-            return self.service.make_payment(
-                card_id=card_id,
-                amount=amount,
-                payment_date=payment_date,
-                from_account_id=from_account_id
-            )
-        except ValueError as e:
-            logger.warning(f"[{self.__class__.__name__}] Валидация платежа: {e}")
-            raise
-        except Exception as e:
-            logger.error(f"[{self.__class__.__name__}] Ошибка внесения платежа: {e}", exc_info=True)
-            raise
-
-    def recalculate_interest(self, card_id: int, as_of_date_str: str) -> Dict[int, float]:
-        """
-        Вручную пересчитывает проценты по кнопке в UI.
-        
-        Args:
-            card_id: ID кредитной карты
-            as_of_date_str: дата среза в формате YYYY-MM-DD
-            
-        Returns:
-            Словарь {tranche_id: сумма неоплаченных процентов}
-        """
-        try:
-            if not card_id:
-                raise ValueError("Не выбрана кредитная карта")
-
-            as_of_date = self._parse_date(as_of_date_str, "Дата пересчёта")
-            card = self.service.card_repo.get_by_id(card_id)
-            
-            if not card:
-                raise ValueError(f"Карта ID {card_id} не найдена")
-
-            result = self.service.interest_engine.recalculate_all_interests(
-                card_id=card_id,
-                annual_rate=card.annual_rate,
-                as_of_date=as_of_date
-            )
-            # Конвертируем Decimal в float для UI
-            return {k: float(v) for k, v in result.items()}
-        except ValueError as e:
-            logger.warning(f"[{self.__class__.__name__}] Валидация пересчёта: {e}")
-            raise
-        except Exception as e:
-            logger.error(f"[{self.__class__.__name__}] Ошибка пересчёта процентов: {e}", exc_info=True)
-            raise
-
-    def generate_statement(self, card_id: int, year: int, month: int) -> Dict[str, Any]:
-        """
-        Формирует выписку за указанный месяц.
-        
-        Args:
-            card_id: ID кредитной карты
-            year: год выписки
-            month: месяц выписки (1-12)
-            
-        Returns:
-            Словарь с данными созданной выписки
-        """
-        try:
-            if not card_id:
-                raise ValueError("Не выбрана кредитная карта")
-            if not (1 <= month <= 12):
-                raise ValueError("Месяц должен быть от 1 до 12")
-
-            statement = self.service.statement_service.generate_statement(card_id, year, month)
-            return {
-                "id": statement.id,
-                "statement_date": statement.statement_date.isoformat(),
-                "due_date": statement.due_date.isoformat(),
-                "closing_balance": float(statement.closing_balance),
-                "min_payment_required": float(statement.min_payment_required),
-                "status": statement.status
-            }
-        except ValueError as e:
-            logger.warning(f"[{self.__class__.__name__}] Валидация выписки: {e}")
-            raise
-        except Exception as e:
-            logger.error(f"[{self.__class__.__name__}] Ошибка генерации выписки: {e}", exc_info=True)
-            raise
-
-    def update_card_settings(self, card_data: Dict[str, Any]):
-        """
-        Обновляет настройки кредитной карты.
-        
-        Args:
-            card_data: словарь с полями карты из UI
-        """
-        try:
-            if "id" not in card_data or not card_data["id"]:
-                raise ValueError("ID карты отсутствует")
-
-            # 1. Получаем текущую карту, чтобы сохранить неизменяемые поля (account_id, is_active)
-            existing_card = self.service.card_repo.get_by_id(card_data["id"])
-            if not existing_card:
-                raise ValueError(f"Карта ID {card_data['id']} не найдена")
-
-            # 2. Создаем объект с обновленными настройками, но старым account_id
-            card = CreditCard(
-                id=card_data["id"],
-                account_id=existing_card.account_id,  # <-- БЕРЕМ ИЗ СУЩЕСТВУЮЩЕЙ ЗАПИСИ
-                name=card_data["name"].strip(),
-                annual_rate=self._parse_decimal(card_data["annual_rate"], "Годовая ставка"),
-                grace_months=int(card_data["grace_months"]),
-                min_payment_percent=self._parse_decimal(card_data["min_payment_percent"], "Мин. платёж %") / Decimal("100"),
-                payment_day=int(card_data["payment_day"]),
-                statement_day=int(card_data["statement_day"]),
-                credit_limit=self._parse_decimal(card_data["credit_limit"], "Кредитный лимит"),
-                is_active=existing_card.is_active     # <-- СОХРАНЯЕМ СТАТУС
-            )
-            
-            self.service.update_card_settings(card)
-            logger.info(f"[{self.__class__.__name__}] Настройки карты ID={card.id} успешно обновлены")
-            
-        except ValueError as e:
-            logger.warning(f"[{self.__class__.__name__}] Валидация настроек: {e}")
-            raise
-        except Exception as e:
-            logger.error(f"[{self.__class__.__name__}] Ошибка обновления настроек: {e}", exc_info=True)
-            raise
+    
 
     def delete_card(self, card_id: int):
         """
@@ -461,10 +286,6 @@ class CreditCardPresenter:
         
         Args:
             card_id: ID кредитной карты для удаления
-            
-        Raises:
-            ValueError: если не передан card_id
-            Exception: при системных ошибках БД или сервиса
         """
         try:
             if not card_id:

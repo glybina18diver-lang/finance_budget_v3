@@ -1,50 +1,55 @@
 """
-Главный сервис-фасад для модуля кредитных карт (CreditCardService).
+Главный сервис для модуля кредитных карт (CreditCardService).
 
-Оркестрирует работу специализированных сервисов (Tranche, Interest, Waterfall, Forecast)
-и предоставляет единый API для Презентера.
+Отвечает за CRUD операций с настройками карт и внесение платежей.
+Платеж разбивается на: перевод (тело долга) + расход (комиссии) + расход (проценты).
 """
 
 import logging
 from datetime import date
-from decimal import Decimal
-from typing import List, Optional, Dict, Any
+from decimal import Decimal, ROUND_HALF_UP
+from typing import Optional, List, Dict, Any
 
-from core.models import CreditCard, Tranche
+from core.models import CreditCard
 from core.repositories.credit_card_repository import CreditCardRepository
-from core.repositories.tranche_repository import TrancheRepository
-from services.tranche_service import TrancheService
-from services.interest_engine import InterestEngine
-from services.payment_waterfall import PaymentWaterfall, PaymentAllocation
-from services.statement_service import StatementService
-from services.forecast_service import ForecastService
+from core.repositories.category_repository import CategoryRepository
+from services.transfer_service import TransferService
+from services.transaction_service import TransactionService
+from core.repositories.account_repository import AccountRepository
+
 
 logger = logging.getLogger(__name__)
 
 
 class CreditCardService:
     """
-    Фасад модуля кредитных карт.
-    Координирует CRUD операции карты и сложные бизнес-процессы (платежи, прогнозы).
+    Сервис для управления кредитными картами.
+    
+    Координирует CRUD операций с настройками карт и внесение платежей.
     """
 
     def __init__(
         self,
         card_repo: CreditCardRepository,
-        tranche_repo: TrancheRepository,
-        tranche_service: TrancheService,
-        interest_engine: InterestEngine,
-        payment_waterfall: PaymentWaterfall,
-        statement_service: StatementService,
-        forecast_service: ForecastService
+        category_repo: CategoryRepository,
+        transfer_service: TransferService,
+        transaction_service: TransactionService,
+        account_repo: AccountRepository
     ):
+        """
+        Инициализация сервиса.
+        
+        Args:
+            card_repo: репозиторий кредитных карт
+            category_repo: репозиторий категорий (для получения ID системных категорий)
+            transfer_service: сервис переводов (для погашения тела долга)
+            transaction_service: сервис транзакций (для записи комиссий и процентов)
+        """
         self.card_repo = card_repo
-        self.tranche_repo = tranche_repo
-        self.tranche_service = tranche_service
-        self.interest_engine = interest_engine
-        self.payment_waterfall = payment_waterfall
-        self.statement_service = statement_service
-        self.forecast_service = forecast_service
+        self.category_repo = category_repo
+        self.transfer_service = transfer_service
+        self.transaction_service = transaction_service
+        self.account_repo = account_repo
 
     # --- CRUD Карты ---
 
@@ -53,12 +58,19 @@ class CreditCardService:
         Создаёт новую кредитную карту.
         
         Args:
-            card: объект CreditCard с заполненными пользовательскими полями
+            card: объект CreditCard (account_id обязателен, остальные поля опциональны)
             
         Returns:
             ID созданной карты
+            
+        Raises:
+            ValueError: если не передан account_id
+            Exception: при ошибке БД
         """
         try:
+            if not card.account_id:
+                raise ValueError("account_id обязателен для создания карты")
+            
             card_id = self.card_repo.create(card)
             logger.info(f"[{self.__class__.__name__}] Создана карта ID={card_id}")
             return card_id
@@ -69,19 +81,23 @@ class CreditCardService:
             logger.error(f"[{self.__class__.__name__}] Ошибка создания карты: {e}", exc_info=True)
             raise
 
-    def update_card_settings(self, card: CreditCard):
+    def update_card(self, card: CreditCard):
         """
         Обновляет настройки кредитной карты.
         
         Args:
             card: объект CreditCard с обновлёнными полями (id обязателен)
+            
+        Raises:
+            ValueError: если не передан id
+            Exception: при ошибке БД
         """
         try:
             if not card.id:
                 raise ValueError("id карты обязателен для обновления")
             
             self.card_repo.update(card)
-            logger.info(f"[{self.__class__.__name__}] Обновлены настройки карты ID={card.id}")
+            logger.info(f"[{self.__class__.__name__}] Обновлена карта ID={card.id}")
         except ValueError as e:
             logger.warning(f"[{self.__class__.__name__}] Валидация при обновлении карты: {e}")
             raise
@@ -119,7 +135,7 @@ class CreditCardService:
             logger.error(f"[{self.__class__.__name__}] Ошибка получения карты по счёту: {e}", exc_info=True)
             raise
 
-    def get_all_active_cards(self) -> List[CreditCard]:
+    def get_all_cards(self) -> List[CreditCard]:
         """
         Получает список всех активных кредитных карт.
         
@@ -132,117 +148,176 @@ class CreditCardService:
             logger.error(f"[{self.__class__.__name__}] Ошибка получения списка карт: {e}", exc_info=True)
             raise
 
-    # --- Интеграция с обычными транзакциями ---
-
-    def add_purchase_by_account(
-        self, 
-        account_id: int, 
-        amount: Decimal, 
-        transaction_date: date, 
-        transaction_id: int
-    ) -> Optional[Tranche]:
+    def get_card_dashboard(self, card_id: int) -> Dict[str, Any]:
         """
-        Точка интеграции: создаёт транш покупки для счёта кредитной карты.
-        Вызывается из TransactionService.
-        
-        Args:
-            account_id: ID счёта
-            amount: сумма покупки (положительное число)
-            transaction_date: дата покупки
-            transaction_id: ID связанной транзакции
-            
-        Returns:
-            Созданный транш или None, если карта не найдена
-        """
-        try:
-            card = self.card_repo.get_by_account_id(account_id)
-            if not card:
-                logger.warning(
-                    f"[{self.__class__.__name__}] Карта для счёта {account_id} не найдена. Транш не создан."
-                )
-                return None
-
-            tranche = self.tranche_service.add_purchase(
-                card_id=card.id,
-                amount=amount,
-                transaction_date=transaction_date,
-                linked_transaction_id=transaction_id
-            )
-            return tranche
-        except ValueError as e:
-            logger.warning(f"[{self.__class__.__name__}] Валидация при добавлении покупки: {e}")
-            raise
-        except Exception as e:
-            logger.error(f"[{self.__class__.__name__}] Ошибка добавления покупки: {e}", exc_info=True)
-            raise
-
-    # --- Оркестрация Платежа ---
-
-    def make_payment(
-        self, 
-        card_id: int, 
-        amount: Decimal, 
-        payment_date: date, 
-        from_account_id: int
-    ) -> Dict[str, Any]:
-        """
-        Полный цикл внесения платежа по кредитной карте.
-        
-        1. Пересчитывает проценты на дату платежа.
-        2. Распределяет платёж по каскаду (Waterfall).
-        3. Сохраняет результат.
+        Получает сводку по кредитной карте для отображения в UI.
         
         Args:
             card_id: ID кредитной карты
-            amount: сумма платежа
-            payment_date: дата платежа
-            from_account_id: ID счёта, с которого списываются средства
             
         Returns:
-            Словарь с детализацией распределения (allocation) для UI
+            Словарь с данными: debt, limit, usage_percent, account_name
+            
+        Raises:
+            ValueError: если карта не найдена
         """
         try:
-            if amount <= 0:
-                raise ValueError("Сумма платежа должна быть положительной")
-
             card = self.card_repo.get_by_id(card_id)
             if not card:
                 raise ValueError(f"Карта ID {card_id} не найдена")
-
-            # Шаг 1: Пересчёт процентов на дату платежа
-            self.interest_engine.recalculate_all_interests(
-                card_id=card_id,
-                annual_rate=card.annual_rate,
-                as_of_date=payment_date
-            )
-
-            # Шаг 2: Каскадное распределение
-            allocation: PaymentAllocation = self.payment_waterfall.distribute_payment(
-                card_id=card_id,
-                amount=amount,
-                payment_date=payment_date
-            )
-
-            # Шаг 3: Формирование ответа для UI
-            # (В будущем здесь будет вызов CreditCardPaymentRepository.create())
-            result = {
-                "payment_date": payment_date.isoformat(),
-                "amount": float(amount),
-                "from_account_id": from_account_id,
-                "allocation": {
-                    "commissions_paid": float(allocation.commissions_paid),
-                    "interest_paid": float(allocation.interest_paid),
-                    "principal_paid": float(allocation.principal_paid),
-                    "remaining_amount": float(allocation.remaining_amount),
-                    "tranches_affected": allocation.tranches_affected
-                }
+            
+            # Получаем баланс счёта (долг)
+            account = self._get_account_by_id(card.account_id)
+            
+            # Конвертируем float в Decimal для точных вычислений
+            balance = Decimal(str(account.current_balance))
+            debt = abs(balance) if balance < 0 else Decimal("0.00")
+            
+            # Вычисляем процент использования лимита
+            usage_percent = Decimal("0.00")
+            if card.credit_limit and card.credit_limit > 0:
+                usage_percent = (debt / card.credit_limit * 100).quantize(
+                    Decimal("0.01"), rounding=ROUND_HALF_UP
+                )
+            
+            return {
+                "card_id": card.id,
+                "account_name": card.account_name or "Неизвестно",
+                "debt": float(debt),
+                "credit_limit": float(card.credit_limit) if card.credit_limit else 0.0,
+                "usage_percent": float(usage_percent),
+                "annual_rate": float(card.annual_rate) if card.annual_rate else 0.0,
+                "payment_day": card.payment_day,
+                "statement_day": card.statement_day
             }
+        except ValueError as e:
+            logger.warning(f"[{self.__class__.__name__}] Валидация дашборда: {e}")
+            raise
+        except Exception as e:
+            logger.error(f"[{self.__class__.__name__}] Ошибка получения дашборда: {e}", exc_info=True)
+            raise
 
+    # --- Внесение платежа ---
+
+    def make_payment(
+        self,
+        card_id: int,
+        amount: Decimal,
+        interest_amount: Decimal,
+        commission_amount: Decimal,
+        payment_date: date,
+        from_account_id: int
+    ) -> Dict[str, Any]:
+        """
+        Вносит платёж по кредитной карте.
+        
+        Разбивает платёж на три операции:
+        1. Перевод (тело долга) - уменьшает долг по кредитке
+        2. Расход (комиссии) - записывается в категорию "Комиссии по кредитным картам"
+        3. Расход (проценты) - записывается в категорию "Проценты по кредитным картам"
+        
+        Args:
+            card_id: ID кредитной карты
+            amount: общая сумма платежа
+            interest_amount: сумма на погашение процентов (может быть 0)
+            commission_amount: сумма на погашение комиссий (может быть 0)
+            payment_date: дата платежа
+            from_account_id: ID счёта-источника
+            
+        Returns:
+            Словарь с детализацией: principal_amount, interest_amount, commission_amount
+            
+        Raises:
+            ValueError: при невалидных данных (сумма <= 0, проценты > суммы и т.д.)
+            Exception: при ошибке БД или сервиса
+        """
+        try:
+            # Валидация
+            if amount <= 0:
+                raise ValueError("Сумма платежа должна быть положительной")
+            if interest_amount < 0:
+                raise ValueError("Сумма процентов не может быть отрицательной")
+            if commission_amount < 0:
+                raise ValueError("Сумма комиссий не может быть отрицательной")
+            if interest_amount + commission_amount > amount:
+                raise ValueError("Сумма процентов и комиссий не может превышать общую сумму платежа")
+            
+            # Получаем карту
+            card = self.card_repo.get_by_id(card_id)
+            if not card:
+                raise ValueError(f"Карта ID {card_id} не найдена")
+            
+            # Вычисляем сумму на погашение тела долга
+            principal_amount = (amount - interest_amount - commission_amount).quantize(
+                Decimal("0.01"), rounding=ROUND_HALF_UP
+            )
+            
+            # Получаем ID системных категорий
+            commission_category_id = self._get_system_category_id("Комиссии по кредитным картам")
+            interest_category_id = self._get_system_category_id("Проценты по кредитным картам")
+            
+            # 1. Перевод (тело долга)
+            if principal_amount > 0:
+                data = {
+                    "from_account_id": from_account_id,
+                    "to_account_id": card.account_id,
+                    "type": "internal",
+                    "date": payment_date.isoformat(),
+                    "amount": float(principal_amount),
+                    "description": (f"Погашение долга по {card.account_name}")
+                }
+                self.transfer_service.create_transfer(data)
+                logger.info(
+                    f"[{self.__class__.__name__}] Создан перевод на {principal_amount} ₽ "
+                    f"для погашения тела долга"
+                )
+            
+            # 2. Расход (комиссии)
+            if commission_amount > 0:
+                if not commission_category_id:
+                    raise ValueError("Системная категория 'Комиссии по кредитным картам' не найдена")
+                
+                self.transaction_service.create_transaction(
+                    account_id=from_account_id,
+                    raw_amount=str(commission_amount),
+                    trans_type="expense",
+                    category_id=commission_category_id,
+                    date_str=str(payment_date.isoformat()),
+                    description=f"Комиссия по {card.account_name}"
+                )
+                logger.info(
+                    f"[{self.__class__.__name__}] Записан расход на комиссии {commission_amount} ₽"
+                )
+            
+            # 3. Расход (проценты)
+            if interest_amount > 0:
+                if not interest_category_id:
+                    raise ValueError("Системная категория 'Проценты по кредитным картам' не найдена")
+                
+                self.transaction_service.create_transaction(
+                    account_id=from_account_id,
+                    raw_amount=str(interest_amount),
+                    trans_type="expense",
+                    category_id=interest_category_id,
+                    date_str=str(payment_date.isoformat()),
+                    description=f"Проценты по {card.account_name}"
+                )
+                logger.info(
+                    f"[{self.__class__.__name__}] Записан расход на проценты {interest_amount} ₽"
+                )
+            
+            result = {
+                "principal_amount": float(principal_amount),
+                "interest_amount": float(interest_amount),
+                "commission_amount": float(commission_amount),
+                "total_amount": float(amount)
+            }
+            
             logger.info(
                 f"[{self.__class__.__name__}] Платёж {amount} ₽ по карте {card_id} успешно обработан"
             )
             return result
-
+            
         except ValueError as e:
             logger.warning(f"[{self.__class__.__name__}] Валидация платежа: {e}")
             raise
@@ -250,68 +325,36 @@ class CreditCardService:
             logger.error(f"[{self.__class__.__name__}] Ошибка обработки платежа: {e}", exc_info=True)
             raise
 
-    # --- Дашборд и Прогнозы ---
+    # --- Приватные методы ---
 
-    def get_dashboard_data(self, card_id: int, as_of_date: Optional[date] = None) -> Dict[str, Any]:
+    def _get_system_category_id(self, category_name: str) -> Optional[int]:
         """
-        Собирает все данные для главного экрана диалога кредитной карты.
+        Получает ID системной категории по названию.
         
         Args:
-            card_id: ID кредитной карты
-            as_of_date: дата среза (по умолчанию сегодня)
+            category_name: название системной категории
             
         Returns:
-            Словарь с данными для UI (карта, долги, алерты, прогнозы)
+            ID категории или None, если не найдена
         """
         try:
-            if as_of_date is None:
-                as_of_date = date.today()
-
-            card = self.card_repo.get_by_id(card_id)
-            if not card:
-                raise ValueError(f"Карта ID {card_id} не найдена")
-
-            # 1. Базовые метрики
-            active_tranches = self.tranche_repo.get_active_by_card(card_id)
-            total_debt = sum(t.remaining_amount for t in active_tranches)
-            available_limit = card.credit_limit - total_debt
-
-            # 2. Прогнозы и инсайты
-            burn_rate = self.forecast_service.calculate_burn_rate(card_id, as_of_date)
-            grace_alerts = self.forecast_service.get_grace_saver_alerts(card_id, days_ahead=10, as_of_date=as_of_date)
-            min_payment = self.forecast_service.forecast_min_payment(card_id, as_of_date)
-
-            # 3. Формирование словаря для UI
-            return {
-                "card": {
-                    "id": card.id,
-                    "name": card.name,
-                    "credit_limit": float(card.credit_limit),
-                    "annual_rate": float(card.annual_rate),
-                    "min_payment_percent": float(card.min_payment_percent)
-                },
-                "metrics": {
-                    "total_debt": float(total_debt),
-                    "available_limit": float(available_limit),
-                    "burn_rate": float(burn_rate),
-                    "min_payment": float(min_payment)
-                },
-                "grace_alerts": [
-                    {
-                        "tranche_id": alert.tranche_id,
-                        "amount": float(alert.amount),
-                        "days_left": alert.days_left,
-                        "grace_end_date": alert.grace_end_date.isoformat(),
-                        "retroactive_cost": float(alert.estimated_retroactive_cost)
-                    }
-                    for alert in grace_alerts
-                ],
-                "tranches_count": len(active_tranches)
-            }
-
-        except ValueError as e:
-            logger.warning(f"[{self.__class__.__name__}] Валидация дашборда: {e}")
-            raise
+            category = self.category_repo.get_by_name(category_name)
+            return category.id if category else None
         except Exception as e:
-            logger.error(f"[{self.__class__.__name__}] Ошибка сбора данных дашборда: {e}", exc_info=True)
-            raise
+            logger.error(
+                f"[{self.__class__.__name__}] Ошибка получения категории '{category_name}': {e}",
+                exc_info=True
+            )
+            return None
+
+    def _get_account_by_id(self, account_id: int):
+        """
+        Получает счёт по ID (вспомогательный метод).
+        
+        Args:
+            account_id: ID счёта
+            
+        Returns:
+            Объект Account
+        """
+        return self.account_repo.get_by_id(account_id)

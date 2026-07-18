@@ -1,16 +1,17 @@
 """
 Диалог редактирования настроек кредитной карты (CreditCardSettingsDialog).
 
-Позволяет пользователю изменить параметры существующей карты:
-название, ставку, льготный период, дни выписки/платежа и лимит.
+Позволяет пользователю изменить опциональные параметры существующей карты:
+лимит, ставку, льготный период, дни выписки/платежа и мин. платёж.
+Название карты редактируется через диалог счетов (AccountDialog).
 """
 
 import logging
 from decimal import Decimal
 
 from PySide6.QtWidgets import (
-    QPushButton, QLabel, QLineEdit, QDoubleSpinBox, 
-    QSpinBox, QFormLayout, QDialogButtonBox
+    QPushButton, QLabel, QDoubleSpinBox, 
+    QSpinBox, QFormLayout, QDialogButtonBox, QGroupBox, QVBoxLayout
 )
 from PySide6.QtCore import Signal
 
@@ -29,7 +30,7 @@ class CreditCardSettingsDialog(BaseDialog):
     
     settings_updated = Signal()
 
-    def __init__(self, parent, presenter, card_id: int):
+    def __init__(self, parent, presenter, card_id: int, account_name: str):
         """
         Инициализация диалога настроек.
         
@@ -37,57 +38,28 @@ class CreditCardSettingsDialog(BaseDialog):
             parent: родительское окно
             presenter: экземпляр CreditCardPresenter
             card_id: ID редактируемой карты
+            account_name: название счёта (для отображения в заголовке)
         """
         super().__init__(parent)
         self.presenter = presenter
         self.card_id = card_id
         
-        self.setWindowTitle("Настройки кредитной карты")
-        self.resize(400, 450)
+        self.setWindowTitle(f"Настройки: {account_name}")
+        self.resize(450, 480)
         
         self._setup_ui()
         self._load_data()
 
     def _setup_ui(self):
         """Настраивает интерфейс диалога."""
+        # Информационная плашка
+        info_label = QLabel("💡 Название карты изменяется в диалоге управления счетами.")
+        info_label.setWordWrap(True)
+        info_label.setStyleSheet("color: #757575; margin-bottom: 10px;")
+        self._main_layout.addWidget(info_label)
+
+        form_group = QGroupBox("Параметры кредитной карты (опционально)")
         form_layout = QFormLayout()
-        
-        # Название карты
-        self.name_input = QLineEdit()
-        self.name_input.setPlaceholderText("Например, Сбер Молодёжная")
-        form_layout.addRow("Название карты:", self.name_input)
-        
-        # Годовая ставка %
-        self.rate_spin = QDoubleSpinBox()
-        self.rate_spin.setRange(0.0, 100.0)
-        self.rate_spin.setDecimals(1)
-        self.rate_spin.setSingleStep(0.1)
-        self.rate_spin.setSuffix(" %")
-        form_layout.addRow("Годовая ставка:", self.rate_spin)
-        
-        # Льготный период (месяцев)
-        self.grace_spin = QSpinBox()
-        self.grace_spin.setRange(0, 12)
-        self.grace_spin.setSuffix(" мес.")
-        form_layout.addRow("Льготный период:", self.grace_spin)
-        
-        # Мин. платёж %
-        self.min_payment_spin = QDoubleSpinBox()
-        self.min_payment_spin.setRange(0.0, 100.0)
-        self.min_payment_spin.setDecimals(1)
-        self.min_payment_spin.setSingleStep(0.1)
-        self.min_payment_spin.setSuffix(" %")
-        form_layout.addRow("Мин. платёж:", self.min_payment_spin)
-        
-        # День платежа
-        self.payment_day_spin = QSpinBox()
-        self.payment_day_spin.setRange(1, 31)
-        form_layout.addRow("День платежа:", self.payment_day_spin)
-        
-        # День выписки
-        self.statement_day_spin = QSpinBox()
-        self.statement_day_spin.setRange(1, 31)
-        form_layout.addRow("День выписки:", self.statement_day_spin)
         
         # Кредитный лимит
         self.limit_spin = QDoubleSpinBox()
@@ -95,9 +67,48 @@ class CreditCardSettingsDialog(BaseDialog):
         self.limit_spin.setDecimals(2)
         self.limit_spin.setSingleStep(1000)
         self.limit_spin.setPrefix("₽ ")
+        self.limit_spin.setSpecialValueText("Не указан")
         form_layout.addRow("Кредитный лимит:", self.limit_spin)
         
-        self._main_layout.addLayout(form_layout)
+        # Годовая ставка %
+        self.rate_spin = QDoubleSpinBox()
+        self.rate_spin.setRange(0.0, 100.0)
+        self.rate_spin.setDecimals(1)
+        self.rate_spin.setSingleStep(0.1)
+        self.rate_spin.setSuffix(" %")
+        self.rate_spin.setSpecialValueText("Не указана")
+        form_layout.addRow("Годовая ставка:", self.rate_spin)
+        
+        # Льготный период (дней)
+        self.grace_days_spin = QSpinBox()
+        self.grace_days_spin.setRange(0, 365)
+        self.grace_days_spin.setSuffix(" дн.")
+        self.grace_days_spin.setSpecialValueText("Не указан")
+        form_layout.addRow("Льготный период:", self.grace_days_spin)
+        
+        # Мин. платёж %
+        self.min_payment_spin = QDoubleSpinBox()
+        self.min_payment_spin.setRange(0.0, 100.0)
+        self.min_payment_spin.setDecimals(1)
+        self.min_payment_spin.setSingleStep(0.1)
+        self.min_payment_spin.setSuffix(" %")
+        self.min_payment_spin.setSpecialValueText("Не указан")
+        form_layout.addRow("Мин. платёж:", self.min_payment_spin)
+        
+        # День платежа
+        self.payment_day_spin = QSpinBox()
+        self.payment_day_spin.setRange(1, 31)
+        self.payment_day_spin.setSpecialValueText("Не указан")
+        form_layout.addRow("День платежа:", self.payment_day_spin)
+        
+        # День выписки
+        self.statement_day_spin = QSpinBox()
+        self.statement_day_spin.setRange(1, 31)
+        self.statement_day_spin.setSpecialValueText("Не указан")
+        form_layout.addRow("День выписки:", self.statement_day_spin)
+        
+        form_group.setLayout(form_layout)
+        self._main_layout.addWidget(form_group)
         
         # Кнопки
         button_box = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
@@ -110,45 +121,58 @@ class CreditCardSettingsDialog(BaseDialog):
         try:
             data = self.presenter.get_card_settings(self.card_id)
             
-            self.name_input.setText(data["name"])
-            self.rate_spin.setValue(data["annual_rate"])
-            self.grace_spin.setValue(data["grace_months"])
-            self.min_payment_spin.setValue(data["min_payment_percent"])
-            self.payment_day_spin.setValue(data["payment_day"])
-            self.statement_day_spin.setValue(data["statement_day"])
-            self.limit_spin.setValue(data["credit_limit"])
+            # Устанавливаем значения или оставляем SpecialValueText (None)
+            if data.get("credit_limit") is not None:
+                self.limit_spin.setValue(float(data["credit_limit"]))
+                
+            if data.get("annual_rate") is not None:
+                self.rate_spin.setValue(float(data["annual_rate"]))
+                
+            if data.get("grace_months") is not None:
+                # В новой модели храним дни, но если в БД были месяцы - конвертируем
+                # Для обратной совместимости со старыми данными
+                grace_val = data["grace_months"]
+                self.grace_days_spin.setValue(grace_val * 30 if grace_val < 13 else grace_val)
+                
+            if data.get("min_payment_percent") is not None:
+                # В модели хранится как доля (0.02), в UI показываем проценты (2.0)
+                self.min_payment_spin.setValue(float(data["min_payment_percent"]) * 100)
+                
+            if data.get("payment_day") is not None:
+                self.payment_day_spin.setValue(int(data["payment_day"]))
+                
+            if data.get("statement_day") is not None:
+                self.statement_day_spin.setValue(int(data["statement_day"]))
             
         except ValueError as e:
             self.show_status(str(e), "error")
         except Exception as e:
-            logger.error(f"Ошибка UI при загрузке настроек: {e}", exc_info=True)
+            logger.error(f"[{self.__class__.__name__}] Ошибка UI при загрузке настроек: {e}", exc_info=True)
             self.show_status("Произошла ошибка при загрузке настроек", "error")
 
     def _on_accept(self):
         """Обрабатывает нажатие кнопки 'Сохранить'."""
         try:
-            name = self.name_input.text().strip()
-            if not name:
-                raise ValueError("Название карты не может быть пустым")
-                
+            # Собираем данные. Если значение равно minimum() спинбокса (SpecialValueText), 
+            # то передаём None, иначе реальное значение.
             card_data = {
                 "id": self.card_id,
-                "account_id": 0, # Не меняется в этом диалоге, обновится из БД в сервисе
-                "name": name,
-                "annual_rate": self.rate_spin.value(),
-                "grace_months": self.grace_spin.value(),
-                "min_payment_percent": self.min_payment_spin.value(),
-                "payment_day": self.payment_day_spin.value(),
-                "statement_day": self.statement_day_spin.value(),
-                "credit_limit": self.limit_spin.value()
+                "account_id": 0,  # Не меняется здесь, обновляется из БД в сервисе
+                
+                "credit_limit": self.limit_spin.value() if self.limit_spin.value() > 0 else None,
+                "annual_rate": self.rate_spin.value() if self.rate_spin.value() > 0 else None,
+                "grace_months": self.grace_days_spin.value() // 30 if self.grace_days_spin.value() > 0 else None,
+                "min_payment_percent": self.min_payment_spin.value() / 100 if self.min_payment_spin.value() > 0 else None,
+                "payment_day": self.payment_day_spin.value() if self.payment_day_spin.value() > 0 else None,
+                "statement_day": self.statement_day_spin.value() if self.statement_day_spin.value() > 0 else None,
             }
             
-            self.presenter.update_card_settings(card_data)
+            self.presenter.update_card(card_data)
             self.settings_updated.emit()
             self.accept()
             
         except ValueError as e:
             self.show_status(str(e), "error")
         except Exception as e:
-            logger.error(f"Ошибка UI при сохранении настроек: {e}", exc_info=True)
+            logger.error(f"[{self.__class__.__name__}] Ошибка UI при сохранении настроек: {e}", exc_info=True)
             self.show_status("Произошла ошибка при сохранении настроек", "error")
