@@ -31,8 +31,8 @@ class AccountService:
         """
         Создаёт новый счёт после валидации.
         
-        Если тип счёта — CreditCard, автоматически создаёт запись в таблице credit_cards
-        с опциональными параметрами (лимит, ставка и т.д.) из ключа 'credit_card_data'.
+        Для счёта типа CreditCard принудительно устанавливает
+        initial_balance и current_balance в 0, независимо от переданных данных.
         
         Args:
             account_data: словарь с данными счёта. Для типа CreditCard может содержать
@@ -51,7 +51,12 @@ class AccountService:
 
             self._validate_account_data(account_data)
             
-            # Извлекаем данные кредитной карты перед созданием счёта
+            # Защита: для CreditCard баланс всегда 0
+            if account_data.get("account_type") == "CreditCard":
+                account_data["initial_balance"] = 0.0
+                account_data["current_balance"] = 0.0
+            
+            # Извлекаем данные кредитной карты перед созданием может не быть если из presenter не передали
             credit_card_data = account_data.pop("credit_card_data", None)
             
             account = Account(**account_data)
@@ -176,17 +181,57 @@ class AccountService:
             if result and result["cnt"] > 0:
                 return True
 
-            # 4. Проверяем кредитные карты
-            query = "SELECT account_type FROM accounts WHERE id = ?"
-            result = self.acc_repo.db.fetchone(query, (account_id,))
-            if result and result["account_type"] == "CreditCard":
-                return True
-
             return False
         except Exception as e:
             logger.error(f"[AccountService] Ошибка проверки зависимостей счёта #{account_id}: {e}", exc_info=True)
             raise
     
+    def _get_transaction_count(self, account_id: int) -> int:
+        """
+        Вспомогательный метод для получения количества операций по счёту.
+        Проверяет все связанные таблицы: transactions, transfers, loans.
+
+        Для кредитных карт: считаются только карты с операциями (periods/payments).
+        Пустые карты игнорируются, так как они удаляются вместе со счётом.
+
+        Args:
+            account_id: ID счёта
+
+        Returns:
+            Общее количество связанных операций
+        """
+        try:
+            total_count = 0
+
+            # 1. Транзакции (расходы/доходы)
+            query = "SELECT COUNT(*) AS cnt FROM transactions WHERE account_id = ?"
+            result = self.acc_repo.db.fetchone(query, (account_id,))
+            if result:
+                total_count += result["cnt"]
+
+            # 2. Переводы (отправитель или получатель)
+            query = """
+                SELECT COUNT(*) AS cnt FROM transfers 
+                WHERE from_account_id = ? OR to_account_id = ?
+            """
+            result = self.acc_repo.db.fetchone(query, (account_id, account_id))
+            if result:
+                total_count += result["cnt"]
+
+            # 3. Займы (наш счёт или счёт контрагента)
+            query = """
+                SELECT COUNT(*) AS cnt FROM loans 
+                WHERE account_id = ? OR counterparty_account_id = ?
+            """
+            result = self.acc_repo.db.fetchone(query, (account_id, account_id))
+            if result:
+                total_count += result["cnt"]
+
+            return total_count
+        except Exception as e:
+            logger.error(f"[AccountService] Ошибка подсчёта операций счёта #{account_id}: {e}", exc_info=True)
+            raise
+
     def _create_credit_card_record(
         self, 
         account_id: int, 
@@ -229,10 +274,6 @@ class AccountService:
             card = CreditCard(**card_kwargs)
             card_id = self.card_repo.create(card)
             
-            # logger.info(
-            #     f"[{self.__class__.__name__}] Создана запись кредитной карты ID={card_id} "
-            #     f"для счёта account_id={account_id}"
-            # )
         except ValueError as e:
             logger.warning(f"[{self.__class__.__name__}] Валидация при создании записи карты: {e}")
             raise
@@ -241,73 +282,6 @@ class AccountService:
                 f"[{self.__class__.__name__}] Ошибка создания записи кредитной карты: {e}", 
                 exc_info=True
             )
-            raise
-
-    def _get_transaction_count(self, account_id: int) -> int:
-        """
-        Вспомогательный метод для получения количества операций по счёту.
-        Проверяет все связанные таблицы: transactions, transfers, loans, credit_cards.
-
-        Для кредитных карт: считаются только карты с операциями (periods/payments).
-        Пустые карты игнорируются, так как они удаляются вместе со счётом.
-
-        Args:
-            account_id: ID счёта
-
-        Returns:
-            Общее количество связанных операций
-        """
-        try:
-            total_count = 0
-
-            # 1. Транзакции (расходы/доходы)
-            query = "SELECT COUNT(*) AS cnt FROM transactions WHERE account_id = ?"
-            result = self.acc_repo.db.fetchone(query, (account_id,))
-            if result:
-                total_count += result["cnt"]
-
-            # 2. Переводы (отправитель или получатель)
-            query = """
-                SELECT COUNT(*) AS cnt FROM transfers 
-                WHERE from_account_id = ? OR to_account_id = ?
-            """
-            result = self.acc_repo.db.fetchone(query, (account_id, account_id))
-            if result:
-                total_count += result["cnt"]
-
-            # 3. Займы (наш счёт или счёт контрагента)
-            query = """
-                SELECT COUNT(*) AS cnt FROM loans 
-                WHERE account_id = ? OR counterparty_account_id = ?
-            """
-            result = self.acc_repo.db.fetchone(query, (account_id, account_id))
-            if result:
-                total_count += result["cnt"]
-
-            # 4. Кредитные карты — УМНАЯ ПРОВЕРКА
-            card_query = "SELECT id FROM credit_cards WHERE account_id = ?"
-            card_row = self.acc_repo.db.fetchone(card_query, (account_id,))
-
-            if card_row:
-                card_id = card_row["id"]
-
-                periods_q = "SELECT COUNT(*) AS cnt FROM credit_card_periods WHERE card_id = ?"
-                payments_q = "SELECT COUNT(*) AS cnt FROM credit_card_payments WHERE card_id = ?"
-
-                p_result = self.acc_repo.db.fetchone(periods_q, (card_id,))
-                pay_result = self.acc_repo.db.fetchone(payments_q, (card_id,))
-
-                card_ops = 0
-                if p_result:
-                    card_ops += p_result["cnt"]
-                if pay_result:
-                    card_ops += pay_result["cnt"]
-
-                total_count += card_ops
-
-            return total_count
-        except Exception as e:
-            logger.error(f"[AccountService] Ошибка подсчёта операций счёта #{account_id}: {e}", exc_info=True)
             raise
 
     def get_all_accounts(self) -> List[Account]:

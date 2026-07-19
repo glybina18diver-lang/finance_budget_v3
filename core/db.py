@@ -176,7 +176,7 @@ class Database:
         """)
 
         # Инициализация системных категорий и индексов
-        self._init_system_categories(cursor)
+        self._init_system_parameters(cursor)
         # self.index_tables()
 
         self._conn.commit()
@@ -199,9 +199,9 @@ class Database:
             logger.error(f"[Database] Ошибка создания индексов: {e}", exc_info=True)
             raise
 
-    def _init_system_categories(self, cursor):
+    def _init_system_parameters(self, cursor):
         """
-        Создаёт системные категории, если их ещё нет в БД.
+        Создаёт системные категории, счетов если их ещё нет в БД.
         
         Логирует создание только при реальной вставке (rowcount > 0).
         
@@ -211,6 +211,9 @@ class Database:
         try:
             system_categories = [
                 ("Проценты по кредитным картам", "expense"),
+            ]
+            pre_installed_acc = [
+                ("Наличка", "Cash")
             ]
             
             for name, cat_type in system_categories:
@@ -223,9 +226,20 @@ class Database:
                 # Логируем только если реально была вставка
                 if cursor.rowcount > 0:
                     logger.info(f"Создана системная категория '{name}'")
+
+            for name, account_type in pre_installed_acc:
+                cursor.execute("""
+                    INSERT INTO accounts (name, account_type, is_active)
+                    SELECT ?, ?, 1
+                    WHERE NOT EXISTS (SELECT 1 FROM accounts WHERE name = ?)
+                """, (name, account_type, name))
+                
+                # Логируем только если реально была вставка
+                if cursor.rowcount > 0:
+                    logger.info(f"Создан pre-installed счет '{name}'")
                     
         except Exception as e:
-            logger.error(f"[{self.__class__.__name__}] Ошибка создания системных категорий: {e}", exc_info=True)
+            logger.error(f"[{self.__class__.__name__}] Ошибка создания системных параметров: {e}", exc_info=True)
             raise
 
     # --- Методы доступа к данным ---

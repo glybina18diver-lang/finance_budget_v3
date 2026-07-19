@@ -7,18 +7,20 @@
 
 import logging
 from datetime import date
+from typing import Optional
 
 from PySide6.QtWidgets import (
-    QComboBox, QPushButton, QLabel, QDoubleSpinBox, 
+    QComboBox, QPushButton, QLabel, QLineEdit, 
     QDateEdit, QFormLayout, QDialogButtonBox, QGroupBox, 
-    QVBoxLayout, QHBoxLayout, QCheckBox, QFrame
+    QVBoxLayout, QCheckBox
 )
-from PySide6.QtCore import Signal, Qt
+from PySide6.QtGui import QDoubleValidator
+from PySide6.QtCore import Signal
 
 from ui.dialogs.base_dialog import BaseDialog
+from utils.validators import parse_float
 
 logger = logging.getLogger(__name__)
-
 
 class CreditCardPaymentDialog(BaseDialog):
     """
@@ -71,12 +73,14 @@ class CreditCardPaymentDialog(BaseDialog):
         form_layout = QFormLayout()
         
         # Общая сумма
-        self.total_spin = QDoubleSpinBox()
-        self.total_spin.setRange(0.01, 10000000.00)
-        self.total_spin.setDecimals(2)
-        self.total_spin.setPrefix("₽ ")
-        self.total_spin.valueChanged.connect(self._update_principal_label)
-        form_layout.addRow("Общая сумма:", self.total_spin)
+        self.total_input = QLineEdit()
+        self.total_input.setPlaceholderText("Введите сумму платежа")
+        self.total_input.setFixedHeight(26)
+        total_validator = QDoubleValidator(0.01, 10000000.00, 2)
+        total_validator.setNotation(QDoubleValidator.StandardNotation)
+        self.total_input.setValidator(total_validator)
+        self.total_input.textChanged.connect(self._update_principal_label)
+        form_layout.addRow("Общая сумма:", self.total_input)
         
         # Дата
         self.date_edit = QDateEdit()
@@ -91,8 +95,8 @@ class CreditCardPaymentDialog(BaseDialog):
         form_group.setLayout(form_layout)
         self._main_layout.addWidget(form_group)
         
-        # Блок разбивки платежа
-        self.split_group = QGroupBox("Распределение платежа")
+        # Блок распределения платежа
+        split_group = QGroupBox("Распределение платежа")
         split_layout = QVBoxLayout()
         
         self.split_checkbox = QCheckBox("Часть платежа идёт на погашение процентов")
@@ -101,21 +105,23 @@ class CreditCardPaymentDialog(BaseDialog):
         
         breakdown_form = QFormLayout()
         
-        self.interest_spin = QDoubleSpinBox()
-        self.interest_spin.setRange(0.00, 10000000.00)
-        self.interest_spin.setDecimals(2)
-        self.interest_spin.setPrefix("₽ ")
-        self.interest_spin.setEnabled(False)
-        self.interest_spin.valueChanged.connect(self._update_principal_label)
-        breakdown_form.addRow("На проценты:", self.interest_spin)
+        self.interest_input = QLineEdit()
+        self.interest_input.setPlaceholderText("Введите сумму процентов")
+        self.interest_input.setFixedHeight(26)
+        interest_validator = QDoubleValidator(0.00, 10000000.00, 2)
+        interest_validator.setNotation(QDoubleValidator.StandardNotation)
+        self.interest_input.setValidator(interest_validator)
+        self.interest_input.setEnabled(False)
+        self.interest_input.textChanged.connect(self._update_principal_label)
+        breakdown_form.addRow("На проценты:", self.interest_input)
         
         self.principal_label = QLabel("0.00 ₽")
         self.principal_label.setStyleSheet("font-weight: bold;")
         breakdown_form.addRow("На основной долг (авто):", self.principal_label)
         
         split_layout.addLayout(breakdown_form)
-        self.split_group.setLayout(split_layout)
-        self._main_layout.addWidget(self.split_group)
+        split_group.setLayout(split_layout)
+        self._main_layout.addWidget(split_group)
         
         # Кнопки
         self.button_box = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
@@ -148,16 +154,16 @@ class CreditCardPaymentDialog(BaseDialog):
 
     def _on_split_toggled(self, checked: bool):
         """Обрабатывает переключение чекбокса распределения."""
-        self.interest_spin.setEnabled(checked)
+        self.interest_input.setEnabled(checked)
         if not checked:
-            self.interest_spin.setValue(0.00)
+            self.interest_input.clear()
         self._update_principal_label()
 
     def _update_principal_label(self):
         """Автоматически пересчитывает сумму на погашение основного долга."""
         try:
-            total = self.total_spin.value()
-            interest = self.interest_spin.value() if self.interest_spin.isEnabled() else 0.00
+            total = parse_float(self.total_input.text()) or 0.0
+            interest = parse_float(self.interest_input.text()) or 0.0 if self.interest_input.isEnabled() else 0.0
             
             principal = total - interest
             
@@ -173,33 +179,29 @@ class CreditCardPaymentDialog(BaseDialog):
                 self.principal_label.setStyleSheet("font-weight: bold; color: #2e7d32;")
         except Exception as e:
             logger.error(f"[{self.__class__.__name__}] Ошибка UI при пересчёте: {e}", exc_info=True)
-
+    
     def _on_pay(self):
         """Обрабатывает нажатие кнопки 'Внести платёж'."""
         try:
-            total = self.total_spin.value()
-            if total <= 0:
+            total = parse_float(self.total_input.text())
+            if total is None or total <= 0:
                 raise ValueError("Общая сумма платежа должна быть больше нуля")
                 
             account_id = self.account_combo.currentData()
             if not account_id:
                 raise ValueError("Не выбран счёт для списания")
                 
-            interest = self.interest_spin.value() if self.interest_spin.isEnabled() else 0.00
+            interest = parse_float(self.interest_input.text()) or 0.0 if self.interest_input.isEnabled() else 0.0
             
             # Расчёт тела долга
             principal = total - interest
-
-            # Формируем сообщение о превешении платежа над долгом
-            msg = (
-                    f"Сумма погашения тела долга ({principal:,.2f} ₽) превышает текущий долг ({self.current_debt:,.2f} ₽). "
-                    f"Увеличьте сумму процентов или уменьшите общую сумму платежа.".replace(",", " ")
-                )
             
             # Проверка: тело долга не должно превышать сумму долга
             if principal > self.current_debt:
-                self.show_error(msg)
-                raise ValueError(msg)
+                raise ValueError(
+                    f"Сумма погашения тела долга ({principal:,.2f} ₽) превышает текущий долг ({self.current_debt:,.2f} ₽). "
+                    f"Увеличьте сумму процентов или уменьшите общую сумму платежа.".replace(",", " ")
+                )
             
             if principal < 0:
                 raise ValueError("Сумма процентов не может превышать общую сумму платежа")

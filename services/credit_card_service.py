@@ -105,18 +105,18 @@ class CreditCardService:
             logger.error(f"[{self.__class__.__name__}] Ошибка обновления карты: {e}", exc_info=True)
             raise
 
-    def delete_card(self, card_id: int):
+    def hide_card(self, card_id: int):
         """
-        Мягко удаляет кредитную карту (is_active = 0).
+        Скрывает кредитную карту (is_active = 0).
         
         Args:
             card_id: ID кредитной карты
         """
         try:
-            self.card_repo.delete(card_id)
-            logger.info(f"[{self.__class__.__name__}] Мягко удалена карта ID={card_id}")
+            self.card_repo.hide(card_id)
+            logger.info(f"[{self.__class__.__name__}] Скрыта карта ID={card_id}")
         except Exception as e:
-            logger.error(f"[{self.__class__.__name__}] Ошибка удаления карты: {e}", exc_info=True)
+            logger.error(f"[{self.__class__.__name__}] Ошибка скрытия карты: {e}", exc_info=True)
             raise
 
     def get_card_by_account(self, account_id: int) -> Optional[CreditCard]:

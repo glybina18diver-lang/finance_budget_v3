@@ -69,11 +69,11 @@ class CreditCardDialog(BaseDialog):
         self.btn_payment.setEnabled(False)
         top_layout.addWidget(self.btn_payment)
         
-        self.btn_delete = QPushButton("🗑️ Удалить")
-        self.btn_delete.clicked.connect(self._on_delete_card)
-        self.btn_delete.setEnabled(False)
-        self.btn_delete.setStyleSheet("QPushButton { color: red; }")
-        top_layout.addWidget(self.btn_delete)
+        self.btn_hide = QPushButton("Скрыть карту")
+        self.btn_hide.clicked.connect(self._on_hide_card)
+        self.btn_hide.setEnabled(False)
+        self.btn_hide.setStyleSheet("QPushButton { color: red; }")
+        top_layout.addWidget(self.btn_hide)
         
         self._main_layout.addLayout(top_layout)
         
@@ -193,7 +193,7 @@ class CreditCardDialog(BaseDialog):
         """Включает или отключает кнопки действий для карты."""
         self.btn_settings.setEnabled(enabled)
         self.btn_payment.setEnabled(enabled)
-        self.btn_delete.setEnabled(enabled)
+        self.btn_hide.setEnabled(enabled)
 
     def _load_dashboard(self):
         """Загружает и отображает данные вкладки 'Обзор'."""
@@ -303,29 +303,29 @@ class CreditCardDialog(BaseDialog):
             logger.error(f"[{self.__class__.__name__}] Ошибка UI при открытии диалога платежа: {e}", exc_info=True)
             self.show_status("Произошла ошибка при открытии диалога платежа", "error")
 
-    def _on_delete_card(self):
-        """Мягко удаляет текущую карту."""
+    def _on_hide_card(self):
+        """Скрывает из UI текущую карту."""
         try:
             card_name = self.card_combo.currentText()
             reply = QMessageBox.question(
                 self, 
                 "Подтверждение удаления", 
-                f"Вы уверены, что хотите удалить настройки карты '{card_name}'?\n"
+                f"Вы уверены, что хотите скрыть карту '{card_name}'?\n"
                 f"Счёт и все транзакции останутся без изменений.",
                 QMessageBox.Yes | QMessageBox.No
             )
             
             if reply == QMessageBox.Yes:
-                self.presenter.delete_card(self.current_card_id)
-                self.show_status(f"Настройки карты '{card_name}' удалены", "success")
+                self.presenter.hide_card(self.current_card_id)
+                self.show_status(f"Карта '{card_name}' скрыта", "success")
                 self._load_cards()
                 self.data_updated.emit()
                 
         except ValueError as e:
             self.show_status(str(e), "error")
         except Exception as e:
-            logger.error(f"[{self.__class__.__name__}] Ошибка UI при удалении карты: {e}", exc_info=True)
-            self.show_status("Произошла ошибка при удалении карты", "error")
+            logger.error(f"[{self.__class__.__name__}] Ошибка UI при скрытии карты: {e}", exc_info=True)
+            self.show_error("Произошла ошибка при скрытии карты")
 
     # --- Хелперы ---
 

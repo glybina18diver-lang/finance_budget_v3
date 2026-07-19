@@ -4,12 +4,12 @@ from datetime import datetime
 from typing import List
 from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QTreeWidget, QTreeWidgetItem,
-    QLabel, QLineEdit, QComboBox, QFrame, QMessageBox, QWidget, QHeaderView, QDateEdit
+    QLabel, QLineEdit, QComboBox, QFrame, QMessageBox, QWidget, QHeaderView, QDateEdit, QPushButton, QTextEdit
 )
 from PySide6.QtCore import Qt, QTimer, QDate
 from PySide6.QtGui import QFont, QDoubleValidator
 
-from ui.widgets.colored_button import ColoredButton
+from ui.widgets.colored_button import ColoredButton, CompactButton
 from ui.dialogs.base_dialog import BaseDialog
 from core.models import Transaction, Account, Category
 
@@ -112,6 +112,25 @@ class OperationDialog(BaseDialog):
 
         panel.setLayout(layout)
         return panel
+    
+    def keyPressEvent(self, event):
+        """
+        Обрабатывает нажатие клавиш в диалоге операций.
+        
+        Перехватывает Enter для вызова _get_form_data,
+        игнорируя другие виджеты, которые могут перехватить событие.
+        
+        Args:
+            event: событие нажатия клавиши
+        """
+        if event.key() in (Qt.Key_Return, Qt.Key_Enter):
+            # Игнорируем, если фокус в многострочном поле (чтобы не ломать перенос строки)
+            focus_widget = self.focusWidget()
+            if not isinstance(focus_widget, QTextEdit):
+                self._get_form_data()
+                event.accept()
+                return
+        super().keyPressEvent(event)
 
     def _create_input_panel(self) -> QWidget:
         """Панель ввода новой операции."""
@@ -169,11 +188,13 @@ class OperationDialog(BaseDialog):
         self.description_input.setMinimumWidth(180)
         layout.addWidget(self.description_input)
 
-        # Кнопка добавления
-        add_btn = ColoredButton("✅ Добавить", "#28a745")
-        add_btn.clicked.connect(self._get_form_data)
-        layout.addWidget(add_btn)
-
+        self.add_btn = CompactButton("Добавить")
+        self.add_btn.clicked.connect(self._get_form_data)
+        
+        # Делаем кнопку активной по нажатию Enter
+        self.add_btn.setDefault(True) 
+        
+        layout.addWidget(self.add_btn)
         layout.addStretch()
         panel.setLayout(layout)
         return panel
@@ -236,8 +257,8 @@ class OperationDialog(BaseDialog):
         """Сбрасывает поля ввода формы к значениям по умолчанию."""
         self.amount_input.clear()
         self.description_input.clear()
-        self.date_input.setDate(QDate.currentDate())
-        self.type_combo.setCurrentIndex(0)  # Расход
+        # self.date_input.setDate(QDate.currentDate())
+        # self.type_combo.setCurrentIndex(0)  # Расход
         #self.show_status("Форма очищена", "info")
 
     def create_caches(self, accounts: List[Account], categories: List[Category]):

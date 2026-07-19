@@ -2,28 +2,18 @@
 from typing import List, Optional
 from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QGroupBox, QTreeWidget, QTreeWidgetItem,
-    QLabel, QLineEdit, QComboBox, QGridLayout, QHBoxLayout, QDialogButtonBox
+    QLabel, QLineEdit, QComboBox, QGridLayout, QHBoxLayout, QDialogButtonBox, QMessageBox, QMenu
 )
 from PySide6.QtCore import Qt, QTimer
-from PySide6.QtGui import QKeyEvent
+from PySide6.QtGui import QDoubleValidator
 import logging
 from datetime import datetime, date
-
-logger = logging.getLogger(__name__)
-
-from PySide6.QtWidgets import (
-    QDialog, QVBoxLayout, QHBoxLayout, QTreeWidget, QTreeWidgetItem,
-    QLabel, QLineEdit, QComboBox, QPushButton, QFrame, QMessageBox,
-    QScrollArea, QTextEdit, QProgressBar, QGroupBox, QGridLayout,
-    QHeaderView, QSplitter, QMenu, QApplication, QWidget,
-    QDialogButtonBox, QStatusBar, QProgressDialog, QRadioButton
-)
-from PySide6.QtGui import QFont, QDoubleValidator
 
 from ui.widgets.colored_button import CompactButton, ColoredDialogButtonBox
 from ui.dialogs.base_dialog import BaseDialog
 from core.models import Account
 
+logger = logging.getLogger(__name__)
 
 class AccountDialog(BaseDialog):
     """Диалог управления счетами (чистый UI-слой)."""
@@ -362,19 +352,25 @@ class AccountDialog(BaseDialog):
         return data
 
     def _reset_form(self):
-        """Сбрасывает форму ввода к состоянию 'новый счёт'."""
-        self.name_input.clear()
-        self.initial_balance_input.clear()
-        #self.type_combo.setCurrentIndex(0)
-        self.currency_combo.setCurrentIndex(0)
-        self.editing_account_id = None
-        self.add_button.setEnabled(True)
-        self.edit_button.setEnabled(False)
-        self.cancel_button.setEnabled(False)
+        """Сбрасывает форму ввода к состоянию 'новый счёт'.
+        Очищает поля ввода, но сохраняет выбранный тип счёта.
+        В конце вызывает _on_type_change() для применения логики
+        скрытия/показа полей к текущему значению ComboBox.
+        """
+        try:
+            self.name_input.clear()
+            self.initial_balance_input.clear()
+            self.currency_combo.setCurrentIndex(0)
+            self.editing_account_id = None
+            self.add_button.setEnabled(True)
+            self.edit_button.setEnabled(False)
 
-    def _stub_method(self):
-        """Заглушка для нереализованных функций."""
-        self.show_status("Функция в разработке", "warning")
+            self._on_type_change()
+            
+        except Exception as e:
+            logger.error(f"[{self.__class__.__name__}] Ошибка при сбросе формы: {e}", exc_info=True)
+
+        self.cancel_button.setEnabled(False)
 
     # =================== Контракт View <-> Presenter ===================
 

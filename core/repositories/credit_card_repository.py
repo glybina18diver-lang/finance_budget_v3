@@ -224,9 +224,9 @@ class CreditCardRepository:
             logger.error(f"[{self.__class__.__name__}] Ошибка обновления карты {card.id}: {e}", exc_info=True)
             raise
 
-    def delete(self, card_id: int):
+    def hide(self, card_id: int):
         """
-        Мягко удаляет карту (устанавливает is_active = 0).
+        Скрывает карту (устанавливает is_active = 0).
         
         Args:
             card_id: ID кредитной карты
@@ -234,9 +234,9 @@ class CreditCardRepository:
         try:
             query = "UPDATE credit_cards SET is_active = 0 WHERE id = ?"
             self.db.execute(query, (card_id,))
-            logger.info(f"[{self.__class__.__name__}] Мягко удалена карта ID={card_id}")
+            logger.info(f"[{self.__class__.__name__}] Карта ID={card_id} скрыта")
         except Exception as e:
-            logger.error(f"[{self.__class__.__name__}] Ошибка удаления карты {card_id}: {e}", exc_info=True)
+            logger.error(f"[{self.__class__.__name__}] Ошибка скрытия карты {card_id}: {e}", exc_info=True)
             raise
 
     def hard_delete(self, card_id: int):

@@ -8,14 +8,17 @@
 
 import logging
 from decimal import Decimal
+from typing import Optional
 
 from PySide6.QtWidgets import (
     QPushButton, QLabel, QDoubleSpinBox, 
-    QSpinBox, QFormLayout, QDialogButtonBox, QGroupBox, QVBoxLayout
+    QSpinBox, QFormLayout, QDialogButtonBox, QGroupBox, QVBoxLayout, QLineEdit
 )
 from PySide6.QtCore import Signal
+from PySide6.QtGui import QDoubleValidator, QIntValidator
 
 from ui.dialogs.base_dialog import BaseDialog
+from utils.validators import parse_float, parse_int  
 
 logger = logging.getLogger(__name__)
 
@@ -62,50 +65,55 @@ class CreditCardSettingsDialog(BaseDialog):
         form_layout = QFormLayout()
         
         # Кредитный лимит
-        self.limit_spin = QDoubleSpinBox()
-        self.limit_spin.setRange(0.0, 10000000.0)
-        self.limit_spin.setDecimals(2)
-        self.limit_spin.setSingleStep(1000)
-        self.limit_spin.setPrefix("₽ ")
-        self.limit_spin.setSpecialValueText("Не указан")
-        form_layout.addRow("Кредитный лимит:", self.limit_spin)
+        self.limit_input = QLineEdit()
+        self.limit_input.setPlaceholderText("Например: 100000")
+        self.limit_input.setFixedHeight(26)
+        limit_validator = QDoubleValidator(0.0, 999999999.0, 0)
+        limit_validator.setNotation(QDoubleValidator.StandardNotation)
+        self.limit_input.setValidator(limit_validator)
+        form_layout.addRow("Кредитный лимит:", self.limit_input)
         
         # Годовая ставка %
-        self.rate_spin = QDoubleSpinBox()
-        self.rate_spin.setRange(0.0, 100.0)
-        self.rate_spin.setDecimals(1)
-        self.rate_spin.setSingleStep(0.1)
-        self.rate_spin.setSuffix(" %")
-        self.rate_spin.setSpecialValueText("Не указана")
-        form_layout.addRow("Годовая ставка:", self.rate_spin)
+        self.rate_input = QLineEdit()
+        self.rate_input.setPlaceholderText("Например: 49.8")
+        self.rate_input.setFixedHeight(26)
+        rate_validator = QDoubleValidator(0.0, 100.0, 1)
+        rate_validator.setNotation(QDoubleValidator.StandardNotation)
+        self.rate_input.setValidator(rate_validator)
+        form_layout.addRow("Годовая ставка (%):", self.rate_input)
         
         # Льготный период (дней)
-        self.grace_days_spin = QSpinBox()
-        self.grace_days_spin.setRange(0, 365)
-        self.grace_days_spin.setSuffix(" дн.")
-        self.grace_days_spin.setSpecialValueText("Не указан")
-        form_layout.addRow("Льготный период:", self.grace_days_spin)
+        self.grace_days_input = QLineEdit()
+        self.grace_days_input.setPlaceholderText("Например: 120")
+        self.grace_days_input.setFixedHeight(26)
+        grace_validator = QIntValidator(0, 365)
+        self.grace_days_input.setValidator(grace_validator)
+        form_layout.addRow("Льготный период (дн.):", self.grace_days_input)
         
         # Мин. платёж %
-        self.min_payment_spin = QDoubleSpinBox()
-        self.min_payment_spin.setRange(0.0, 100.0)
-        self.min_payment_spin.setDecimals(1)
-        self.min_payment_spin.setSingleStep(0.1)
-        self.min_payment_spin.setSuffix(" %")
-        self.min_payment_spin.setSpecialValueText("Не указан")
-        form_layout.addRow("Мин. платёж:", self.min_payment_spin)
+        self.min_payment_input = QLineEdit()
+        self.min_payment_input.setPlaceholderText("Например: 2.0")
+        self.min_payment_input.setFixedHeight(26)
+        min_pay_validator = QDoubleValidator(0.0, 100.0, 1)
+        min_pay_validator.setNotation(QDoubleValidator.StandardNotation)
+        self.min_payment_input.setValidator(min_pay_validator)
+        form_layout.addRow("Мин. платёж (%):", self.min_payment_input)
         
         # День платежа
-        self.payment_day_spin = QSpinBox()
-        self.payment_day_spin.setRange(1, 31)
-        self.payment_day_spin.setSpecialValueText("Не указан")
-        form_layout.addRow("День платежа:", self.payment_day_spin)
+        self.payment_day_input = QLineEdit()
+        self.payment_day_input.setPlaceholderText("1-31")
+        self.payment_day_input.setFixedHeight(26)
+        pay_day_validator = QIntValidator(1, 31)
+        self.payment_day_input.setValidator(pay_day_validator)
+        form_layout.addRow("День платежа:", self.payment_day_input)
         
         # День выписки
-        self.statement_day_spin = QSpinBox()
-        self.statement_day_spin.setRange(1, 31)
-        self.statement_day_spin.setSpecialValueText("Не указан")
-        form_layout.addRow("День выписки:", self.statement_day_spin)
+        self.statement_day_input = QLineEdit()
+        self.statement_day_input.setPlaceholderText("1-31")
+        self.statement_day_input.setFixedHeight(26)
+        stmt_day_validator = QIntValidator(1, 31)
+        self.statement_day_input.setValidator(stmt_day_validator)
+        form_layout.addRow("День выписки:", self.statement_day_input)
         
         form_group.setLayout(form_layout)
         self._main_layout.addWidget(form_group)
@@ -121,28 +129,27 @@ class CreditCardSettingsDialog(BaseDialog):
         try:
             data = self.presenter.get_card_settings(self.card_id)
             
-            # Устанавливаем значения или оставляем SpecialValueText (None)
             if data.get("credit_limit") is not None:
-                self.limit_spin.setValue(float(data["credit_limit"]))
+                self.limit_input.setText(str(data["credit_limit"]))
                 
             if data.get("annual_rate") is not None:
-                self.rate_spin.setValue(float(data["annual_rate"]))
+                self.rate_input.setText(str(data["annual_rate"]))
                 
             if data.get("grace_months") is not None:
-                # В новой модели храним дни, но если в БД были месяцы - конвертируем
-                # Для обратной совместимости со старыми данными
+                # Конвертируем месяцы в дни для отображения (если это старая логика)
                 grace_val = data["grace_months"]
-                self.grace_days_spin.setValue(grace_val * 30 if grace_val < 13 else grace_val)
+                days = grace_val * 30 if grace_val < 13 else grace_val
+                self.grace_days_input.setText(str(days))
                 
             if data.get("min_payment_percent") is not None:
-                # В модели хранится как доля (0.02), в UI показываем проценты (2.0)
-                self.min_payment_spin.setValue(float(data["min_payment_percent"]) * 100)
+                # Конвертируем долю в проценты (0.02 -> 2.0)
+                self.min_payment_input.setText(str(data["min_payment_percent"] * 100))
                 
             if data.get("payment_day") is not None:
-                self.payment_day_spin.setValue(int(data["payment_day"]))
+                self.payment_day_input.setText(str(data["payment_day"]))
                 
             if data.get("statement_day") is not None:
-                self.statement_day_spin.setValue(int(data["statement_day"]))
+                self.statement_day_input.setText(str(data["statement_day"]))
             
         except ValueError as e:
             self.show_status(str(e), "error")
@@ -153,18 +160,16 @@ class CreditCardSettingsDialog(BaseDialog):
     def _on_accept(self):
         """Обрабатывает нажатие кнопки 'Сохранить'."""
         try:
-            # Собираем данные. Если значение равно minimum() спинбокса (SpecialValueText), 
-            # то передаём None, иначе реальное значение.
             card_data = {
                 "id": self.card_id,
-                "account_id": 0,  # Не меняется здесь, обновляется из БД в сервисе
+                "account_id": 0,  # Не меняется здесь
                 
-                "credit_limit": self.limit_spin.value() if self.limit_spin.value() > 0 else None,
-                "annual_rate": self.rate_spin.value() if self.rate_spin.value() > 0 else None,
-                "grace_months": self.grace_days_spin.value() // 30 if self.grace_days_spin.value() > 0 else None,
-                "min_payment_percent": self.min_payment_spin.value() / 100 if self.min_payment_spin.value() > 0 else None,
-                "payment_day": self.payment_day_spin.value() if self.payment_day_spin.value() > 0 else None,
-                "statement_day": self.statement_day_spin.value() if self.statement_day_spin.value() > 0 else None,
+                "credit_limit": parse_float(self.limit_input.text()),
+                "annual_rate": parse_float(self.rate_input.text()),
+                "grace_months": parse_int(self.grace_days_input.text()) // 30 if parse_int(self.grace_days_input.text()) else None,
+                "min_payment_percent": parse_float(self.min_payment_input.text()) / 100 if parse_float(self.min_payment_input.text()) else None,
+                "payment_day": parse_int(self.payment_day_input.text()),
+                "statement_day": parse_int(self.statement_day_input.text()),
             }
             
             self.presenter.update_card(card_data)
