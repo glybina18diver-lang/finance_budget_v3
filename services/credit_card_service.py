@@ -2,7 +2,7 @@
 Главный сервис для модуля кредитных карт (CreditCardService).
 
 Отвечает за CRUD операций с настройками карт и внесение платежей.
-Платеж разбивается на: перевод (тело долга) + расход (комиссии) + расход (проценты).
+Платеж разбивается на: перевод (тело долга)  + расход (проценты).
 """
 
 import logging
@@ -43,7 +43,7 @@ class CreditCardService:
             card_repo: репозиторий кредитных карт
             category_repo: репозиторий категорий (для получения ID системных категорий)
             transfer_service: сервис переводов (для погашения тела долга)
-            transaction_service: сервис транзакций (для записи комиссий и процентов)
+            transaction_service: сервис транзакций (для записи процентов)
         """
         self.card_repo = card_repo
         self.category_repo = category_repo
@@ -204,7 +204,6 @@ class CreditCardService:
         card_id: int,
         amount: Decimal,
         interest_amount: Decimal,
-        commission_amount: Decimal,
         payment_date: date,
         from_account_id: int
     ) -> Dict[str, Any]:
@@ -213,19 +212,17 @@ class CreditCardService:
         
         Разбивает платёж на три операции:
         1. Перевод (тело долга) - уменьшает долг по кредитке
-        2. Расход (комиссии) - записывается в категорию "Комиссии по кредитным картам"
         3. Расход (проценты) - записывается в категорию "Проценты по кредитным картам"
         
         Args:
             card_id: ID кредитной карты
             amount: общая сумма платежа
             interest_amount: сумма на погашение процентов (может быть 0)
-            commission_amount: сумма на погашение комиссий (может быть 0)
             payment_date: дата платежа
             from_account_id: ID счёта-источника
             
         Returns:
-            Словарь с детализацией: principal_amount, interest_amount, commission_amount
+            Словарь с детализацией: principal_amount, interest_amount
             
         Raises:
             ValueError: при невалидных данных (сумма <= 0, проценты > суммы и т.д.)
@@ -237,10 +234,8 @@ class CreditCardService:
                 raise ValueError("Сумма платежа должна быть положительной")
             if interest_amount < 0:
                 raise ValueError("Сумма процентов не может быть отрицательной")
-            if commission_amount < 0:
-                raise ValueError("Сумма комиссий не может быть отрицательной")
-            if interest_amount + commission_amount > amount:
-                raise ValueError("Сумма процентов и комиссий не может превышать общую сумму платежа")
+            if interest_amount > amount:
+                raise ValueError("Сумма процентов не может превышать общую сумму платежа")
             
             # Получаем карту
             card = self.card_repo.get_by_id(card_id)
@@ -248,12 +243,11 @@ class CreditCardService:
                 raise ValueError(f"Карта ID {card_id} не найдена")
             
             # Вычисляем сумму на погашение тела долга
-            principal_amount = (amount - interest_amount - commission_amount).quantize(
+            principal_amount = (amount - interest_amount).quantize(
                 Decimal("0.01"), rounding=ROUND_HALF_UP
             )
             
             # Получаем ID системных категорий
-            commission_category_id = self._get_system_category_id("Комиссии по кредитным картам")
             interest_category_id = self._get_system_category_id("Проценты по кредитным картам")
             
             # 1. Перевод (тело долга)
@@ -271,25 +265,8 @@ class CreditCardService:
                     f"[{self.__class__.__name__}] Создан перевод на {principal_amount} ₽ "
                     f"для погашения тела долга"
                 )
-            
-            # 2. Расход (комиссии)
-            if commission_amount > 0:
-                if not commission_category_id:
-                    raise ValueError("Системная категория 'Комиссии по кредитным картам' не найдена")
-                
-                self.transaction_service.create_transaction(
-                    account_id=from_account_id,
-                    raw_amount=str(commission_amount),
-                    trans_type="expense",
-                    category_id=commission_category_id,
-                    date_str=str(payment_date.isoformat()),
-                    description=f"Комиссия по {card.account_name}"
-                )
-                logger.info(
-                    f"[{self.__class__.__name__}] Записан расход на комиссии {commission_amount} ₽"
-                )
-            
-            # 3. Расход (проценты)
+
+            # 2. Расход (проценты)
             if interest_amount > 0:
                 if not interest_category_id:
                     raise ValueError("Системная категория 'Проценты по кредитным картам' не найдена")
@@ -309,7 +286,6 @@ class CreditCardService:
             result = {
                 "principal_amount": float(principal_amount),
                 "interest_amount": float(interest_amount),
-                "commission_amount": float(commission_amount),
                 "total_amount": float(amount)
             }
             

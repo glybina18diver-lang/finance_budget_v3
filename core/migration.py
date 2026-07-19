@@ -85,8 +85,7 @@ def migrate_schema(conn: Optional[sqlite3.Connection]) -> None:
 
     # --- categories: добавление системных категорий (если отсутствуют) ---
     system_categories = [
-        ('Комиссии по кредитным картам', 'expense'),
-        ('Проценты по кредитным картам', 'expense'),
+        ('Проценты по кредитным картам', 'expense')
     ]
     
     for name, cat_type in system_categories:

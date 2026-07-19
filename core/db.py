@@ -68,20 +68,6 @@ class Database:
             )
         """)
 
-        # Инициализация системных категорий (безопасная вставка)
-        cursor.execute("""
-            INSERT INTO categories (name, cat_type, is_system, is_active)
-            SELECT 'Комиссии по кредитным картам', 'expense', 1, 1
-            WHERE NOT EXISTS (SELECT 1 FROM categories WHERE name = 'Комиссии по кредитным картам' AND is_system = 1);
-        """)
-        logger.debug(f"Создана системная категория 'Комиссии по кредитным картам'")
-        cursor.execute("""
-            INSERT INTO categories (name, cat_type, is_system, is_active)
-            SELECT 'Проценты по кредитным картам', 'expense', 1, 1
-            WHERE NOT EXISTS (SELECT 1 FROM categories WHERE name = 'Проценты по кредитным картам' AND is_system = 1);
-        """)
-        logger.debug(f"Создана системная категория 'Проценты по кредитным картам'")
-
         # 3. Transactions (Транзакции)
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS transactions (
@@ -189,6 +175,10 @@ class Database:
             )
         """)
 
+        # Инициализация системных категорий и индексов
+        self._init_system_categories(cursor)
+        # self.index_tables()
+
         self._conn.commit()
         logger.info("[Database] Все таблицы схемы V3 успешно созданы/проверены")
 
@@ -207,6 +197,35 @@ class Database:
             logger.info("[Database] Индексы для таблиц tranches, interest_accruals, statements созданы/проверены")
         except Exception as e:
             logger.error(f"[Database] Ошибка создания индексов: {e}", exc_info=True)
+            raise
+
+    def _init_system_categories(self, cursor):
+        """
+        Создаёт системные категории, если их ещё нет в БД.
+        
+        Логирует создание только при реальной вставке (rowcount > 0).
+        
+        Args:
+            cursor: активный курсор SQLite
+        """
+        try:
+            system_categories = [
+                ("Проценты по кредитным картам", "expense"),
+            ]
+            
+            for name, cat_type in system_categories:
+                cursor.execute("""
+                    INSERT INTO categories (name, cat_type, is_system, is_active)
+                    SELECT ?, ?, 1, 1
+                    WHERE NOT EXISTS (SELECT 1 FROM categories WHERE name = ? AND is_system = 1)
+                """, (name, cat_type, name))
+                
+                # Логируем только если реально была вставка
+                if cursor.rowcount > 0:
+                    logger.info(f"Создана системная категория '{name}'")
+                    
+        except Exception as e:
+            logger.error(f"[{self.__class__.__name__}] Ошибка создания системных категорий: {e}", exc_info=True)
             raise
 
     # --- Методы доступа к данным ---

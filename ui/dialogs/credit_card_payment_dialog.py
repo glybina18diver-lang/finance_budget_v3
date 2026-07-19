@@ -95,7 +95,7 @@ class CreditCardPaymentDialog(BaseDialog):
         self.split_group = QGroupBox("Распределение платежа")
         split_layout = QVBoxLayout()
         
-        self.split_checkbox = QCheckBox("Разбить платёж на тело долга, проценты и комиссии")
+        self.split_checkbox = QCheckBox("Часть платежа идёт на погашение процентов")
         self.split_checkbox.toggled.connect(self._on_split_toggled)
         split_layout.addWidget(self.split_checkbox)
         
@@ -108,14 +108,6 @@ class CreditCardPaymentDialog(BaseDialog):
         self.interest_spin.setEnabled(False)
         self.interest_spin.valueChanged.connect(self._update_principal_label)
         breakdown_form.addRow("На проценты:", self.interest_spin)
-        
-        self.commission_spin = QDoubleSpinBox()
-        self.commission_spin.setRange(0.00, 10000000.00)
-        self.commission_spin.setDecimals(2)
-        self.commission_spin.setPrefix("₽ ")
-        self.commission_spin.setEnabled(False)
-        self.commission_spin.valueChanged.connect(self._update_principal_label)
-        breakdown_form.addRow("На комиссии:", self.commission_spin)
         
         self.principal_label = QLabel("0.00 ₽")
         self.principal_label.setStyleSheet("font-weight: bold;")
@@ -155,12 +147,10 @@ class CreditCardPaymentDialog(BaseDialog):
             self.show_status("Произошла ошибка при загрузке счетов", "error")
 
     def _on_split_toggled(self, checked: bool):
-        """Обрабатывает переключение чекбокса разбивки платежа."""
+        """Обрабатывает переключение чекбокса распределения."""
         self.interest_spin.setEnabled(checked)
-        self.commission_spin.setEnabled(checked)
         if not checked:
             self.interest_spin.setValue(0.00)
-            self.commission_spin.setValue(0.00)
         self._update_principal_label()
 
     def _update_principal_label(self):
@@ -168,18 +158,21 @@ class CreditCardPaymentDialog(BaseDialog):
         try:
             total = self.total_spin.value()
             interest = self.interest_spin.value() if self.interest_spin.isEnabled() else 0.00
-            commission = self.commission_spin.value() if self.commission_spin.isEnabled() else 0.00
             
-            principal = total - interest - commission
+            principal = total - interest
             
             if principal < 0:
                 self.principal_label.setText(f"{principal:,.2f} ₽".replace(",", " "))
                 self.principal_label.setStyleSheet("font-weight: bold; color: #d32f2f;")
+            elif principal > self.current_debt:
+                # Тело долга превышает сумму долга — предупреждение
+                self.principal_label.setText(f"{principal:,.2f} ₽ (превышает долг!)".replace(",", " "))
+                self.principal_label.setStyleSheet("font-weight: bold; color: #ff6f00;")
             else:
                 self.principal_label.setText(f"{principal:,.2f} ₽".replace(",", " "))
                 self.principal_label.setStyleSheet("font-weight: bold; color: #2e7d32;")
         except Exception as e:
-            logger.error(f"[{self.__class__.__name__}] Ошибка UI при пересчёте основного долга: {e}", exc_info=True)
+            logger.error(f"[{self.__class__.__name__}] Ошибка UI при пересчёте: {e}", exc_info=True)
 
     def _on_pay(self):
         """Обрабатывает нажатие кнопки 'Внести платёж'."""
@@ -193,10 +186,23 @@ class CreditCardPaymentDialog(BaseDialog):
                 raise ValueError("Не выбран счёт для списания")
                 
             interest = self.interest_spin.value() if self.interest_spin.isEnabled() else 0.00
-            commission = self.commission_spin.value() if self.commission_spin.isEnabled() else 0.00
             
-            if interest + commission > total:
-                raise ValueError("Сумма процентов и комиссий не может превышать общую сумму платежа")
+            # Расчёт тела долга
+            principal = total - interest
+
+            # Формируем сообщение о превешении платежа над долгом
+            msg = (
+                    f"Сумма погашения тела долга ({principal:,.2f} ₽) превышает текущий долг ({self.current_debt:,.2f} ₽). "
+                    f"Увеличьте сумму процентов или уменьшите общую сумму платежа.".replace(",", " ")
+                )
+            
+            # Проверка: тело долга не должно превышать сумму долга
+            if principal > self.current_debt:
+                self.show_error(msg)
+                raise ValueError(msg)
+            
+            if principal < 0:
+                raise ValueError("Сумма процентов не может превышать общую сумму платежа")
                 
             payment_date = self.date_edit.date().toString("yyyy-MM-dd")
             
@@ -205,7 +211,6 @@ class CreditCardPaymentDialog(BaseDialog):
                 card_id=self.card_id,
                 amount_str=str(total),
                 interest_str=str(interest),
-                commission_str=str(commission),
                 payment_date_str=payment_date,
                 from_account_id=account_id
             )

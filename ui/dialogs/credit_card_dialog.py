@@ -80,6 +80,8 @@ class CreditCardDialog(BaseDialog):
         # Вкладки
         self.tabs = QTabWidget()
         self._main_layout.addWidget(self.tabs)
+
+        self._main_layout.addWidget(self.status_bar)
         
         self._setup_dashboard_tab()
 

@@ -124,7 +124,6 @@ class CreditCardPresenter:
         card_id: int, 
         amount_str: str, 
         interest_str: str, 
-        commission_str: str, 
         payment_date_str: str, 
         from_account_id: int
     ) -> Dict[str, Any]:
@@ -135,7 +134,6 @@ class CreditCardPresenter:
             card_id: ID кредитной карты
             amount_str: общая сумма платежа (строка из UI)
             interest_str: сумма на погашение процентов (строка из UI)
-            commission_str: сумма на погашение комиссий (строка из UI)
             payment_date_str: дата платежа в формате YYYY-MM-DD
             from_account_id: ID счёта-источника
             
@@ -154,7 +152,6 @@ class CreditCardPresenter:
             # Конвертация и валидация ввода
             amount = self._parse_decimal(amount_str, "Общая сумма платежа")
             interest = self._parse_decimal(interest_str or "0", "Сумма процентов")
-            commission = self._parse_decimal(commission_str or "0", "Сумма комиссий")
             payment_date = self._parse_date(payment_date_str, "Дата платежа")
 
             # Вызов сервиса
@@ -162,7 +159,6 @@ class CreditCardPresenter:
                 card_id=card_id,
                 amount=amount,
                 interest_amount=interest,
-                commission_amount=commission,
                 payment_date=payment_date,
                 from_account_id=from_account_id
             )

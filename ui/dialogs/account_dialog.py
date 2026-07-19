@@ -85,7 +85,8 @@ class AccountDialog(BaseDialog):
         form_layout.addWidget(self.type_combo, row, 1)
         row += 1
 
-        form_layout.addWidget(QLabel("Начальный баланс:"), row, 0)
+        self.initial_balance_label = QLabel("Начальный баланс:")
+        form_layout.addWidget(self.initial_balance_label, row, 0)
         self.initial_balance_input = QLineEdit()
         self.initial_balance_input.setPlaceholderText("0.00")
         self.initial_balance_input.setFixedHeight(26)
@@ -96,7 +97,8 @@ class AccountDialog(BaseDialog):
         self.initial_balance_input.setValidator(validator)
 
         # Подсказка для кредитной карты
-        self.credit_card_hint = QLabel("💡 Все параметры карты настраиваются в окне Кредитные карты — Настройки")
+        self.credit_card_hint = QLabel("Параметры карты настраиваются в окне Кредитные карты — Настройки"
+                                       "\nДля кредитных карт началный баланс всегда 0 ")
         self.credit_card_hint.setStyleSheet("color: gray; font-size: 9pt;")
         self.credit_card_hint.setVisible(False)
         self.credit_card_hint.setWordWrap(True)
@@ -304,9 +306,24 @@ class AccountDialog(BaseDialog):
 
     
     def _on_type_change(self):
-        """Показывает/скрывает подсказку для кредитной карты."""
-        is_credit = self.type_combo.currentText() == "CreditCard"
-        self.credit_card_hint.setVisible(is_credit)
+        """
+        Скрывает начальный баланс для кредитной карты.
+        
+        Для типа 'CreditCard' поле ввода и его лейбл скрываются,
+        а значение принудительно сбрасывается в '0.00'.
+        """
+        try:
+            is_credit = self.type_combo.currentText() == "CreditCard"
+            self.credit_card_hint.setVisible(is_credit)
+            self.initial_balance_label.setVisible(not is_credit)
+            self.initial_balance_input.setVisible(not is_credit)
+            
+            # Принудительно сбрасываем значение для CreditCard
+            if is_credit:
+                self.initial_balance_input.setText("0.00")
+                
+        except Exception as e:
+            logger.error(f"[{self.__class__.__name__}] Ошибка при смене типа счёта: {e}", exc_info=True)
 
     def _get_form_data(self) -> dict:
         """
