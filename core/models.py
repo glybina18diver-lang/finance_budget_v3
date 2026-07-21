@@ -16,7 +16,7 @@ class BaseModel:
 class Account(BaseModel):
     """Модель счета (полное соответствие схеме V2)."""
     name: str = ""
-    account_type: str = "Cash"  # Cash, BankAccount, CreditCard, Counterparty
+    account_type: str = "Cash"  # Cash, BankAccount, CreditCard, Counterparty, Credit
     
     # Балансы
     initial_balance: float = 0.0
@@ -91,18 +91,47 @@ class Transfer:
     
 @dataclass
 class Loan(BaseModel):
-    """Модель займа (из схемы V2)."""
-    account_id: int = 0
-    counterparty_account_id: int = 0
-    contact_name: str = ""
-    loan_type: str = "issued"  # issued, received
-    loan_amount: float = 0.0
-    remaining: float = 0.0
-    # interest_rate: float = 0.0 в займа не исползуется
+    """
+    Модель займа/кредита.
+    
+    Поддерживает два типа сущностей через поле source_type:
+    - 'bank': банковский кредит (создаёт системный счёт Credit)
+    - 'person': займ у физического лица (использует счёт Counterparty)
+    
+    Для банковских кредитов (source_type='bank'):
+    - loan_purpose='consumer': деньги переведены на целевой счёт
+    - loan_purpose='purchase': сразу совершена покупка (POS-кредит)
+    """
+    name: str = ""
+    
+    # Разделение сущностей
+    source_type: str = "bank"            # 'bank' / 'person'
+    loan_type: str = "received"          # 'issued' / 'received'
+    loan_purpose: Optional[str] = None   # 'consumer' / 'purchase' (только для bank)
+    
+    # Суммы
+    loan_amount: Decimal = 0.0
+    remaining: Decimal = 0.0
+    interest_rate: Decimal = 0.0
+    term_months: Optional[int] = None
+    
+    # Даты
     issue_date: str = ""
     due_date: Optional[str] = None
+    
+    # Связи со счетами
+    account_id: int = 0                  # Счёт Credit (для bank) или мой счёт (для person)
+    counterparty_account_id: Optional[int] = None  # Target счёт / счёт Counterparty
+    
+    # Специфичные поля для POS-кредита
+    purchase_transaction_id: Optional[int] = None
+    
+    # Специфичные поля для займов у людей
+    contact_name: Optional[str] = None
+    
+    # Общее
     description: str = ""
-    status: str = "active"  # active, paid, default
+    status: str = "active"               # 'active' / 'paid' / 'default'
     created_at: str = field(default_factory=lambda: datetime.now().isoformat())
 
 @dataclass

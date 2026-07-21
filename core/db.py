@@ -41,7 +41,9 @@ class Database:
             CREATE TABLE IF NOT EXISTS accounts (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 name TEXT NOT NULL UNIQUE,
-                account_type TEXT NOT NULL CHECK(account_type IN ('Cash', 'BankAccount', 'CreditCard', 'Counterparty')),
+                account_type TEXT NOT NULL CHECK(account_type IN (
+                    'Cash', 'BankAccount', 'CreditCard', 'Counterparty', 'Credit'
+                )),
                 initial_balance REAL DEFAULT 0.0,
                 current_balance REAL DEFAULT 0.0,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -119,24 +121,45 @@ class Database:
             )
         """)
 
-        # 5. Loans (Займы) 
+        # 5. Loans (Займы и Кредиты)
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS loans (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                account_id INTEGER NOT NULL,
-                counterparty_account_id INTEGER NOT NULL,
-                contact_name TEXT NOT NULL,
-                loan_type TEXT NOT NULL CHECK (loan_type IN ('issued', 'received')),
+                name TEXT NOT NULL,
+                
+                -- Разделение сущностей
+                source_type TEXT NOT NULL CHECK(source_type IN ('bank', 'person')),
+                loan_type TEXT NOT NULL CHECK(loan_type IN ('issued', 'received')),
+                loan_purpose TEXT CHECK(loan_purpose IN ('consumer', 'purchase')),
+                
+                -- Суммы
                 loan_amount REAL NOT NULL,
                 remaining REAL NOT NULL,
                 interest_rate REAL DEFAULT 0.0,
+                term_months INTEGER,
+                
+                -- Даты
                 issue_date TEXT NOT NULL,
                 due_date TEXT,
+                
+                -- Связи со счетами
+                account_id INTEGER NOT NULL,
+                counterparty_account_id INTEGER,
+                
+                -- Специфичные поля для POS-кредита (purchase)
+                purchase_transaction_id INTEGER,
+                
+                -- Специфичные поля для займов у людей
+                contact_name TEXT,
+                
+                -- Общее
                 description TEXT,
-                status TEXT DEFAULT 'active' CHECK (status IN ('active', 'paid', 'default')),
+                status TEXT DEFAULT 'active' CHECK(status IN ('active', 'paid', 'default')),
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                
                 FOREIGN KEY (account_id) REFERENCES accounts(id) ON DELETE CASCADE,
-                FOREIGN KEY (counterparty_account_id) REFERENCES accounts(id) ON DELETE CASCADE
+                FOREIGN KEY (counterparty_account_id) REFERENCES accounts(id) ON DELETE SET NULL,
+                FOREIGN KEY (purchase_transaction_id) REFERENCES transactions(id) ON DELETE SET NULL
             )
         """)
 
@@ -211,6 +234,7 @@ class Database:
         try:
             system_categories = [
                 ("Проценты по кредитным картам", "expense"),
+                ("Проценты по кредитам", "expense")
             ]
             pre_installed_acc = [
                 ("Наличка", "Cash")

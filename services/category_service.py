@@ -25,13 +25,42 @@ class CategoryService:
 
     def get_all_categories(self) -> List[Category]:
         """
-        Возвращает все активные категории (без фильтрации по типу).
+        Возвращает все  категории (без фильтрации по типу).
 
         Returns:
             Список объектов Category
         """
         try:
             return self.cat_repo.get_all_categories()
+        except Exception as e:
+            logger.error(f"[CategoryService] Ошибка загрузки категорий: {e}", exc_info=True)
+            raise
+
+    def get_all_by_type(self, cat_type: str) -> List[Category]:
+        """
+        Возвращает список активных категорий указанного типа (доход/расход).
+
+        Args:
+            cat_type: тип категории ('income' или 'expense')
+
+        Returns:
+            Список объектов Category, отсортированный по имени
+        """
+        try:
+            return self.cat_repo.get_all_by_type(cat_type)
+        except Exception as e:
+            logger.error(f"[CategoryService] Ошибка загрузки категорий: {e}", exc_info=True)
+            raise
+
+    def get_all_active_categories(self) -> List[Category]:
+        """
+        Возвращает все активные категории (без фильтрации по типу).
+
+        Returns:
+            Список объектов Category
+        """
+        try:
+            return self.cat_repo.get_all_active_categories()
         except Exception as e:
             logger.error(f"[CategoryService] Ошибка загрузки категорий: {e}", exc_info=True)
             raise
@@ -52,6 +81,36 @@ class CategoryService:
             logger.error(f"[CategoryService] Ошибка загрузки категории #{category_id}: {e}", exc_info=True)
             raise
 
+    def get_category_by_name(self, name: str) -> Optional[Category]:
+        """
+        Возвращает категорию по имени.
+
+        Args:
+            name: имя запрашиваемой категории
+
+        Returns:
+            Объект Category или None, если не найдена
+
+        Raises:
+            ValueError: если имя пустое
+            Exception: при системной ошибке
+        """
+        try:
+            if not name or not name.strip():
+                raise ValueError("Имя категории не может быть пустым")
+
+            return self.cat_repo.get_by_name(name.strip())
+
+        except ValueError as e:
+            logger.warning(f"[CategoryService] Валидация: {e}")
+            raise
+        except Exception as e:
+            logger.error(
+                f"[CategoryService] Ошибка загрузки категории '{name}': {e}",
+                exc_info=True,
+            )
+            raise
+        
     def create_category(self, data: dict) -> Category:
         """
         Создаёт новую категорию.

@@ -17,7 +17,7 @@ from ui.dialogs.category_dialog import CategoryDialog
 from ui.dialogs.transfer_dialog import TransferDialog
 from ui.dialogs.loan_dialog import LoanDialog
 from ui.dialogs.credit_card_dialog import CreditCardDialog
-
+from ui.dialogs.credit_create_dialog import CreditCreateDialog
 
 # Презентеры
 from ui.presenters.transaction_presenter import TransactionPresenter
@@ -26,6 +26,8 @@ from ui.presenters.category_presenter import CategoryPresenter
 from ui.presenters.transfer_presenter import TransferPresenter
 from ui.presenters.loan_presenter import LoanPresenter
 from ui.presenters.credit_card_presenter import CreditCardPresenter
+from ui.presenters.credit_presenter import CreditPresenter
+
 
 
 
@@ -36,6 +38,7 @@ from services.category_service import CategoryService
 from services.transfer_service import TransferService
 from services.loan_service import LoanService
 from services.credit_card_service import CreditCardService
+from services.credit_service import CreditService
 # from services.tranche_service import TrancheService
 # from services.interest_engine import InterestEngine
 # from services.payment_waterfall import PaymentWaterfall, PaymentAllocation
@@ -50,6 +53,7 @@ from core.repositories.category_repository import CategoryRepository
 from core.repositories.transfer_repository import TransferRepository
 from core.repositories.loan_repository import LoanRepository
 from core.repositories.credit_card_repository import CreditCardRepository
+from core.repositories.credit_repository import CreditRepository
 # from core.repositories.tranche_repository import TrancheRepository
 # from core.repositories.interest_accrual_repository import InterestAccrualRepository
 # from core.repositories.statement_repository import StatementRepository
@@ -82,6 +86,7 @@ class NavigationService:
             self.tr_repo = TransferRepository(self.db)
             self.loan_repo = LoanRepository(self.db)
             self.credit_card_repo = CreditCardRepository(self.db)
+            self.credit_repo = CreditRepository(self.db)
             # self.tranche_repo = TrancheRepository(self.db)
             # self.accrual_repo = InterestAccrualRepository(self.db)
             # self.statement_repo = StatementRepository(self.db)
@@ -107,6 +112,14 @@ class NavigationService:
                 self.tx_service,
                 self.acc_repo
                 )
+            self.cat_service = CategoryService(cat_repo=self.cat_repo)
+            self.credit_service = CreditService(
+                self.credit_repo,
+                self.acc_repo,
+                self.tr_service,
+                self.tx_service,
+                self.cat_service
+            )
         except Exception as e:
             logger.error(f"[NavigationService] Ошибка инициализации репозиториев: {e}", exc_info=True)
             raise
@@ -168,7 +181,7 @@ class NavigationService:
             cat_service = CategoryService(cat_repo=self.cat_repo)
 
             # 2. Создаём презентер для КАТЕГОРИЙ
-            presenter = CategoryPresenter(service=cat_service)
+            presenter = CategoryPresenter(service=self.cat_service)
 
             # 3. Создаём и показываем диалог
             dialog = CategoryDialog(parent=parent, presenter=presenter)
@@ -242,4 +255,25 @@ class NavigationService:
             return dialog
         except Exception as e:
             logger.error(f"[NavigationService] Ошибка открытия диалога кредитных карт: {e}", exc_info=True)
+            raise
+
+    def open_credit_create_dialog(self, parent: QWidget) -> Optional[LoanDialog]:
+        """
+        Открывает диалог управления кредитной картой.
+
+        Args:
+            parent: родительское окно
+        """
+        try:
+            
+            # Создаём презентер и открываем диалог
+            presenter = CreditPresenter(self.credit_service, self.acc_repo, self.cat_service)
+            dialog = CreditCreateDialog(
+                parent=parent,
+                presenter=presenter,
+            )
+            dialog.show()
+            return dialog
+        except Exception as e:
+            logger.error(f"[NavigationService] Ошибка открытия диалога rhtlbnjd: {e}", exc_info=True)
             raise

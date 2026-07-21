@@ -3,7 +3,10 @@
 Диалог управления займами.
 Соответствует архитектуре V3: MVP, наследование от BaseDialog, контракты View-Presenter.
 """
-from typing import List
+from typing import List, Dict, Any, Optional
+import logging
+
+
 from PySide6.QtWidgets import (
     QTableWidget, QTableWidgetItem, QHeaderView, QMenu, 
     QMessageBox, QPushButton, QFrame, QHBoxLayout
@@ -13,6 +16,9 @@ from ui.dialogs.base_dialog import BaseDialog
 from ui.widgets.colored_button import CompactButton
 from ui.dialogs.edit_loan_dialog import EditLoanDialog
 from ui.dialogs.loan_details_dialog import LoanDetailsDialog
+
+
+logger = logging.getLogger(__name__)
 
 
 class LoanDialog(BaseDialog):
@@ -52,6 +58,10 @@ class LoanDialog(BaseDialog):
         self.add_loan_btn = CompactButton("➕ Добавить заём")
         self.add_loan_btn.clicked.connect(self._add_loan)
         btn_layout.addWidget(self.add_loan_btn)
+
+        self.create_credit_btn = CompactButton("➕ Добавить кредит")
+        self.create_credit_btn.clicked.connect(self._open_credit_create_dialog)
+        btn_layout.addWidget(self.create_credit_btn)
         
         btn_layout.addStretch()
         
@@ -136,6 +146,51 @@ class LoanDialog(BaseDialog):
         if self.presenter:
             self.presenter.open_add_loan_dialog()
 
+    def _open_credit_create_dialog(self):
+        """
+        Открывает диалог cjlfybz rhtlbnf через навигационный сервис.
+        """
+        nav_service = self._find_navigation_service()
+        if nav_service is None:
+            self.show_status("Навигация недоступна", message_type="error")
+            return
+
+        nav_service.open_credit_create_dialog(self)
+        # if hasattr(self.parent.parent, 'navigation_service'):
+        #     self.parent.parent.navigation_service.open_credit_create_dialog(self.parent)
+        # else:
+        #     self.show_status("Навигация недоступна", message_type="error")
+
+    def _find_navigation_service(self) -> Optional[Any]:
+        """
+        Ищет navigation_service в иерархии родительских окон.
+
+        Проходит по цепочке parent'ов от текущего окна вверх,
+        пока не найдёт объект с атрибутом navigation_service.
+
+        Returns:
+            Экземпляр NavigationService или None, если не найден
+        """
+        try:
+            current = self.parent()
+            while current is not None:
+                if hasattr(current, 'navigation_service'):
+                    return current.navigation_service
+                current = current.parent()
+
+            logger.debug(
+                f"[{self.__class__.__name__}] navigation_service не найден "
+                f"в иерархии parent'ов"
+            )
+            return None
+
+        except Exception as e:
+            logger.error(
+                f"[{self.__class__.__name__}] Ошибка поиска navigation_service: {e}",
+                exc_info=True,
+            )
+            return None
+        
     def _edit_loan(self):
         """Открывает диалог редактирования выбранного займа."""
         selected = self.loans_table.selectionModel().selectedRows()

@@ -47,6 +47,7 @@ class CategoryRepository:
             query = """
                 SELECT * FROM categories 
                 WHERE cat_type = ?
+                   AND is_active = 1 AND is_system = 0
                 ORDER BY name
             """
             rows = self.db.fetchall(query, (cat_type,))
@@ -55,7 +56,7 @@ class CategoryRepository:
             logger.error(f"[CategoryRepository] Ошибка получения категорий типа '{cat_type}': {e}", exc_info=True)
             raise
 
-    def get_all_categories(self) -> List[Category]:
+    def get_all_active_categories(self) -> List[Category]:
         """
         Возвращает все активные категории (без фильтрации по типу).
 
@@ -66,6 +67,24 @@ class CategoryRepository:
             query = """
                 SELECT * FROM categories
                 WHERE is_active = 1 
+                ORDER BY cat_type, name
+            """
+            rows = self.db.fetchall(query)
+            return [self._row_to_category(row) for row in rows]
+        except Exception as e:
+            logger.error(f"[CategoryRepository] Ошибка получения всех категорий: {e}", exc_info=True)
+            raise
+
+    def get_all_categories(self) -> List[Category]:
+        """
+        Возвращает все категории (без фильтрации по типу).
+
+        Returns:
+            Список объектов Category
+        """
+        try:
+            query = """
+                SELECT * FROM categories
                 ORDER BY cat_type, name
             """
             rows = self.db.fetchall(query)
