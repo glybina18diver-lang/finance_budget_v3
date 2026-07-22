@@ -5,11 +5,13 @@
 """
 from typing import List, Optional, Dict
 from datetime import datetime, date
+from decimal import Decimal
 import logging
 from core.models import Loan, Transfer
 from core.repositories.loan_repository import LoanRepository
 from core.repositories.transfer_repository import TransferRepository
 from core.repositories.account_repository import AccountRepository
+from utils.validators import to_decimal
 
 logger = logging.getLogger(__name__)
 
@@ -24,9 +26,29 @@ class LoanService:
         self.transfer_repo = transfer_repo
         self.account_repo = account_repo
 
-    def get_all_loans(self, filters: Optional[dict] = None) -> List[dict]:
+    def get_all_loans_ui(self) -> List[Loan]:
         """
-        Возвращает список займов для отображения в UI.
+        Возвращает список всех займов у контрагентов для отображения в UI.
+
+        Returns:
+            Список объектов Loan (может быть пустым)
+
+        Raises:
+            Exception: при системной ошибке
+        """
+        try:
+            return self.loan_repo.get_all()
+
+        except Exception as e:
+            logger.error(
+                f"[LoanService] Ошибка получения списка займов: {e}",
+                exc_info=True,
+            )
+            raise
+        
+    def get_filters_loans(self, filters: Optional[dict] = None) -> List[dict]:
+        """
+        Возвращает список займов с фильтрами.
 
         Args:
             filters: словарь с фильтрами (status, contact_name и т.д.)
@@ -76,8 +98,8 @@ class LoanService:
             loan_data: {
                 'contact_name': str,
                 'loan_type': 'issued' | 'received',
-                'loan_amount': float,
-                'account_id': int,  # Мой счёт
+                'loan_amount': Decimal/float/str,
+                'account_id': int,
                 'issue_date': str,
                 'due_date': str (опционально),
                 'description': str (опционально)
@@ -95,7 +117,10 @@ class LoanService:
             if not loan_data.get("account_id"):
                 raise ValueError("Выберите счёт для операции")
 
-            # 2. Получаем объекты счетов
+            # 2. Конвертируем сумму в Decimal
+            amount = to_decimal(loan_data["loan_amount"])
+
+            # 3. Получаем объекты счетов
             my_account = self.account_repo.get_by_id(loan_data["account_id"])
             if not my_account:
                 raise ValueError(f"Счёт с ID {loan_data['account_id']} не найден")
@@ -105,8 +130,7 @@ class LoanService:
                 loan_data["contact_name"]
             )
 
-            # 3. Определяем направление движения денег и обновляем балансы
-            amount = loan_data["loan_amount"]
+            # 4. Определяем направление движения денег и обновляем балансы
             issue_date = loan_data.get("issue_date", datetime.now().strftime("%Y-%m-%d"))
 
             if loan_data["loan_type"] == "issued":
@@ -115,7 +139,7 @@ class LoanService:
                 to_acc_id = counterparty_acc.id
                 description = f"Выдача займа: {loan_data['contact_name'].strip()}"
 
-                # Обновляем балансы в объектах
+                # Обновляем балансы в объектах (Decimal арифметика)
                 my_account.current_balance -= amount
                 counterparty_acc.current_balance += amount
 
@@ -125,17 +149,20 @@ class LoanService:
                 to_acc_id = my_account.id
                 description = f"Получение займа: {loan_data['contact_name'].strip()}"
 
-                # Обновляем балансы в объектах
+                # Обновляем балансы в объектах (Decimal арифметика)
                 counterparty_acc.current_balance -= amount
                 my_account.current_balance += amount
 
-            # 4. Сохраняем изменения балансов через репозиторий
+            # 5. Сохраняем изменения балансов через репозиторий
             self.account_repo.update(my_account)
             self.account_repo.update(counterparty_acc)
 
-            # 5. Создаём объект займа (с уже заполненным counterparty_account_id)
+
+            # 6. Создаём объект займа (с уже заполненным counterparty_account_id)
             loan = Loan(
                 contact_name=loan_data["contact_name"].strip(),
+                name="Заём у контрагента",
+                source_type="person",
                 loan_type=loan_data["loan_type"],
                 loan_amount=amount,
                 remaining=amount,  # Изначально весь долг
@@ -144,12 +171,12 @@ class LoanService:
                 due_date=loan_data.get("due_date"),
                 description=loan_data.get("description", ""),
                 account_id=my_account.id,
-                counterparty_account_id=counterparty_acc.id  # ← Заполняем сразу!
+                counterparty_account_id=counterparty_acc.id
             )
 
             loan_id = self.loan_repo.create(loan)
 
-            # 6. Создаём системный перевод
+            # 7. Создаём системный перевод
             transfer = Transfer(
                 date=issue_date,
                 amount=amount,
@@ -179,9 +206,9 @@ class LoanService:
         Args:
             loan_id: ID займа
             payment_data: {
-                'amount': float,
+                'amount': Decimal/float/str,
                 'date': str,
-                'account_id': int,  # Счёт, с которого/на который идёт платёж
+                'account_id': int,
                 'description': str (опционально)
             }
 
@@ -194,11 +221,12 @@ class LoanService:
             if not loan:
                 raise ValueError("Заём не найден")
 
-            amount = float(payment_data["amount"])
+            # Конвертируем сумму в Decimal
+            amount = to_decimal(payment_data["amount"])
             if amount <= 0:
                 raise ValueError("Сумма платежа должна быть больше нуля")
 
-            # 2. Обновляем остаток долга
+            # 2. Обновляем остаток долга (Decimal арифметика)
             loan.remaining -= amount
 
             # 3. Определяем направление платежа и обновляем балансы
@@ -234,7 +262,7 @@ class LoanService:
 
             # 4. Обновляем статус
             if loan.remaining <= 0:
-                loan.remaining = 0
+                loan.remaining = Decimal("0.00")
                 loan.status = "paid"
             elif loan.due_date:
                 due_date = datetime.strptime(loan.due_date, "%Y-%m-%d").date()
@@ -301,7 +329,7 @@ class LoanService:
             if not loan:
                 raise ValueError("Заём не найден")
 
-            # 3. Возвращаем остаток (увеличиваем долг обратно)
+            # 3. Возвращаем остаток (увеличиваем долг обратно) — Decimal арифметика
             loan.remaining += payment.amount
 
             # 4. Если статус был "paid", возвращаем в "active"
@@ -309,8 +337,8 @@ class LoanService:
                 loan.status = "active"
 
             # 5. Откатываем балансы счетов
-            self.account_repo.update_balance(payment.from_account_id, payment.amount)
-            self.account_repo.update_balance(payment.to_account_id, -payment.amount)
+            self.account_repo.update_balance_delta(payment.from_account_id, payment.amount)
+            self.account_repo.update_balance_delta(payment.to_account_id, -payment.amount)
 
             # 6. Удаляем перевод
             self.transfer_repo.delete(payment_id)

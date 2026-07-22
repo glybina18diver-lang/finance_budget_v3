@@ -306,6 +306,7 @@ class OperationDialog(BaseDialog):
             self.show_error("Выберите категорию")
             return
 
+        # преаброзем тип для записи в БД
         trans_type = "income" if self.type_combo.currentText() == "Доход" else "expense"
         date_str = self.date_input.date().toString("yyyy-MM-dd")
         description = self.description_input.text().strip()

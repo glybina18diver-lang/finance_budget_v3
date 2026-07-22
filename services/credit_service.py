@@ -125,12 +125,11 @@ class CreditService:
 
             created_loan = self.credit_repo.create(loan)
 
-            tr_amount = float(loan_amount)
             data = {
                 "from_account_id": loan_account.id,
                 "to_account_id": target_account_id,
                 "type": "internal",
-                "amount": tr_amount,
+                "amount": loan_amount,
                 "date": issue_date,
                 "description": (f"Получение кредита: {name}")
             }
@@ -214,13 +213,11 @@ class CreditService:
 
             created_loan = self.credit_repo.create(loan)
 
-            # ковиртирум перд созднием
-            loan_amount_2 = str(loan_amount)
             transaction = self.transaction_service.create_transaction(
                 account_id=loan_account.id,
                 category_id=category_id,
                 trans_type="expense",
-                raw_amount=loan_amount_2,
+                raw_amount=loan_amount,
                 date_str=issue_date,
                 description=purchase_description or f"Покупка в кредит: {name}",
             )
@@ -306,7 +303,7 @@ class CreditService:
                     f"Кредит #{loan_id} не активен (статус: {loan.status})"
                 )
 
-            body_amount = round(amount - interest_amount, 2)
+            body_amount = (amount - interest_amount).quantize(Decimal("0.01"))
 
             if body_amount > loan.remaining:
                 raise ValueError(
@@ -339,14 +336,14 @@ class CreditService:
                     account_id=from_account_id,
                     category_id=interest_category_id,
                     trans_type="expense",
-                    row_amount=str(interest_amount),
-                    date=str(payment_date),
+                    raw_amount=str(interest_amount),
+                    date_str=str(payment_date),
                     description=f"Проценты по кредиту: {loan.name}",
                 )
                 transaction_id = transaction.id
 
             self.credit_repo.update_remaining(loan_id, -body_amount)
-            new_remaining = round(loan.remaining - body_amount, 2)
+            new_remaining = (loan.remaining - body_amount).quantize(Decimal("0.01"))
 
             logger.info(
                 f"[CreditService] Внесён платёж по кредиту #{loan_id}: "
@@ -423,7 +420,7 @@ class CreditService:
             )
             raise
 
-    def get_all_credits(self) -> List[Loan]:
+    def get_all_credits_ui(self) -> List[Loan]:
         """
         Возвращает список всех банковских кредитов.
 

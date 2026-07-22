@@ -226,7 +226,7 @@ class NavigationService:
             service = LoanService(self.loan_repo, self.tr_repo, self.acc_repo)
 
             # 3. Создаем презентер
-            presenter = LoanPresenter(service)
+            presenter = LoanPresenter(service, self.credit_service)
 
             # 4. Создаем и показываем диалог
             dialog = LoanDialog(parent=parent, presenter=presenter)

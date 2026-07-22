@@ -1,19 +1,28 @@
 """Форматтеры для данных приложения "Простой Бюджет"."""
 from datetime import datetime
-from typing import Optional
+from decimal import Decimal
+from typing import Optional, Union
+
+from utils.constants import MONEY_DECIMALS, MONEY_PRECISION
 
 
 # Символы валют по умолчанию
 DEFAULT_CURRENCY_SYMBOL = '₽'
 THOUSAND_SEP = ' '
 
+# Тип, который может быть отформатирован как деньги
+MoneyValue = Union[Decimal, float, int, str]
 
-def format_currency(amount: float, currency_symbol: str = DEFAULT_CURRENCY_SYMBOL,
-                    decimals: int = 2) -> str:
+
+def format_currency(
+    amount: MoneyValue,
+    currency_symbol: str = DEFAULT_CURRENCY_SYMBOL,
+    decimals: int = MONEY_DECIMALS,
+) -> str:
     """Форматирование суммы в валюте.
 
     Args:
-        amount: Сумма для форматирования
+        amount: Сумма для форматирования (Decimal, float, int, str)
         currency_symbol: Символ валюты
         decimals: Количество знаков после запятой
 
@@ -21,13 +30,15 @@ def format_currency(amount: float, currency_symbol: str = DEFAULT_CURRENCY_SYMBO
         Отформатированная строка суммы
     """
     try:
-        amount = float(amount)
+        if not isinstance(amount, Decimal):
+            amount = Decimal(str(amount))
+        amount = amount.quantize(MONEY_PRECISION)
     except (ValueError, TypeError):
-        amount = 0.0
+        amount = Decimal("0.00")
 
     # Форматируем с разделением тысяч
     formatted = f"{amount:,.{decimals}f}"
-    formatted = formatted.replace(',', THOUSAND_SEP)
+    formatted = formatted.replace(",", THOUSAND_SEP)
 
     return f"{formatted} {currency_symbol}"
 
@@ -95,25 +106,36 @@ def format_account_type(account_type: str) -> str:
     return type_map.get(account_type, account_type)
 
 
-def format_balance(balance: float, show_sign: bool = True) -> str:
+def format_balance(
+    balance: MoneyValue,
+    show_sign: bool = True,
+    currency_symbol: str = DEFAULT_CURRENCY_SYMBOL,
+) -> str:
     """Форматирование баланса с учётом знака.
 
     Args:
-        balance: Сумма баланса
+        balance: Сумма баланса (Decimal, float, int, str)
         show_sign: Показывать ли знак + для положительных значений
+        currency_symbol: Символ валюты
 
     Returns:
         Отформатированная строка баланса
     """
+    if not isinstance(balance, Decimal):
+        balance = Decimal(str(balance))
+
     if balance < 0:
-        return f"-{format_currency(abs(balance))}"
+        return f"-{format_currency(abs(balance), currency_symbol)}"
     elif show_sign and balance > 0:
-        return f"+{format_currency(balance)}"
+        return f"+{format_currency(balance, currency_symbol)}"
     else:
-        return format_currency(balance)
+        return format_currency(balance, currency_symbol)
 
 
-def format_percentage(value: float, decimals: int = 1) -> str:
+def format_percentage(
+    value: Union[Decimal, float, int, str],
+    decimals: int = 1,
+) -> str:
     """Форматирование процентов.
 
     Args:
@@ -124,13 +146,10 @@ def format_percentage(value: float, decimals: int = 1) -> str:
         Отформатированная строка процентов
     """
     try:
-        value = float(value)
+        if not isinstance(value, Decimal):
+            value = Decimal(str(value))
     except (ValueError, TypeError):
-        value = 0.0
-
-    # Если значение больше 1, считаем что это проценты (0-100)
-    if value > 1:
-        value = value
+        value = Decimal("0")
 
     return f"{value:.{decimals}f}%"
 
@@ -197,3 +216,19 @@ def truncate_string(text: str, max_length: int = 50, suffix: str = '...') -> str
         return text
 
     return text[:max_length - len(suffix)] + suffix
+
+
+def format_decimal(value: Decimal, decimals: int = MONEY_DECIMALS) -> str:
+    """Форматирует Decimal в строку для отображения в UI.
+
+    Args:
+        value: Decimal для форматирования
+        decimals: Количество знаков после запятой
+
+    Returns:
+        Отформатированная строка (например, "1 234.56")
+    """
+    precision = Decimal("0." + "0" * decimals)
+    quantized = value.quantize(precision)
+    formatted = f"{quantized:,.{decimals}f}"
+    return formatted.replace(",", THOUSAND_SEP)

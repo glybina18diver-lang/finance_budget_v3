@@ -1,16 +1,13 @@
 # services/transaction_service.py
 import logging
+from decimal import Decimal
 from core.repositories.transaction_repository import TransactionRepository
 from core.repositories.account_repository import AccountRepository
 from core.repositories.category_repository import CategoryRepository
-# from services.credit_card_service import CreditCardService
-
-# from services.tranche_service import TrancheService
 from core.models import Transaction, Account, Category
 from typing import Tuple, List
 from datetime import date, datetime
-from decimal import Decimal
-import re
+from utils.validators import to_decimal
 
 logger = logging.getLogger(__name__)
 
@@ -30,7 +27,6 @@ class TransactionService:
         self.tx_repo = tx_repo
         self.acc_repo = acc_repo
         self.cat_repo = cat_repo
-        # self.credit_card_service = credit_card_service
 
     # ------Работа с транзакциями------
     def create_transaction(self, raw_amount: str, trans_type: str, account_id: int,
@@ -58,7 +54,7 @@ class TransactionService:
             if not isinstance(category_id, int) or category_id <= 0:
                 raise ValueError("Некорректный ID категории")
 
-            # 1. Парсинг суммы и количества
+            # 1. Парсинг суммы и количества (возвращает Decimal)
             amount_positive, quantity = self._parse_amount(raw_amount)
 
             # 2. Бизнес-валидация
@@ -83,16 +79,9 @@ class TransactionService:
 
             logger.debug(f"[TransactionService] ID создаваемой транзакции = {saved_tx.id}")
 
-            # 7. Обновление баланса счёта
+            # 6. Обновление баланса счёта
             self._update_account_balance(account_id, signed_amount)
-            
-            # # конвертируем перед вызовом
-            # amount_decimal = Decimal(str(amount_positive))
-            # date_obj = datetime.strptime(date_str, "%Y-%m-%d").date()
 
-            # # 6. ОБРАБОТКА КРЕДИТНОЙ КАРТЫ (если это расход с кредитки)
-            # if trans_type == "expense":
-            #     self._handle_credit_card_expense(account_id, amount_decimal, date_obj, saved_tx.id)
             return saved_tx
 
         except ValueError as e:
@@ -134,63 +123,17 @@ class TransactionService:
             logger.error("Ошибка: %s", e, exc_info=True)
             raise RuntimeError(f"Системная ошибка при удалении транзакции: {e}") from e
 
-    # def _handle_credit_card_expense(
-    #     self, 
-    #     account_id: int, 
-    #     amount: Decimal, 
-    #     date: date, 
-    #     transaction_id: int
-    # ):
-    #     """
-    #     Метод-посредник: если счёт — кредитная карта, создаёт транш покупки.
-    #     Вызывается после создания расхода.
-
-    #     Args:
-    #         account_id: ID счёта
-    #         amount: сумма расхода (положительное число, Decimal)
-    #         date: дата транзакции (объект date)
-    #         transaction_id: ID созданной транзакции (для связи)
-            
-    #     Raises:
-    #         ValueError: при ошибках валидации данных транша
-    #         Exception: при системных ошибках БД или сервиса
-    #     """
-    #     if not self.tranche_service:
-    #         logger.debug("[TransactionService] TrancheService не подключён, пропускаем создание транша")
-    #         return
-
-    #     try:
-    #         # Проверяем, является ли счёт кредитной картой
-    #         account = self.acc_repo.get_by_id(account_id)
-    #         if not account or account.account_type != 'CreditCard':
-    #             logger.debug(f"[TransactionService] Счёт ID {account_id} не является CreditCard")
-    #             return
-
-    #         # Создаём транш покупки
-    #         self.credit_card_service.add_purchase_by_account(
-    #             account_id=account_id,
-    #             amount=amount,
-    #             transaction_date=date,
-    #             transaction_id=transaction_id
-    #         )
-
-    #     except ValueError as e:
-    #         logger.warning(f"[TransactionService] Ошибка валидации при создании транша: {e}")
-    #         raise
-    #     except Exception as e:
-    #         logger.error(f"[TransactionService] Системная ошибка при создании транша: {e}", exc_info=True)
-    #         raise
-
     # ------Проверки, валидация, преобразование------
-    def _parse_amount(self, raw: str) -> Tuple[float, float]:
+    def _parse_amount(self, raw: str) -> Tuple[Decimal, Decimal]:
         """
         Разбирает строку суммы: поддерживает "100*3", "10,50", "1000".
+        Возвращает Decimal для точных финансовых расчётов.
 
         Args:
             raw: исходная строка из поля ввода
 
         Returns:
-            Кортеж (общая_сумма, количество)
+            Кортеж (общая_сумма, количество) — оба Decimal
 
         Raises:
             ValueError: при недопустимом формате
@@ -202,19 +145,20 @@ class TransactionService:
             parts = normalized.split("*", maxsplit=1)
             if len(parts) != 2:
                 raise ValueError("Некорректный формат умножения. Используйте: сумма*количество")
-            unit_price = float(parts[0])
-            quantity = float(parts[1])
+            unit_price = to_decimal(parts[0])
+            quantity = to_decimal(parts[1])
             if quantity <= 0:
                 raise ValueError("Количество должно быть больше 0")
-            return round(unit_price * quantity, 2), quantity
+            total = (unit_price * quantity).quantize(Decimal("0.01"))
+            return total, quantity
 
         # Обычное число
-        total = float(normalized)
+        total = to_decimal(normalized)
         if total <= 0:
             raise ValueError("Сумма должна быть положительным числом")
-        return total, 1.0
+        return total, Decimal("1.00")
 
-    def _validate_inputs(self, trans_type: str, account_id: int, category_id: int, amount: float):
+    def _validate_inputs(self, trans_type: str, account_id: int, category_id: int, amount: Decimal):
         """
         Проверяет бизнес-правила перед сохранением транзакции.
 
@@ -241,7 +185,7 @@ class TransactionService:
             raise ValueError("Для доходов/расходов необходимо указать категорию")
 
     # ------Обработчики UI------
-    def _update_account_balance(self, account_id: int, amount: float):
+    def _update_account_balance(self, account_id: int, amount: Decimal):
         """
         Обновляет текущий баланс счёта на указанную сумму.
 
@@ -252,7 +196,7 @@ class TransactionService:
         try:
             account = self.acc_repo.get_by_id(account_id)
             if account:
-                account.current_balance = round(account.current_balance + amount, 2)
+                account.current_balance = (account.current_balance + amount).quantize(Decimal("0.01"))
                 self.acc_repo.update(account)
         except Exception as e:
             logger.error(f"[TransactionService] Ошибка обновления баланса счёта #{account_id}: {e}")

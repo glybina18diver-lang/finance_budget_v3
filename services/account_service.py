@@ -4,10 +4,10 @@
 Инкапсулирует бизнес-логику: валидацию данных, CRUD-операции и проверку ограничений.
 """
 from typing import Dict, Optional, List, Any
+from decimal import Decimal
 import logging
 from core.repositories.account_repository import AccountRepository
 from core.repositories.credit_card_repository import CreditCardRepository
-# from services.credit_card_service import CreditCardService
 from core.models import Account
 
 logger = logging.getLogger(__name__)
@@ -53,8 +53,8 @@ class AccountService:
             
             # Защита: для CreditCard баланс всегда 0
             if account_data.get("account_type") == "CreditCard":
-                account_data["initial_balance"] = 0.0
-                account_data["current_balance"] = 0.0
+                account_data["initial_balance"] = Decimal("0.00")
+                account_data["current_balance"] = Decimal("0.00")
             
             # Извлекаем данные кредитной карты перед созданием может не быть если из presenter не передали
             credit_card_data = account_data.pop("credit_card_data", None)
@@ -73,7 +73,7 @@ class AccountService:
             raise
         except Exception as e:
             logger.error(
-                f"[{self.__class__.__name__}] Критическая ошибка при создании счёта: {e}", 
+                f"[{self.__class__.__name__}] Критическая ошибка при создании счёта: {e}",
                 exc_info=True
             )
             raise RuntimeError(f"Системная ошибка при создании счёта: {e}") from e
@@ -338,6 +338,19 @@ class AccountService:
             logger.error(f"[{self.__class__.__name__}] Ошибка фильтрации счетов по типу {account_type}: {e}", exc_info=True)
             raise
 
+    def get_user_accounts(self) -> List[Account]:
+        """
+        Возвращает список пользовательских счетов для UI
+
+        Returns:
+            Список объектов Account
+        """
+        try:
+            return self.acc_repo.get_user_accounts()
+        except Exception as e:
+            logger.error(f"[{self.__class__.__name__}] Ошибка загрузки пользовательских счетов: {e}", exc_info=True)
+            raise
+
     def get_account(self, account_id: int) -> Optional[Account]:
         """
         Возвращает счёт по ID.
@@ -366,5 +379,8 @@ class AccountService:
         """
         if not account_data.get("name", "").strip():
             raise ValueError("Название счёта не может быть пустым")
-        if account_data.get("initial_balance", 0) < 0:
+        initial_balance = account_data.get("initial_balance", Decimal("0.00"))
+        if isinstance(initial_balance, (int, float)):
+            initial_balance = Decimal(str(initial_balance))
+        if initial_balance < 0:
             raise ValueError("Начальный баланс не может быть отрицательным")

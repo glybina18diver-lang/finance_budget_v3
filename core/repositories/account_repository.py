@@ -10,10 +10,12 @@
 """
 
 from typing import Optional, Dict, Any, List
+from decimal import Decimal
 import logging
 
 from core.db import Database
 from core.models import Account
+from utils.validators import to_decimal
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +35,7 @@ class AccountRepository:
     def _row_to_account(self, row: Dict[str, Any]) -> Account:
         """
         Преобразует словарь из БД в объект счёта.
+        Числовые поля конвертируются из float (SQLite REAL) в Decimal.
 
         Args:
             row: словарь с данными строки из БД
@@ -44,8 +47,8 @@ class AccountRepository:
             id=row.get("id"),
             name=row.get("name", ""),
             account_type=row.get("account_type", "Cash"),
-            initial_balance=row.get("initial_balance", 0.0),
-            current_balance=row.get("current_balance", 0.0),
+            initial_balance=to_decimal(row.get("initial_balance", 0.0)),
+            current_balance=to_decimal(row.get("current_balance", 0.0)),
             is_active=bool(row.get("is_active", 1)),
             is_system=bool(row.get("is_system", 0)),
             currency=row.get("currency", "RUB"),
@@ -161,8 +164,8 @@ class AccountRepository:
             params = (
                 account.name,
                 account.account_type,
-                account.initial_balance,
-                account.current_balance,
+                float(account.initial_balance),
+                float(account.current_balance),
                 account.currency or "RUB",
                 1 if account.is_active else 0,
                 1 if account.is_system else 0,
@@ -220,8 +223,8 @@ class AccountRepository:
             params = (
                 account.name,
                 account.account_type,
-                account.initial_balance,
-                account.current_balance,
+                float(account.initial_balance),
+                float(account.current_balance),
                 account.is_active,
                 account.is_system,
                 account.currency,
@@ -259,8 +262,8 @@ class AccountRepository:
             new_account = Account(
                 name=name.strip(),
                 account_type="Counterparty",
-                initial_balance=0.0,
-                current_balance=0.0,
+                initial_balance=Decimal("0.00"),
+                current_balance=Decimal("0.00"),
                 currency="RUB",
                 is_active=True,
                 is_system=True,
@@ -276,8 +279,8 @@ class AccountRepository:
             params = (
                 new_account.name,
                 new_account.account_type,
-                new_account.initial_balance,
-                new_account.current_balance,
+                float(new_account.initial_balance),
+                float(new_account.current_balance),
                 new_account.currency,
                 1 if new_account.is_active else 0,
                 1 if new_account.is_system else 0,
@@ -312,8 +315,8 @@ class AccountRepository:
             new_account = Account(
                 name=name.strip(),
                 account_type="Credit",
-                initial_balance=0.0,
-                current_balance=0.0,
+                initial_balance=Decimal("0.00"),
+                current_balance=Decimal("0.00"),
                 currency="RUB",
                 is_active=True,
                 is_system=True,
@@ -328,8 +331,8 @@ class AccountRepository:
             params = (
                 new_account.name,
                 new_account.account_type,
-                new_account.initial_balance,
-                new_account.current_balance,
+                float(new_account.initial_balance),
+                float(new_account.current_balance),
                 new_account.currency,
                 1 if new_account.is_active else 0,
                 1 if new_account.is_system else 0,
@@ -375,7 +378,7 @@ class AccountRepository:
             )
             raise
 
-    def update_balance_delta(self, account_id: int, delta: float) -> bool:
+    def update_balance_delta(self, account_id: int, delta: Decimal) -> bool:
         """
         Изменяет текущий баланс счёта на указанную дельту.
 
@@ -394,10 +397,10 @@ class AccountRepository:
             if not account:
                 raise ValueError(f"Счёт #{account_id} не найден")
 
-            new_balance = round(account.current_balance + delta, 2)
+            new_balance = (account.current_balance + delta).quantize(Decimal("0.01"))
 
             query = "UPDATE accounts SET current_balance = ? WHERE id = ?"
-            self.db.execute(query, (new_balance, account_id))
+            self.db.execute(query, (float(new_balance), account_id))
 
             logger.info(
                 f"[AccountRepository] Обновлён баланс счёта #{account_id}: "

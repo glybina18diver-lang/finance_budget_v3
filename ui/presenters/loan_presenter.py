@@ -6,6 +6,7 @@
 from PySide6.QtWidgets import QDialog
 import logging
 from services.loan_service import LoanService
+from services.credit_service import CreditService
 
 from ui.dialogs.loan_dialog import LoanDialog
 from ui.dialogs.add_loan_dialog import AddLoanDialog
@@ -17,7 +18,7 @@ logger = logging.getLogger(__name__)
 class LoanPresenter:
     """Презентер займов."""
 
-    def __init__(self, service: LoanService):
+    def __init__(self, service: LoanService, credit_service: CreditService):
         """
         Инициализация.
 
@@ -25,6 +26,7 @@ class LoanPresenter:
             service: экземпляр LoanService
         """
         self.service = service
+        self.credit_service = credit_service
         self.view: LoanDialog = None
 
     def set_view(self, view: LoanDialog):
@@ -33,16 +35,97 @@ class LoanPresenter:
         """
         self.view = view
         self.load_loans()
+        self.load_credits()
 
-    def load_loans(self):
-        """Загружает список займов из сервиса в таблицу."""
+    def load_credits(self):
+        """Загружает список кредитов из сервиса в таблицу.
+        Возвращает список всех банковских кредитов в формате для UI.
+
+        Returns:
+            Список словарей с информацией о кредитах:
+            [
+                {
+                    'id': int,
+                    'name': str,
+                    'loan_purpose': str,
+                    'loan_amount': Decimal,
+                    'remaining': Decimal,
+                    'status': str,
+                    'issue_date': str,
+                    'due_date': str|None
+                },
+                ...
+            ]
+
+        Raises:
+            Exception: при системной ошибке
+        """
         try:
-            # Можно передать фильтры из view.current_filters, если нужно
-            loans = self.service.get_all_loans()
-            self.view.load_loans(loans)
+            loans = self.credit_service.get_all_credits_ui()
+
+            result = []
+            for loan in loans:
+                result.append({
+                    "id": loan.id,
+                    "name": loan.name,
+                    "loan_purpose": loan.loan_purpose,
+                    "loan_amount": loan.loan_amount,
+                    "remaining": loan.remaining,
+                    "status": loan.status,
+                    "issue_date": loan.issue_date,
+                    "due_date": loan.due_date,
+                })
+
+            self.view.load_credits(result)
+
         except Exception as e:
-            logger.error(f"[LoanPresenter] Ошибка загрузки займов: {e}", exc_info=True)
-            self.view.show_status(f"Ошибка загрузки займов: {e}", "error")
+            logger.error(
+                f"[CreditPresenter] Ошибка получения списка кредитов: {e}",
+                exc_info=True,
+            )
+            self.view.show_error(f"Ошибка загрузки кредитов: {e}")
+            raise
+        
+
+    def load_loans(self) -> None:
+        """
+        Загружает список займов из сервиса в таблицу UI.
+
+        Получает все займы у контрагентов и преобразует их
+        в формат словарей для отображения в таблице.
+
+        Returns:
+            None. Результат передаётся в view через self.view.load_loans(result).
+
+        Raises:
+            Exception: при системной ошибке
+        """
+        try:
+            loans = self.service.get_all_loans_ui()
+
+            result = []
+            for loan in loans:
+                result.append({
+                    "id": loan.id,
+                    "contact_name": loan.contact_name,
+                    "type": loan.loan_type,
+                    "amount": loan.loan_amount,
+                    "remaining": loan.remaining,
+                    "status": loan.status,
+                    "issue_date": loan.issue_date,
+                    "due_date": loan.due_date,
+                    "description": loan.description,
+                })
+
+            self.view.load_loans(result)
+
+        except Exception as e:
+            logger.error(
+                f"[LoanPresenter] Ошибка загрузки списка займов: {e}",
+                exc_info=True,
+            )
+            self.view.show_error(f"Ошибка загрузки займов: {e}")
+            raise
 
     def open_add_loan_dialog(self):
         """
@@ -100,6 +183,7 @@ class LoanPresenter:
             accounts_objects = self.service.get_all_accounts_active()
 
             # Конвертируем объекты Account в словари для UI
+            # current_balance уже Decimal, передаём как есть
             accounts = [
                 {
                     'id': acc.id,

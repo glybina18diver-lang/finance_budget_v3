@@ -3,6 +3,7 @@ from typing import List, Dict, Any, Optional
 import logging
 from core.db import Database
 from core.models import Category
+from decimal import Decimal
 
 logger = logging.getLogger(__name__)
 
@@ -15,6 +16,7 @@ class CategoryRepository:
 
     def _row_to_category(self, row: Dict[str, Any]) -> Category:
         """Преобразует строку из БД в объект Category.
+        Числовые поля конвертируются из float (SQLite REAL) в Decimal.
 
         Args:
             row: строка из БД
@@ -22,11 +24,12 @@ class CategoryRepository:
         Returns:
             Объект Category
         """
+        
         return Category(
             id=row.get("id"),
             name=row.get("name", ""),
             cat_type=row.get("cat_type", "expense"),
-            budget_amount_monthly=row.get("budget_amount_monthly", 0.0),
+            budget_amount_monthly=Decimal(str(row.get("budget_amount_monthly", 0.0))),
             parent_id=row.get("parent_id"),
             color=row.get("color", "#3498db"),
             icon=row.get("icon", ""),
@@ -152,7 +155,7 @@ class CategoryRepository:
                 category.name,
                 category.cat_type,
                 category.parent_id,
-                category.budget_amount_monthly or 0.0,
+                float(category.budget_amount_monthly or Decimal("0.00")),
                 1 if category.is_active else 0,
                 0  # is_system = False для новых категорий
             )
@@ -183,7 +186,7 @@ class CategoryRepository:
                 category.name,
                 category.cat_type,
                 category.parent_id,
-                category.budget_amount_monthly or 0.0,
+                float(category.budget_amount_monthly or Decimal("0.00")),
                 category.id
             )
             self.db.execute(query, params)

@@ -324,7 +324,7 @@ class CreditPresenter:
             Exception: при системной ошибке
         """
         try:
-            loans = self.credit_service.get_all_credits()
+            loans = self.credit_service.get_all_credits_ui()
 
             result = []
             for loan in loans:

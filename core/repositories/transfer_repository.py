@@ -4,7 +4,9 @@
 """
 import logging
 from typing import List, Optional
+from decimal import Decimal
 from core.models import Transfer
+from utils.validators import to_decimal
 
 logger = logging.getLogger(__name__)
 
@@ -15,7 +17,7 @@ class TransferRepository:
     def __init__(self, db):
         """
         Инициализация репозитория.
-        
+
         Args:
             db: экземпляр подключения к базе данных
         """
@@ -24,17 +26,18 @@ class TransferRepository:
     def _row_to_transfer(self, row) -> Transfer:
         """
         Преобразует строку результата БД в объект Transfer.
-        
+        Числовые поля конвертируются из float (SQLite REAL) в Decimal.
+
         Args:
             row: строка с данными перевода
-            
+
         Returns:
             Объект Transfer
         """
         return Transfer(
             id=row["id"],
             date=row["date"],
-            amount=row["amount"],
+            amount=to_decimal(row["amount"]),
             type=row["type"],
             from_account_id=row["from_account_id"],
             to_account_id=row["to_account_id"],
@@ -44,10 +47,10 @@ class TransferRepository:
     def get_by_id(self, transfer_id: int) -> Optional[Transfer]:
         """
         Возвращает перевод по ID.
-        
+
         Args:
             transfer_id: ID искомого перевода
-            
+
         Returns:
             Объект Transfer или None, если не найден
         """
@@ -62,7 +65,7 @@ class TransferRepository:
     def get_all(self) -> List[Transfer]:
         """
         Возвращает все переводы, отсортированные по дате (новые сверху).
-        
+
         Returns:
             Список объектов Transfer
         """
@@ -77,7 +80,7 @@ class TransferRepository:
     def get_all_with_details(self) -> List[dict]:
         """
         Возвращает пользовательские переводы с именами счетов и контрагентов.
-        
+
         Returns:
             Список словарей с данными для UI
         """
@@ -115,7 +118,7 @@ class TransferRepository:
             """
             params = (
                 transfer.date,
-                transfer.amount,
+                float(transfer.amount),
                 transfer.type,
                 transfer.from_account_id,
                 transfer.to_account_id,
@@ -132,10 +135,10 @@ class TransferRepository:
     def delete(self, transfer_id: int) -> bool:
         """
         Удаляет перевод по ID.
-        
+
         Args:
             transfer_id: ID удаляемого перевода
-            
+
         Returns:
             True если операция прошла успешно
         """
@@ -146,5 +149,3 @@ class TransferRepository:
         except Exception as e:
             logger.error("[TransferRepository] Ошибка при удалении перевода ID %s: %s", transfer_id, e, exc_info=True)
             raise
-
-    

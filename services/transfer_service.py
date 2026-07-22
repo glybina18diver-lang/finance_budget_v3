@@ -4,6 +4,7 @@
 Инкапсулирует логику внутренних/внешних переводов, работу с контрагентами и балансами.
 """
 from typing import List
+from decimal import Decimal
 import logging
 from core.repositories.transfer_repository import TransferRepository
 from core.repositories.account_repository import AccountRepository
@@ -108,7 +109,7 @@ class TransferService:
         Логика внутреннего перевода (Счёт → Счёт).
 
         Args:
-            data: данные перевода 
+            data: данные перевода
 
         Returns:
             Созданный объект Transfer
@@ -123,9 +124,12 @@ class TransferService:
         if not from_account or not to_account:
             raise ValueError("Один из счетов не найден")
 
-        # Обновляем балансы в объектах
-        from_account.current_balance -= data["amount"]
-        to_account.current_balance += data["amount"]
+        # Конвертируем amount в Decimal (из UI может прийти float)
+        amount = Decimal(str(data["amount"]))
+
+        # Обновляем балансы в объектах (Decimal арифметика)
+        from_account.current_balance -= amount
+        to_account.current_balance += amount
 
         # Сохраняем изменения через репозиторий
         self.account_repo.update(from_account)
@@ -134,7 +138,7 @@ class TransferService:
         # Создаём перевод
         transfer = Transfer(
             date=data["date"],
-            amount=data["amount"],
+            amount=amount,
             type="internal",
             from_account_id=data["from_account_id"],
             to_account_id=data["to_account_id"],
@@ -146,9 +150,12 @@ class TransferService:
         """Логика внешнего перевода (Счёт ↔ Контрагент)."""
         counterparty_name = data["counterparty"].strip()
 
+        # Конвертируем amount в Decimal
+        amount = Decimal(str(data["amount"]))
+
         # Получаем объект Account контрагента (создает или находит)
         counterparty_account = self.account_repo.get_or_create_counterparty(counterparty_name)
-        counterparty_id = counterparty_account.id  # ← Берем ID из объекта
+        counterparty_id = counterparty_account.id
 
         # Получаем объекты счетов пользователя
         if data["direction"] == "incoming":
@@ -161,9 +168,9 @@ class TransferService:
         if not from_account or not to_account:
             raise ValueError("Ошибка при получении счетов для перевода")
 
-        # Обновляем балансы
-        from_account.current_balance -= data["amount"]
-        to_account.current_balance += data["amount"]
+        # Обновляем балансы (Decimal арифметика)
+        from_account.current_balance -= amount
+        to_account.current_balance += amount
 
         # Сохраняем изменения
         self.account_repo.update(from_account)
@@ -172,12 +179,12 @@ class TransferService:
         # Создаём перевод
         transfer = Transfer(
             date=data["date"],
-            amount=data["amount"],
+            amount=amount,
             type="external",
             from_account_id=from_account.id,
             to_account_id=to_account.id,
             description=data.get("description"),
-            is_system=False,  # Пользовательский перевод
+            is_system=False,
             loan_id=None
         )
         return self.transfer_repo.create(transfer)

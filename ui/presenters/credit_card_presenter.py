@@ -104,7 +104,7 @@ class CreditCardPresenter:
                 {
                     "id": acc.id,
                     "name": acc.name,
-                    "balance": float(acc.current_balance),
+                    "balance": acc.current_balance,
                     "type": acc.account_type
                 }
                 for acc in accounts
@@ -260,10 +260,10 @@ class CreditCardPresenter:
                 "id": card.id,
                 "account_id": card.account_id,
                 "account_name": card.account_name,
-                "credit_limit": float(card.credit_limit) if card.credit_limit is not None else None,
-                "annual_rate": float(card.annual_rate) if card.annual_rate is not None else None,
+                "credit_limit": card.credit_limit,
+                "annual_rate": card.annual_rate,
                 "grace_months": card.grace_months,
-                "min_payment_percent": float(card.min_payment_percent) * 100 if card.min_payment_percent is not None else None,
+                "min_payment_percent": card.min_payment_percent * 100 if card.min_payment_percent is not None else None,
                 "payment_day": card.payment_day,
                 "statement_day": card.statement_day
             }

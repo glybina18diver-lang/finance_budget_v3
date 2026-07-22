@@ -183,10 +183,10 @@ class CreditCardService:
             return {
                 "card_id": card.id,
                 "account_name": card.account_name or "Неизвестно",
-                "debt": float(debt),
-                "credit_limit": float(card.credit_limit) if card.credit_limit else 0.0,
-                "usage_percent": float(usage_percent),
-                "annual_rate": float(card.annual_rate) if card.annual_rate else 0.0,
+                "debt": debt,
+                "credit_limit": card.credit_limit if card.credit_limit else Decimal("0.00"),
+                "usage_percent": usage_percent,
+                "annual_rate": card.annual_rate if card.annual_rate else Decimal("0.00"),
                 "payment_day": card.payment_day,
                 "statement_day": card.statement_day
             }
@@ -257,7 +257,7 @@ class CreditCardService:
                     "to_account_id": card.account_id,
                     "type": "internal",
                     "date": payment_date.isoformat(),
-                    "amount": float(principal_amount),
+                    "amount": principal_amount,
                     "description": (f"Погашение долга по {card.account_name}")
                 }
                 self.transfer_service.create_transfer(data)
@@ -284,9 +284,9 @@ class CreditCardService:
                 )
             
             result = {
-                "principal_amount": float(principal_amount),
-                "interest_amount": float(interest_amount),
-                "total_amount": float(amount)
+                "principal_amount": principal_amount,
+                "interest_amount": interest_amount,
+                "total_amount": amount
             }
             
             logger.info(

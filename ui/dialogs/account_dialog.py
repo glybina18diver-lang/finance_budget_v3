@@ -70,7 +70,7 @@ class AccountDialog(BaseDialog):
         form_layout.addWidget(QLabel("Тип:"), row, 0)
         self.type_combo = QComboBox()
         self.type_combo.setFixedHeight(26)
-        self.type_combo.addItems(["Cash", "BankAccount", "CreditCard"])
+        self.type_combo.addItems(["Наличные деньги (Кэш)", "Дебетовая карта или банковский счет", "Кредитная карта"])
         self.type_combo.currentTextChanged.connect(self._on_type_change)
         form_layout.addWidget(self.type_combo, row, 1)
         row += 1
@@ -299,16 +299,16 @@ class AccountDialog(BaseDialog):
         """
         Скрывает начальный баланс для кредитной карты.
         
-        Для типа 'CreditCard' поле ввода и его лейбл скрываются,
+        Для типа 'CreditCard' (Кредитная карта) поле ввода и его лейбл скрываются,
         а значение принудительно сбрасывается в '0.00'.
         """
         try:
-            is_credit = self.type_combo.currentText() == "CreditCard"
+            is_credit = self.type_combo.currentText() == "Кредитная карта"
             self.credit_card_hint.setVisible(is_credit)
             self.initial_balance_label.setVisible(not is_credit)
             self.initial_balance_input.setVisible(not is_credit)
             
-            # Принудительно сбрасываем значение для CreditCard
+            # Принудительно сбрасываем значение для Кредитная карта
             if is_credit:
                 self.initial_balance_input.setText("0.00")
                 
@@ -329,7 +329,16 @@ class AccountDialog(BaseDialog):
         if name == "":
             raise ValueError("Введите название счёта")
 
-        acc_type = self.type_combo.currentText()
+        # Тип счета (приобразование для БД)
+        type = self.type_combo.currentText()
+        if type == "Наличные деньги (Кэш)":
+            acc_type = "Cash"
+        elif type == "Дебетовая карта или банковский счет":
+            acc_type = "BankAccount"  
+        elif type == "Кредитная карта":
+            acc_type = "CreditCard" # CreditCard = "Кредитка (Кредитная карта)" 
+        else:
+            logger.debug(f"[{self.__class__.__name__}] Тип счета некоректен: {type}")
 
         raw_balance = self.initial_balance_input.text().strip().replace(',', '.')
         if raw_balance == "":
@@ -374,18 +383,36 @@ class AccountDialog(BaseDialog):
 
     # =================== Контракт View <-> Presenter ===================
 
-    def load_accounts(self, accounts: List[Account]):
+    def load_accounts_table(self, accounts: List[Account]): #TODO: нужно будет пребрзование венести в отденый файл или утелиту
         """
         Заполняет таблицу счетов данными из презентера.
+        
+        Преобразует технические типы счетов (Cash, BankAccount...) 
+        в понятные пользователю названия.
         
         Args:
             accounts: список объектов Account
         """
         self.accounts_tree.clear()
         self.current_accounts = accounts
+        
+        # Словарь для преобразования технических типов в пользовательские
+        type_map = {
+            "Cash": "Наличные деньги (Кэш)",
+            "BankAccount": "Дебетовая карта или банковский счет",
+            "CreditCard": "Кредитная карта",
+            "Counterparty": "Контрагент",
+            "Credit": "Банковский кредит"
+        }
+
         for acc in accounts:
+            # Получаем человекочитаемое название типа, если его нет в словаре — оставляем как есть
+            display_type = type_map.get(acc.account_type, acc.account_type)
+            
+            # Форматируем баланс с разделителями тысяч и валютой
             balance_str = f"{acc.current_balance:,.2f} {acc.currency}"
-            item = QTreeWidgetItem([acc.name, acc.account_type, balance_str])
+            
+            item = QTreeWidgetItem([acc.name, display_type, balance_str])
             item.setData(0, Qt.UserRole, acc.id)
             item.setData(0, Qt.UserRole + 1, acc.is_system)
             self.accounts_tree.addTopLevelItem(item)

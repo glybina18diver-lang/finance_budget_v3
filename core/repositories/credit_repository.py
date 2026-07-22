@@ -279,7 +279,7 @@ class CreditRepository:
         """
         try:
             current = self.get_remaining(loan_id)
-            new_remaining = round(current + delta, 2)
+            new_remaining = (current + delta).quantize(Decimal("0.01"))
 
             if new_remaining < 0:
                 raise ValueError(

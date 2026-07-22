@@ -4,8 +4,10 @@
 Отвечает за CRUD-операции с таблицей loans и получение истории платежей из transfers.
 """
 from typing import List, Optional, Dict, Any
+from decimal import Decimal
 import logging
 from core.models import Loan
+from utils.validators import to_decimal
 
 logger = logging.getLogger(__name__)
 
@@ -24,7 +26,7 @@ class LoanRepository:
 
     def get_all_with_details(self, filters: Optional[Dict[str, Any]] = None) -> List[dict]:
         """
-        Возвращает список займов для отображения в UI.
+        Возвращает список займов для отображения в UI с исползованиями фильтров.
 
         Args:
             filters: словарь с фильтрами (status, loan_type, contact_name)
@@ -61,7 +63,33 @@ class LoanRepository:
         except Exception as e:
             logger.error(f"[LoanRepository] Ошибка получения займов: {e}", exc_info=True)
             raise
+    
+    def get_all(self) -> List[Loan]:
+        """
+        Возвращает список всех займов у контрагентов.
 
+        Returns:
+            Список объектов Loan (может быть пустым)
+
+        Raises:
+            Exception: при ошибке базы данных
+        """
+        try:
+            query = """
+                SELECT * FROM loans
+                WHERE source_type = 'person'
+                ORDER BY created_at DESC
+            """
+            rows = self.db.fetchall(query)
+            return [self._row_to_loan(row) for row in rows]
+
+        except Exception as e:
+            logger.error(
+                f"[LoanRepository] Ошибка получения списка займов: {e}",
+                exc_info=True,
+            )
+            raise
+        
     def get_by_id(self, loan_id: int) -> Optional[Loan]:
         """
         Возвращает объект займа по ID.
@@ -93,16 +121,18 @@ class LoanRepository:
         try:
             query = """
                 INSERT INTO loans (
-                    contact_name, loan_type, loan_amount, remaining,
+                    contact_name, loan_type, name, source_type, loan_amount, remaining,
                     status, issue_date, due_date, description,
                     account_id, counterparty_account_id
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """
             params = (
                 loan.contact_name,
                 loan.loan_type,
-                loan.loan_amount,
-                loan.remaining,
+                loan.name,
+                loan.source_type,
+                float(loan.loan_amount),
+                float(loan.remaining),
                 loan.status,
                 loan.issue_date,
                 loan.due_date,
@@ -145,8 +175,8 @@ class LoanRepository:
             params = (
                 loan.contact_name,
                 loan.loan_type,
-                loan.loan_amount,
-                loan.remaining,
+                float(loan.loan_amount),
+                float(loan.remaining),
                 loan.status,
                 loan.issue_date,
                 loan.due_date,
@@ -191,7 +221,7 @@ class LoanRepository:
         """
         try:
             query = """
-                SELECT 
+                SELECT
                     t.id, t.date, t.amount, t.description,
                     a.name as account_name
                 FROM transfers t
@@ -205,13 +235,15 @@ class LoanRepository:
             raise
 
     def _row_to_loan(self, row) -> Loan:
-        """Преобразует строку БД в объект Loan."""
+        """Преобразует строку БД в объект Loan.
+        Числовые поля конвертируются из float (SQLite REAL) в Decimal.
+        """
         return Loan(
             id=row["id"],
             contact_name=row["contact_name"],
             loan_type=row["loan_type"],
-            loan_amount=row["loan_amount"],
-            remaining=row["remaining"],
+            loan_amount=to_decimal(row["loan_amount"]),
+            remaining=to_decimal(row["remaining"]),
             status=row["status"],
             issue_date=row["issue_date"],
             due_date=row.get("due_date"),

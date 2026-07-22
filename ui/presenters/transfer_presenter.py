@@ -6,6 +6,7 @@
 from services.transfer_service import TransferService
 from services.transaction_service import TransactionService
 from typing import Dict, List
+from decimal import Decimal
 import logging
 
 logger = logging.getLogger(__name__)
@@ -95,16 +96,16 @@ class TransferPresenter:
             if self.view:
                 self.view.show_status("Ошибка загрузки данных", "error")
 
-    def check_credit_card_transfer(self, from_account_id: int, amount: float) -> dict:
+    def check_credit_card_transfer(self, from_account_id: int, amount: Decimal) -> dict:
         """
         Проверяет, является ли счёт кредитной картой, и рассчитывает комиссию.
 
         Args:
             from_account_id: ID счёта-источника
-            amount: сумма перевода
+            amount: сумма перевода (Decimal)
 
         Returns:
-            Словарь {is_credit_card: bool, commission: float, total: float}
+            Словарь {is_credit_card: bool, commission: Decimal, total: Decimal}
         """
         try:
             from core.repositories.credit_card_repository import CreditCardRepository
@@ -113,10 +114,10 @@ class TransferPresenter:
             card = repo.get_card_by_account_id(from_account_id)
 
             if not card:
-                return {"is_credit_card": False, "commission": 0.0, "total": amount}
+                return {"is_credit_card": False, "commission": Decimal("0.00"), "total": amount}
 
             # Комиссия: 5.9% + 590 ₽
-            commission = amount * 0.059 + 590.0
+            commission = (amount * Decimal("0.059") + Decimal("590.00")).quantize(Decimal("0.01"))
             return {
                 "is_credit_card": True,
                 "commission": commission,
@@ -125,7 +126,7 @@ class TransferPresenter:
             }
         except Exception as e:
             logger.error(f"[TransferPresenter] Ошибка проверки кредитной карты: {e}", exc_info=True)
-            return {"is_credit_card": False, "commission": 0.0, "total": amount}
+            return {"is_credit_card": False, "commission": Decimal("0.00"), "total": amount}
 
     def add_commission_expense(self, data: dict):
         """
