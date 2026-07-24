@@ -28,7 +28,7 @@ class LoanDialog(BaseDialog):
     TAB_LOANS = 0
     TAB_CREDITS = 1
 
-    def __init__(self, parent=None, presenter=None):
+    def __init__(self, parent=None, presenter=None, navigation_service: Optional[Any] = None):
         """
         Инициализация диалога управления займами и кредитами.
 
@@ -38,6 +38,7 @@ class LoanDialog(BaseDialog):
         """
         super().__init__(parent)
         self.presenter = presenter
+        self.navigation_service = navigation_service
         self.setWindowTitle("Управление Займами и Кредитами")
         self.resize(1000, 650)
         self._init_ui()
@@ -199,6 +200,8 @@ class LoanDialog(BaseDialog):
 
         menu.exec(table.viewport().mapToGlobal(position))
 
+    # === Методы для займов ===
+
     def _add_payment(self):
         """Запрашивает открытие диалога добавления платежа для выбранного займа."""
         selected = self.loans_table.selectionModel().selectedRows()
@@ -213,42 +216,6 @@ class LoanDialog(BaseDialog):
         """Запрашивает создание нового займа через презентер."""
         if self.presenter:
             self.presenter.open_add_loan_dialog()
-
-    def _open_credit_create_dialog(self):
-        """Открывает диалог создания кредита через навигационный сервис."""
-        nav_service = self._find_navigation_service()
-        if nav_service is None:
-            self.show_status("Навигация недоступна", message_type="error")
-            return
-        nav_service.open_credit_create_dialog(self)
-
-    def _find_navigation_service(self) -> Optional[Any]:
-        """
-        Ищет navigation_service в иерархии родительских окон.
-
-        Проходит по цепочке parent'ов от текущего окна вверх,
-        пока не найдёт объект с атрибутом navigation_service.
-
-        Returns:
-            Экземпляр NavigationService или None, если не найден
-        """
-        try:
-            current = self.parent()
-            while current is not None:
-                if hasattr(current, 'navigation_service'):
-                    return current.navigation_service
-                current = current.parent()
-            logger.debug(
-                f"[{self.__class__.__name__}] navigation_service не найден "
-                f"в иерархии parent'ов"
-            )
-            return None
-        except Exception as e:
-            logger.error(
-                f"[{self.__class__.__name__}] Ошибка поиска navigation_service: {e}",
-                exc_info=True,
-            )
-            return None
 
     def _edit_loan(self):
         """Открывает диалог редактирования выбранного займа."""
@@ -289,17 +256,68 @@ class LoanDialog(BaseDialog):
             loan_id = self.loans_table.item(selected[0].row(), 0).data(Qt.UserRole)
             self.presenter.delete_loan(loan_id)
 
-    # === Методы для кредитов (заглушки, будут реализованы позже) ===
+    # === Методы для кредитов (часть заглушки, будут реализованы позже) ===
+
+    def _open_credit_create_dialog(self) -> None:
+            """
+            Открывает диалог создания кредита через навигационный сервис.
+            """
+            try:
+                if self.navigation_service is None:
+                    self.show_error("Навигация недоступна")
+                    return
+    
+                self.navigation_service.open_credit_create_dialog(self)
+    
+            except ValueError as e:
+                logger.warning(f"[{self.__class__.__name__}] Валидация: {e}")
+                self.show_status(str(e), message_type="error")
+            except Exception as e:
+                logger.error(
+                    f"[{self.__class__.__name__}] Ошибка открытия диалога: {e}",
+                    exc_info=True,
+                )
+                self.show_error("Произошла ошибка при открытии диалога")
 
     def _add_credit_payment(self):
-        """Вносит платеж по выбранному кредиту."""
-        selected = self.credits_table.selectionModel().selectedRows()
-        if not selected:
-            self.show_status("Выберите кредит для внесения платежа", "warning")
-            return
-        # TODO: реализовать через presenter
-        self.show_status("Функция в разработке", "info")
+        """
+        Открывает диалог внесения платежа по выбранному кредиту.
 
+        Делегирует логику презентеру, который сам создаст диалог.
+        """
+        try:
+            if self.navigation_service is None:
+                self.show_error("Навигация недоступна")
+                return
+
+            selected = self.credits_table.selectionModel().selectedRows()
+            if not selected:
+                self.show_status("Выберите кредит для внесения платежа", "warning")
+                return
+
+            credit_id = self.credits_table.item(selected[0].row(), 0).data(Qt.UserRole)
+            if credit_id is None or credit_id <= 0:
+                raise ValueError(f"Некорректный credit_id: {credit_id}")
+
+            # Проверяем, что кредит существует
+            credit = self.presenter.credit_check(credit_id)
+            if credit is None:
+                raise ValueError(f"Кредит #{credit_id} не найден")
+    
+            dialog = self.navigation_service.open_credit_payment_dialog(self, credit_id)
+
+            dialog.payment_made.connect(self.presenter._on_credit_payment_made)
+
+        except ValueError as e:
+            logger.warning(f"[{self.__class__.__name__}] Валидация: {e}")
+            self.show_status(str(e), message_type="error")
+        except Exception as e:
+            logger.error(
+                f"[{self.__class__.__name__}] Ошибка открытия диалога: {e}",
+                exc_info=True,
+            )
+            self.show_error("Произошла ошибка при открытии диалога")
+        
     def _view_credit_details(self):
         """Открывает диалог просмотра деталей выбранного кредита."""
         selected = self.credits_table.selectionModel().selectedRows()

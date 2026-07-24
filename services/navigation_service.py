@@ -18,6 +18,8 @@ from ui.dialogs.transfer_dialog import TransferDialog
 from ui.dialogs.loan_dialog import LoanDialog
 from ui.dialogs.credit_card_dialog import CreditCardDialog
 from ui.dialogs.credit_create_dialog import CreditCreateDialog
+from ui.dialogs.credit_payment_dialog import CreditPaymentDialog
+
 
 # Презентеры
 from ui.presenters.transaction_presenter import TransactionPresenter
@@ -80,6 +82,7 @@ class NavigationService:
     def _init_shared_repositories(self):
         """Инициализирует репозитории и сервисы, общие для всех диалогов."""
         try:
+            # Создаем репозитории
             self.acc_repo = AccountRepository(self.db)
             self.tx_repo = TransactionRepository(self.db)
             self.cat_repo = CategoryRepository(self.db)
@@ -97,6 +100,7 @@ class NavigationService:
             # self.forecast_service = ForecastService(self.tranche_repo, self.accrual_repo, self.credit_card_repo)
             # self.tranche_service = TrancheService(self.tranche_repo, self.credit_card_repo)
 
+            # Создаем сервисы
             self.acc_service = AccountService(self.acc_repo, self.credit_card_repo)
             self.tr_service = TransferService(self.tr_repo, self.acc_repo)
             self.tx_service = TransactionService(
@@ -120,6 +124,10 @@ class NavigationService:
                 self.tx_service,
                 self.cat_service
             )
+
+            # Создаем презентеры
+            self.credit_presenter = CreditPresenter(self.credit_service, self.acc_repo, self.cat_service)
+            
         except Exception as e:
             logger.error(f"[NavigationService] Ошибка инициализации репозиториев: {e}", exc_info=True)
             raise
@@ -177,9 +185,6 @@ class NavigationService:
             Экземпляр CategoryDialog
         """
         try:
-            # 1. Создаём сервис для КАТЕГОРИЙ
-            cat_service = CategoryService(cat_repo=self.cat_repo)
-
             # 2. Создаём презентер для КАТЕГОРИЙ
             presenter = CategoryPresenter(service=self.cat_service)
 
@@ -229,7 +234,7 @@ class NavigationService:
             presenter = LoanPresenter(service, self.credit_service)
 
             # 4. Создаем и показываем диалог
-            dialog = LoanDialog(parent=parent, presenter=presenter)
+            dialog = LoanDialog(parent=parent, presenter=presenter, navigation_service=self)
             dialog.show()
             return dialog
         except Exception as e:
@@ -259,7 +264,7 @@ class NavigationService:
 
     def open_credit_create_dialog(self, parent: QWidget) -> Optional[LoanDialog]:
         """
-        Открывает диалог управления кредитной картой.
+        Открывает диалог создания кредита.
 
         Args:
             parent: родительское окно
@@ -267,13 +272,34 @@ class NavigationService:
         try:
             
             # Создаём презентер и открываем диалог
-            presenter = CreditPresenter(self.credit_service, self.acc_repo, self.cat_service)
             dialog = CreditCreateDialog(
                 parent=parent,
-                presenter=presenter,
+                presenter=self.credit_presenter,
             )
             dialog.show()
             return dialog
         except Exception as e:
             logger.error(f"[NavigationService] Ошибка открытия диалога rhtlbnjd: {e}", exc_info=True)
             raise
+
+    def open_credit_payment_dialog(self, parent: QWidget, credit_id) -> Optional[LoanDialog]:
+            """
+            Открывает диалог внесения платежа по кредиту.
+    
+            Args:
+                parent: родительское окно
+                credit_id: ID кредита
+            """
+            try:
+                
+                # Создаём презентер и открываем диалог
+                dialog = CreditPaymentDialog(
+                    parent=parent,
+                    presenter=self.credit_presenter,
+                    loan_id = credit_id
+                )
+                dialog.exec()
+                return dialog
+            except Exception as e:
+                logger.error(f"[NavigationService] Ошибка открытия диалога: {e}", exc_info=True)
+                raise

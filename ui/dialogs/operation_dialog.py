@@ -1,6 +1,7 @@
 # ui/dialogs/operation_dialog.py
 import logging
 from datetime import datetime
+from typing import List, Dict, Any, Optional
 from typing import List
 from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QTreeWidget, QTreeWidgetItem,
@@ -19,7 +20,7 @@ logger = logging.getLogger(__name__)
 class OperationDialog(BaseDialog):
     """Диалог управления операциями (чистый UI слой, без бизнес-логики)."""
 
-    def __init__(self, parent=None, presenter=None):
+    def __init__(self, parent=None, presenter=None, navigation_service: Optional[Any] = None):
         """
         Инициализация диалога.
         

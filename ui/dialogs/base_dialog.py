@@ -3,6 +3,8 @@
 Базовый диалог с общими функциями: статус-бар, сообщения, заглушки.
 """
 import logging
+from typing import List, Dict, Any, Optional
+
 from PySide6.QtWidgets import (
     QDialog, QLabel, QVBoxLayout, QHBoxLayout, QMessageBox, QTextEdit, QDialogButtonBox
 )
@@ -14,8 +16,9 @@ logger = logging.getLogger(__name__)
 class BaseDialog(QDialog):
     """Базовый класс для всех диалогов приложения."""
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, navigation_service: Optional[Any] = None):
         super().__init__(parent)
+        self.navigation_service = navigation_service
         self._init_base_ui()
 
     def _init_base_ui(self):

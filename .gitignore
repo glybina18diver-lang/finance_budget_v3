@@ -41,6 +41,7 @@ htmlcov/
 budget.db-journal
 budget.db-shm
 budget.db-wal
+*.db
 
 # Matplotlib кэш
 matplotlib/

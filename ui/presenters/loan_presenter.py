@@ -312,3 +312,24 @@ class LoanPresenter:
         """Сбрасывает фильтры в UI и перезагружает данные."""
         if self.view:
             self.load_loans()
+
+    def credit_check(self, credit_id):
+        """ Проверяет сущесвует ли кредит"""
+        credit = self.credit_service.get_credit_details(credit_id)
+        return credit
+        
+    def _on_credit_payment_made(self, loan_id: int) -> None:
+        """
+        Обрабатывает успешное внесение платежа по кредиту.
+
+        Args:
+            loan_id: идентификатор кредита
+        """
+        try:
+            self.load_credits()
+            self.view.show_status(f"Платёж по кредиту {loan_id} успешно внесён", "info")
+        except Exception as e:
+            logger.error(
+                f"[LoanPresenter] Ошибка перезагрузки кредитов: {e}",
+                exc_info=True,
+            )
