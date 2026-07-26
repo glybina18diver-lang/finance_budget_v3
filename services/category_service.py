@@ -36,6 +36,19 @@ class CategoryService:
             logger.error(f"[CategoryService] Ошибка загрузки категорий: {e}", exc_info=True)
             raise
 
+    def get_user_categories(self) -> List[Category]:
+        """
+        Возвращает список активных пользовательские категории (без фильтрации по типу).
+
+        Returns:
+            Список объектов Category
+        """
+        try:
+            return self.cat_repo.get_user_categories()
+        except Exception as e:
+            logger.error(f"[CategoryService] Ошибка загрузки категорий: {e}", exc_info=True)
+            raise
+
     def get_all_by_type(self, cat_type: str) -> List[Category]:
         """
         Возвращает список активных категорий указанного типа (доход/расход).

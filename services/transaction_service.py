@@ -274,13 +274,13 @@ class TransactionService:
 
     def get_accounts_for_ui(self) -> List[Account]:
         """
-        Возвращает список активных счетов для заполнения комбобокса.
+        Возвращает список активных пользователских счетов для заполнения комбобокса.
 
         Returns:
             Список объектов Account
         """
         try:
-            return self.acc_repo.get_all_active()
+            return self.acc_repo.get_user_accounts()
         except Exception as e:
             logger.error(f"[TransactionService] Ошибка загрузки счетов: {e}")
             logger.error("Ошибка: %s", e, exc_info=True)
@@ -322,10 +322,10 @@ class TransactionService:
             logger.error("Ошибка: %s", e, exc_info=True)
             raise
 
-    def get_all_categories(self) -> List[Category]:
-        """Возвращает все категории для UI (без фильтрации)."""
+    def get_categories_for_ui(self) -> List[Category]:
+        """Возвращает список активные пользователские категории для UI (комбоксов) (без фильтров)."""
         try:
-            return self.cat_repo.get_all_categories()
+            return self.cat_repo.get_user_categories()
         except Exception as e:
             logger.error(f"[TransactionService] Ошибка загрузки всех категорий: {e}")
             logger.error("Ошибка: %s", e, exc_info=True)

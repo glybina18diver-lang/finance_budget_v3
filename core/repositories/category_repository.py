@@ -78,6 +78,28 @@ class CategoryRepository:
             logger.error(f"[CategoryRepository] Ошибка получения всех категорий: {e}", exc_info=True)
             raise
 
+    def get_user_categories(self) -> List[Category]:
+        """
+        Возвращает список активных пользовательских категрий для UI.
+
+        Исключает системные,
+        которые используются только для внутренней логики.
+
+        Returns:
+            Список объектов Category
+        """
+        try:
+            query = """
+                SELECT * FROM categories
+                WHERE is_active = 1 AND is_system = 0
+                ORDER BY cat_type, name
+            """
+            rows = self.db.fetchall(query)
+            return [self._row_to_category(row) for row in rows]
+        except Exception as e:
+            logger.error(f"[CategoryRepository] Ошибка получения пользовательских категорий: {e}", exc_info=True)
+            raise
+
     def get_all_categories(self) -> List[Category]:
         """
         Возвращает все категории (без фильтрации по типу).

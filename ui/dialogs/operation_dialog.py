@@ -31,6 +31,7 @@ class OperationDialog(BaseDialog):
         super().__init__(parent)
         self.parent = parent
         self.presenter = presenter
+        self.navigation_service = navigation_service
         self.setWindowTitle("Операции")
         self.resize(1200, 600)
         self._init_ui()
@@ -280,7 +281,7 @@ class OperationDialog(BaseDialog):
         """
         if self.presenter:
             # Просим презентер перезагрузить последние 300 записей
-            self.presenter.initial_load_transactions(limit=300)
+            self.presenter.load_transactions(limit=300)
             #self.show_status("Таблица обновлена", message_type="success")
         else:
             self.show_error("Презентер не подключен или ошибка метода")
@@ -387,8 +388,11 @@ class OperationDialog(BaseDialog):
         # Выбираем первую категорию по умолчанию
         self.category_combo.setCurrentIndex(0)
 
-    def initial_load_transactions(self, transactions: List[Transaction]):
-        """Публичный интерфейс для презентера. (загрузка транзакций при открытии диалога)"""
+    def load_transactions(self, transactions: List[Transaction]):
+        """
+        Публичный интерфейс для презентера. 
+        (загрузка транзакций при открытии диалога и последущих обновлениях таблицы)
+        """
         rows = self._prepare_transaction_rows(transactions)
         self._render_transaction_table(rows)
         self.show_status(f"Загружено {len(transactions)} операций", message_type="success")
@@ -459,48 +463,59 @@ class OperationDialog(BaseDialog):
 
     #========== Открытие диалогов ==========
     def _open_account_management(self):
-        """
-        Открывает диалог управления счетами через навигационный сервис.
-        """
+        """Открывает диалог управления счетами."""
         if hasattr(self.parent, 'navigation_service'):
-            self.parent.navigation_service.open_account_dialog(self.parent)
+            dialog = self.parent.navigation_service.open_account_dialog(self.parent)
+            if dialog:
+                dialog.finished.connect(self._on_child_dialog_closed)
         else:
             self.show_status("Навигация недоступна", message_type="error")
 
     def _open_category_management(self):
-        """
-        Открывает диалог управления категориями через навигационный сервис.
-        """
+        """Открывает управление категориями."""
         if hasattr(self.parent, 'navigation_service'):
-            self.parent.navigation_service.open_category_dialog(self.parent)
+            dialog = self.parent.navigation_service.open_category_dialog(self.parent)
+            if dialog:
+                dialog.finished.connect(self._on_child_dialog_closed)
         else:
             self.show_status("Навигация недоступна", message_type="error")
 
     def _open_transfer_dialog(self):
-        """
-        Открывает диалог переводов через навигационный сервис.
-        """
+        """Открывает диалог переводов."""
         if hasattr(self.parent, 'navigation_service'):
-            self.parent.navigation_service.open_transfer_dialog(self.parent)
+            dialog = self.parent.navigation_service.open_transfer_dialog(self.parent)
+            if dialog:
+                dialog.finished.connect(self._on_child_dialog_closed)
         else:
             self.show_status("Навигация недоступна", message_type="error")
-    
+
     def _open_loan_dialog(self):
-        """
-        Открывает диалог управления займами через навигационный сервис.
-        """
+        """Открывает диалог управления займами."""
         if hasattr(self.parent, 'navigation_service'):
-            self.parent.navigation_service.open_loan_dialog(self.parent)
-        else:
-            self.show_status("Навигация недоступна", message_type="error")      
-    
-    def _open_credit_card_dialog(self):
-        """
-        Открывает диалог управления rhtlbnrfvb через навигационный сервис.
-        """
-        if hasattr(self.parent, 'navigation_service'):
-            self.parent.navigation_service.open_credit_card_dialog(self.parent)
+            dialog = self.parent.navigation_service.open_loan_dialog(self.parent)
+            if dialog:
+                dialog.finished.connect(self._on_child_dialog_closed)
         else:
             self.show_status("Навигация недоступна", message_type="error")
+
+    def _open_credit_card_dialog(self):
+        """Открывает диалог управления кредитными картами."""
+        if hasattr(self.parent, 'navigation_service'):
+            dialog = self.parent.navigation_service.open_credit_card_dialog(self.parent)
+            if dialog:
+                dialog.finished.connect(self._on_child_dialog_closed)
+        else:
+            self.show_status("Навигация недоступна", message_type="error")
+
+    def _on_child_dialog_closed(self):
+        """
+        Вызывается при закрытии любого дочернего диалога.
+        Запускает полное обновление данных (счета, категории, транзакции) через презентер.
+        """
+        if self.presenter:
+            # Сохраняем текущий выбранный тип, чтобы не сбрасывать выбор пользователя
+            current_type = self.type_combo.currentText()
+            self.presenter.refresh_data(current_type)
+            self.show_status("Данные успешно обновлены", message_type="success")
     
     #========== Функции (прочие) ==========

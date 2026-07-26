@@ -146,7 +146,7 @@ class NavigationService:
                         # Создаём презентер
             presenter = TransactionPresenter(tx_service=self.tx_service)
             # Создаём и показываем диалог
-            dialog = OperationDialog(parent=parent, presenter=presenter)
+            dialog = OperationDialog(parent=parent, presenter=presenter, navigation_service=self)
             dialog.show()  # Не modal!
             return dialog
         except Exception as e:

@@ -35,11 +35,11 @@ class CategoryPresenter:
         self.load_categories()
 
     def load_categories(self) -> None:
-        """Загружает все категории из сервиса и передаёт в UI."""
+        """Загружает категории из сервиса и передаёт в UI. Исключася системные категории."""
         if not self.view:
             return
         try:
-            categories = self.service.get_all_categories()
+            categories = self.service.get_user_categories()
             self.view.load_categories(categories)
             self.view.load_parent_categories(categories)
         except Exception as e:

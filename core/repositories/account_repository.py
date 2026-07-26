@@ -118,9 +118,7 @@ class AccountRepository:
             return [self._row_to_account(row) for row in rows]
         except Exception as e:
             logger.error(
-                f"[AccountRepository] Ошибка получения пользовательских счетов: {e}",
-                exc_info=True,
-            )
+                f"[AccountRepository] Ошибка получения пользовательских счетов: {e}", exc_info=True)
             raise
 
     def get_by_name(self, name: str) -> Optional[Account]:

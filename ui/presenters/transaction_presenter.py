@@ -87,6 +87,36 @@ class TransactionPresenter:
                 self.view.show_error(f"Ошибка удаления: {e}")
 
     # ================= Работа с UI =================
+    def refresh_data(self, current_type: str = "Расход"):
+        """
+        Обновляет данные в представлении (счета, категории, транзакции).
+        используется при закрытии дочерних диалогов
+        
+        Args:
+            current_type: текущий выбранный тип операции для сохранения состояния UI
+        """
+        if not self.view:
+            return
+        try:
+            # 1. Загружаем актуальные списки счетов и категорий
+            accounts = self.service.get_accounts_for_ui()
+            self.all_categories = self.service.get_categories_for_ui()
+            
+            # 2. Обновляем кэши и комбобокс счетов
+            self.create_caches(accounts, self.all_categories)
+            self.view.load_accounts_combos(accounts)
+            
+            # 3. Обновляем комбобокс категорий с учётом текущего выбранного типа
+            self.update_categories_for_type(current_type)
+            
+            # 4. Перезагружаем таблицу транзакций
+            self.load_transactions(limit=300)
+            
+        except Exception as e:
+            logger.error(f"[TransactionPresenter] Ошибка обновления данных: {e}", exc_info=True)
+            if self.view:
+                self.view.show_error(f"Ошибка обновления данных: {e}")
+
     def load_initial_data(self):
         """Загружает начальные данные при открытии диалога."""
         if not self.view:
@@ -95,7 +125,7 @@ class TransactionPresenter:
         try:
             # 1. Загружаем ВСЕ категории и счета (один раз)
             accounts = self.service.get_accounts_for_ui()
-            self.all_categories = self.service.get_all_categories()
+            self.all_categories = self.service.get_categories_for_ui()
 
             # 2. Создаём кэши в UI
             self.create_caches(accounts, self.all_categories)
@@ -105,7 +135,7 @@ class TransactionPresenter:
             self.view.load_accounts_combos(accounts)
 
             # 4. Загружаем таблицу транзакций
-            self.initial_load_transactions()
+            self.load_transactions()
         except Exception as e:
             logger.error(f"[TransactionPresenter] Ошибка загрузки начальных данных: {e}", exc_info=True)
             if self.view:
@@ -145,7 +175,7 @@ class TransactionPresenter:
         # Передаём кэши в UI для отрисовки таблицы и форматирования
         self.view.create_caches(accounts, categories)
 
-    def initial_load_transactions(self, limit: int = 300):
+    def load_transactions(self, limit: int = 300):
         """
         Загружает транзакции из БД и передает их в представление для отрисовки.
 
@@ -155,16 +185,8 @@ class TransactionPresenter:
         try:
             transactions = self.service.get_latest_transactions(limit)
             if self.view:
-                self.view.initial_load_transactions(transactions)
+                self.view.load_transactions(transactions)
         except Exception as e:
             logger.error(f"[TransactionPresenter] Ошибка загрузки транзакций: {e}", exc_info=True)
             if self.view:
                 self.view.show_error(f"Ошибка загрузки транзакций: {e}")
-
-    # ========== Открытие диалогов =========
-    def open_account_dialog(self):
-        """Заглушка: открытие диалога счетов (реализуется в основном презентере)."""
-        from ui.dialogs.account_dialog import AccountDialog
-        # TODO: Заменить на DI через фабрику или контекст
-        dialog = AccountDialog(parent=self.view.parent)
-        dialog.exec()
