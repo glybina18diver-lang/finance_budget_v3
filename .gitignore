@@ -24,6 +24,7 @@ Thumbs.db
 
 # Данные
 budget.db
+*.db
 
 # Логи
 *.log
@@ -41,7 +42,7 @@ htmlcov/
 budget.db-journal
 budget.db-shm
 budget.db-wal
-*.db
+*.db.backup
 
 # Matplotlib кэш
 matplotlib/

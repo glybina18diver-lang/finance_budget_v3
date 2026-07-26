@@ -4,7 +4,8 @@ import sqlite3
 import logging
 from typing import Optional
 
-from core.migration import migrate_schema
+from core.migration_div import migrate_schema
+# from core.migration import migrate_database
 
 logger = logging.getLogger(__name__)
 
@@ -16,9 +17,10 @@ class Database:
         self.db_path = db_path
         self._conn: Optional[sqlite3.Connection] = None
         self._connect()
-        self._init_tables()
+        # new_db = "new_budget.db"
+        # migrate_database(db_path, new_db)
         # migrate_schema(self._conn)  # ← миграция сразу после создания таблиц (для старых БД)
-
+        self._init_tables()
     def _connect(self):
         """Устанавливает соединение с БД."""
         try:

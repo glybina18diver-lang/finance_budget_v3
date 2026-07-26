@@ -5,7 +5,7 @@ from core.repositories.transaction_repository import TransactionRepository
 from core.repositories.account_repository import AccountRepository
 from core.repositories.category_repository import CategoryRepository
 from core.models import Transaction, Account, Category
-from typing import Tuple, List
+from typing import Tuple, List, Union
 from datetime import date, datetime
 from utils.validators import to_decimal
 
@@ -29,33 +29,42 @@ class TransactionService:
         self.cat_repo = cat_repo
 
     # ------Работа с транзакциями------
-    def create_transaction(self, raw_amount: str, trans_type: str, account_id: int,
+    def create_transaction(self, raw_amount: Union[str, Decimal], trans_type: str, account_id: int,
                            category_id: int, description: str, date_str: str) -> Transaction:
         """
-        Создаёт транзакцию с парсингом суммы, валидацией и обновлением баланса счёта.
+        Создаёт транзакцию, с парсингом суммы, валидацией и обновлением баланса счёта.
+
+        Принимает сумму в двух форматах:
+        - Decimal: прямое значение (например, из CreditService)
+        - str: строка с возможностью выражения "сумма * количество"
+               (например, "100 * 5" = 500, или "104883,10")
 
         Args:
-            raw_amount: строка суммы из UI (например, "100*3" или "10,50")
+            raw_amount: сумма транзакции (Decimal или строка суммы из UI (например, "100*3" или "10,50")
             trans_type: тип операции ("income", "expense", "correct")
             account_id: ID счёта
             category_id: ID категории
-            description: описание операции
+            description: описание операции/транзакции
             date_str: дата в формате YYYY-MM-DD
 
         Returns:
-            Сохранённый объект Transaction с присвоенным ID
+            Созданный объект Transaction
 
         Raises:
-            ValueError: при некорректном формате суммы или данных
+            ValueError: если сумма некорректна или <= 0 или данных
+            Exception: при системной ошибке
         """
         try:
             if not isinstance(account_id, int) or account_id <= 0:
                 raise ValueError("Некорректный ID счёта")
             if not isinstance(category_id, int) or category_id <= 0:
                 raise ValueError("Некорректный ID категории")
-
+            
             # 1. Парсинг суммы и количества (возвращает Decimal)
             amount_positive, quantity = self._parse_amount(raw_amount)
+
+            if amount_positive <= 0:
+                raise ValueError(f"Сумма должна быть > 0, получено: {amount_positive}")
 
             # 2. Бизнес-валидация
             self._validate_inputs(trans_type, account_id, category_id, amount_positive)
@@ -84,8 +93,30 @@ class TransactionService:
 
             return saved_tx
 
+            # вариант исполнгния логики
+            # # Бизнес-логика создания транзакции
+            # transaction = self.transaction_repo.create(
+            #     account_id=account_id,
+            #     category_id=category_id,
+            #     amount=amount_positive,
+            #     quantity=quantity,
+            #     date=date,
+            #     type=type,
+            #     description=description,
+            # )
+
+            # # Обновляем баланс счёта
+            # delta = amount_positive if type == "income" else -amount_positive
+            # self.account_repo.update_balance(account_id, delta)
+
+            # logger.info(
+            #     f"[{self.__class__.__name__}] Создана транзакция "
+            #     f"id={transaction.id}, type={type}, amount={amount_positive}"
+            # )
+            # return transaction
+
         except ValueError as e:
-            logger.warning(f"[TransactionService] Валидация: {e}")
+            logger.warning(f"[{self.__class__.__name__}] Валидация: {e}")
             raise
         except Exception as e:
             logger.error(f"[TransactionService] Критическая ошибка при создании транзакции: {e}")
@@ -124,39 +155,77 @@ class TransactionService:
             raise RuntimeError(f"Системная ошибка при удалении транзакции: {e}") from e
 
     # ------Проверки, валидация, преобразование------
-    def _parse_amount(self, raw: str) -> Tuple[Decimal, Decimal]:
+    def _parse_amount(self, raw_amount: Union[str, Decimal]) -> Tuple[Decimal, Decimal]:
         """
-        Разбирает строку суммы: поддерживает "100*3", "10,50", "1000".
-        Возвращает Decimal для точных финансовых расчётов.
+        Парсит сумму транзакции из строки или Decimal.
+
+        Поддерживает два формата:
+        - Decimal: возвращается как есть, quantity = 1
+        - str: может содержать выражение "сумма * количество"
+               (например, "100 * 5" → amount=100, quantity=5)
+               или просто число ("104883,10" → amount=104883.10, quantity=1)
 
         Args:
-            raw: исходная строка из поля ввода
+            raw_amount: сумма в виде Decimal или строки
 
         Returns:
-            Кортеж (общая_сумма, количество) — оба Decimal
+            Кортеж (amount, quantity), где:
+            - amount: Decimal, положительная сумма
+            - quantity: Decimal, количество (по умолчанию 1)
 
         Raises:
-            ValueError: при недопустимом формате
+            ValueError: если формат некорректен
         """
-        normalized = raw.replace(",", ".").strip()
+        try:
+            # Если уже Decimal — просто возвращаем
+            if isinstance(raw_amount, Decimal):
+                if raw_amount < 0:
+                    return abs(raw_amount), Decimal("1")
+                return raw_amount, Decimal("1")
 
-        # Формат "сумма*количество"
-        if "*" in normalized:
-            parts = normalized.split("*", maxsplit=1)
-            if len(parts) != 2:
-                raise ValueError("Некорректный формат умножения. Используйте: сумма*количество")
-            unit_price = to_decimal(parts[0])
-            quantity = to_decimal(parts[1])
-            if quantity <= 0:
-                raise ValueError("Количество должно быть больше 0")
-            total = (unit_price * quantity).quantize(Decimal("0.01"))
-            return total, quantity
+            # Если не строка — ошибка
+            if not isinstance(raw_amount, str):
+                raise ValueError(
+                    f"Ожидается Decimal или str, получено: {type(raw_amount).__name__}"
+                )
 
-        # Обычное число
-        total = to_decimal(normalized)
-        if total <= 0:
-            raise ValueError("Сумма должна быть положительным числом")
-        return total, Decimal("1.00")
+            # Парсим строку
+            normalized = raw_amount.replace(" ", "").replace(",", ".")
+
+            if not normalized:
+                raise ValueError("Сумма не может быть пустой")
+
+            # Проверяем наличие выражения "сумма * количество"
+            if "*" in normalized:
+                parts = normalized.split("*")
+                if len(parts) != 2:
+                    raise ValueError(
+                        f"Некорректный формат выражения: '{raw_amount}'"
+                    )
+
+                amount = Decimal(parts[0].strip())
+                quantity = Decimal(parts[1].strip())
+
+                if quantity <= 0:
+                    raise ValueError(
+                        f"Количество должно быть > 0, получено: {quantity}"
+                    )
+
+                return amount, quantity
+
+            # Простое число
+            amount = Decimal(normalized)
+            return amount, Decimal("1")
+
+        except ValueError as e:
+            logger.warning(f"[{self.__class__.__name__}] Валидация суммы: {e}")
+            raise
+        except Exception as e:
+            logger.error(
+                f"[{self.__class__.__name__}] Ошибка парсинга суммы: {e}",
+                exc_info=True,
+            )
+            raise
 
     def _validate_inputs(self, trans_type: str, account_id: int, category_id: int, amount: Decimal):
         """

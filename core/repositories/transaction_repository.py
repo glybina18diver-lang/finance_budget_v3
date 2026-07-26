@@ -61,9 +61,8 @@ class TransactionRepository:
             query = """
                 INSERT INTO transactions (
                     date, amount, trans_type, account_id, category_id,
-                    description, quantity, original_transaction_id,
-                    created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    description, quantity, original_transaction_id
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """
             params = (
                 transaction.date,
@@ -73,9 +72,7 @@ class TransactionRepository:
                 transaction.category_id,
                 transaction.description,
                 float(transaction.quantity),
-                transaction.original_transaction_id,
-                transaction.created_at,
-                transaction.updated_at
+                transaction.original_transaction_id
             )
             new_id = self.db.execute(query, params)
             transaction.id = new_id
