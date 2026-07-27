@@ -2,7 +2,7 @@
 
 import sqlite3
 import logging
-from typing import Optional
+from typing import Optional, Dict, Any, List
 
 from core.migration_div import migrate_schema
 # from core.migration import migrate_database
@@ -21,6 +21,7 @@ class Database:
         # migrate_database(db_path, new_db)
         # migrate_schema(self._conn)  # ← миграция сразу после создания таблиц (для старых БД)
         self._init_tables()
+
     def _connect(self):
         """Устанавливает соединение с БД."""
         try:
@@ -32,6 +33,80 @@ class Database:
             logger.error(f"[Database] Ошибка подключения к БД: {e}", exc_info=True)
             raise
 
+    # Это временный метод только для того чтобы по быстрому подключть минималный график в гл. окне
+    def get_yearly_summary(self, year: int) -> Dict[str, Dict]:
+        """
+        Получает сводку доходов/расходов по месяцам за год для графика.
+        
+        Args:
+            year: год для получения данных (например, 2026)
+            
+        Returns:
+            Словарь вида {'2026-01': {'income': 1000.0, 'expense': 800.0, 'balance': 200.0}, ...}
+            Всегда возвращает данные за все 12 месяцев (даже если по ним нет транзакций).
+            
+        Raises:
+            ValueError: если год некорректен
+            RuntimeError: при ошибке работы с БД
+        """
+        try:
+            # Валидация входных данных
+            if not isinstance(year, int):
+                raise ValueError(f"Год должен быть целым числом, получено: {type(year).__name__}")
+            if year < 1900 or year > 2100:
+                raise ValueError(f"Год вне допустимого диапазона: {year}")
+            
+            sql = '''
+                SELECT 
+                    strftime('%Y-%m', date) AS month_year,
+                    COALESCE(SUM(CASE WHEN trans_type = 'income' THEN amount ELSE 0 END), 0) AS income,
+                    COALESCE(SUM(CASE WHEN trans_type = 'expense' THEN ABS(amount) ELSE 0 END), 0) AS expense,
+                    COALESCE(SUM(amount), 0) AS balance
+                FROM transactions
+                WHERE strftime('%Y', date) = ?
+                    AND trans_type IN ('income', 'expense')
+                GROUP BY month_year
+                ORDER BY month_year
+            '''
+            
+            cursor = self._conn.cursor()
+            cursor.execute(sql, (str(year),))
+            results = cursor.fetchall()
+            
+            # Инициализируем структуру для всех 12 месяцев (нулевые значения)
+            monthly_data = {}
+            for month in range(1, 13):
+                month_key = f"{year}-{month:02d}"
+                monthly_data[month_key] = {
+                    'income': 0.0,
+                    'expense': 0.0,
+                    'balance': 0.0
+                }
+            
+            # Заполняем данные из БД
+            for row in results:
+                month_key = row[0]
+                if month_key in monthly_data:
+                    monthly_data[month_key] = {
+                        'income': float(row[1] or 0.0),
+                        'expense': float(row[2] or 0.0),
+                        'balance': float(row[3] or 0.0)
+                    }
+            
+            logger.info(f"[{self.__class__.__name__}] Получена сводка за {year} год: "
+                        f"{len([m for m in monthly_data.values() if m['income'] or m['expense']])} "
+                        f"месяцев с данными")
+            return monthly_data
+            
+        except ValueError as e:
+            logger.warning(f"[{self.__class__.__name__}] Валидация года: {e}")
+            raise
+        except Exception as e:
+            logger.error(f"[{self.__class__.__name__}] Ошибка получения сводки за {year}: {e}", 
+                        exc_info=True)
+            raise RuntimeError(f"Не удалось получить сводку за {year} год") from e
+        
+    
     def _init_tables(self):
         """Создание всех таблиц согласно актуальной схеме V3."""
         if not self._conn:

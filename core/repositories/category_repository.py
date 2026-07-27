@@ -33,7 +33,8 @@ class CategoryRepository:
             parent_id=row.get("parent_id"),
             color=row.get("color", "#3498db"),
             icon=row.get("icon", ""),
-            is_system=bool(row.get("is_system", 0))
+            is_system=bool(row.get("is_system", 0)),
+            is_active=bool(row.get("is_active", 0))
         )
 
     def get_all_by_type(self, cat_type: str) -> List[Category]:

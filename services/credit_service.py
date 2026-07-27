@@ -338,7 +338,7 @@ class CreditService:
                     trans_type="expense",
                     raw_amount=str(interest_amount),
                     date_str=str(payment_date),
-                    description=f"Проценты по кредиту: {loan.name}",
+                    description=f'Проценты по: "{loan.name}"',
                 )
                 transaction_id = transaction.id
 

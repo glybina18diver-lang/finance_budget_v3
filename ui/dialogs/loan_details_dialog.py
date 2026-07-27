@@ -170,7 +170,7 @@ class LoanDetailsDialog(BaseDialog):
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             QMessageBox.StandardButton.No
         )
-        
+
         if reply == QMessageBox.StandardButton.Yes and self.presenter:
             self.presenter.delete_loan_payment(self.loan_id, payment_id)
 

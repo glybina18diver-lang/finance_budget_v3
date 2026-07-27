@@ -368,25 +368,41 @@ class OperationDialog(BaseDialog):
 
     def load_categories_combos(self, categories: List):
         """
-        Заполняет комбобокс категорий данными из БД.
+        Заполняет комбобокс категорий данными из БД (исключая системные).
         Вызывается презентером.
 
         Args:
             categories: список объектов Categories
+            
+        Note:
+            Системные категории (is_system=True) исключаются из комбобокса
         """
-        self.category_combo.clear()
-        
-        if not categories:
-            self.category_combo.addItem("Нет категорий", userData=None)
-            self.show_status("⚠️ Нет доступных категорий", message_type="warning")
-            return
+        try:
+            self.category_combo.clear()
+            
+            if not categories:
+                self.category_combo.addItem("Нет категорий", userData=None)
+                self.show_status("⚠️ Нет доступных категорий", message_type="warning")
+                return
 
-        for cat in categories:
-            # text = имя, userData = ID категории
-            self.category_combo.addItem(cat.name, userData=cat.id)
-        
-        # Выбираем первую категорию по умолчанию
-        self.category_combo.setCurrentIndex(0)
+            # Фильтруем системные категории
+            user_categories = [cat for cat in categories if not getattr(cat, 'is_system', False)]
+            
+            if not user_categories:
+                self.category_combo.addItem("Нет категорий", userData=None)
+                self.show_status("⚠️ Нет пользовательских категорий", message_type="warning")
+                return
+
+            for cat in user_categories:
+                # text = имя, userData = ID категории
+                self.category_combo.addItem(cat.name, userData=cat.id)
+            
+            # Выбираем первую категорию по умолчанию
+            self.category_combo.setCurrentIndex(0)
+            
+        except Exception as e:
+            logger.error(f"[{self.__class__.__name__}] Ошибка загрузки категорий: {e}", exc_info=True)
+            self.show_status("Ошибка загрузки категорий", message_type="error")
 
     def load_transactions(self, transactions: List[Transaction]):
         """

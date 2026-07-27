@@ -18,6 +18,7 @@ from PySide6.QtWidgets import (
     QGroupBox,
 )
 from PySide6.QtCore import Qt, QDate, Signal
+from PySide6.QtGui import QDoubleValidator, QIntValidator
 
 from ui.presenters.credit_presenter import CreditPresenter
 from utils.validators import parse_float, parse_int
@@ -90,7 +91,10 @@ class CreditCreateDialog(QDialog):
         main_form.addRow("Название:", self.name_input)
 
         self.amount_input = QLineEdit()
-        self.amount_input.setPlaceholderText("500000")
+        self.amount_input.setPlaceholderText("500000.00")
+        amount_validator = QDoubleValidator(0.01, 999999999.99, 2, self)
+        amount_validator.setNotation(QDoubleValidator.StandardNotation)
+        self.amount_input.setValidator(amount_validator)
         main_form.addRow("Сумма кредита:", self.amount_input)
 
         self.issue_date_edit = QDateEdit()
@@ -102,10 +106,15 @@ class CreditCreateDialog(QDialog):
         self.rate_input = QLineEdit()
         self.rate_input.setPlaceholderText("0 (опционально)")
         self.rate_input.setText("0")
+        rate_validator = QDoubleValidator(0.0, 999.99, 2, self)
+        rate_validator.setNotation(QDoubleValidator.StandardNotation)
+        self.rate_input.setValidator(rate_validator)
         main_form.addRow("Ставка, %:", self.rate_input)
 
         self.term_input = QLineEdit()
         self.term_input.setPlaceholderText("36 (опционально)")
+        term_validator = QIntValidator(1, 999, self)
+        self.term_input.setValidator(term_validator)
         main_form.addRow("Срок, мес.:", self.term_input)
 
         self.due_date_edit = QDateEdit()
@@ -114,6 +123,13 @@ class CreditCreateDialog(QDialog):
         self.due_date_edit.setSpecialValueText("Не указана")
         self.due_date_edit.setDisplayFormat("yyyy-MM-dd")
         main_form.addRow("Дата окончания:", self.due_date_edit)
+
+        self.due_date_label = QLabel("—")
+        self.due_date_label.setStyleSheet("color: #1976d2; font-weight: bold;")
+        main_form.addRow("Дата окончания (авто):", self.due_date_label)
+
+        # Скрываем сам QDateEdit, если не исползуем пользовательскую дату
+        # self.due_date_edit.hide()
 
         self.description_input = QTextEdit()
         self.description_input.setPlaceholderText("Описание кредита (опционально)")
@@ -150,6 +166,10 @@ class CreditCreateDialog(QDialog):
 
         specific_layout.addWidget(self.stacked)
         main_layout.addWidget(self.specific_group)
+
+        # --- Подключение сигналов для автоматического расчёта ---
+        self.term_input.textChanged.connect(self._calculate_due_date)
+        self.issue_date_edit.dateChanged.connect(self._calculate_due_date)
 
         # --- Статус-бар ---
         self.status_label = QLabel("")
@@ -312,27 +332,16 @@ class CreditCreateDialog(QDialog):
         if not name:
             raise ValueError("Название кредита не может быть пустым")
 
-        amount = self.amount_input.text().strip()
+        amount = self.amount_input.text()
         if not amount:
             raise ValueError("Сумма кредита не может быть пустой")
-
-        amount_value = parse_float(amount)
-        if amount_value is None or amount_value <= 0:
-            raise ValueError("Сумма кредита должна быть положительным числом")
 
         issue_date = self.issue_date_edit.date().toString("yyyy-MM-dd")
 
         rate = self.rate_input.text().strip() or "0"
-        rate_value = parse_float(rate)
-        if rate_value is None or rate_value < 0:
-            raise ValueError("Процентная ставка не может быть отрицательной")
 
         term = self.term_input.text().strip()
-        if term:
-            term_value = parse_int(term)
-            if term_value is None or term_value <= 0:
-                raise ValueError("Срок кредита должен быть положительным числом")
-
+        
         # Дата окончания — опциональная
         due_date = ""
         if self.due_date_edit.date() != QDate():
@@ -353,6 +362,51 @@ class CreditCreateDialog(QDialog):
     # ------------------------------------------------------------------ #
     #                         Вспомогательные методы                     #
     # ------------------------------------------------------------------ #
+    def _calculate_due_date(self) -> None:
+        """
+        Пересчитывает и отображает дату окончания на основе даты выдачи и срока.
+        
+        Вызывается автоматически при изменении:
+        - Даты выдачи (issue_date_edit)
+        - Срока в месяцах (term_input)
+        """
+        try:
+            # Получаем дату выдачи
+            issue_date = self.issue_date_edit.date()
+            
+            # Получаем срок в месяцах
+            term_str = self.term_input.text().strip()
+            
+            if not term_str:
+                # Если срок не указан — очищаем дату окончания
+                self.due_date_edit.setDate(QDate())
+                self.due_date_label.setText("—")
+                return
+            
+            # Парсим срок
+            term_months = parse_int(term_str)
+            if term_months is None or term_months <= 0:
+                self.due_date_edit.setDate(QDate())
+                self.due_date_label.setText("Некорректный срок")
+                self.due_date_label.setStyleSheet("color: #d32f2f;")
+                return
+            
+            # Рассчитываем дату окончания
+            due_date = issue_date.addMonths(term_months)
+            
+            # Устанавливаем дату в поле (без сигнала, чтобы не было рекурсии)
+            self.due_date_edit.blockSignals(True)
+            self.due_date_edit.setDate(due_date)
+            self.due_date_edit.blockSignals(False)
+            
+            # Обновляем label с отформатированной датой
+            formatted_date = due_date.toString("dd.MM.yyyy")
+            self.due_date_label.setText(formatted_date)
+            self.due_date_label.setStyleSheet("color: #1976d2; font-weight: bold;")
+            
+        except Exception as e:
+            logger.debug(f"[CreditCreateDialog] Ошибка расчёта даты окончания: {e}")
+            self.due_date_label.setText("—")
 
     def _show_status(self, message: str, level: str = "info") -> None:
         """

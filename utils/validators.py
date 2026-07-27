@@ -131,6 +131,14 @@ def to_decimal(value: NumericInput) -> Decimal:
             return Decimal(str(value))
 
         if isinstance(value, str):
+            # Удаляем пробелы (например, '1 000,50' -> '1000.50')
+            value = value.replace(' ', '')
+            logger.debug(f"[to_decimal] Убераем пробелы: {value}")
+    
+            # Заменяем запятую на точку для корректного преобразования
+            value = str(value).replace(',', '.')
+            logger.debug(f"[to_decimal] Заменяем запятую на точку: {value}")
+
             stripped = value.strip()
             if not stripped:
                 raise ValueError("Строка не может быть пустой")

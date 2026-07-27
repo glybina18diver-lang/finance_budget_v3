@@ -241,9 +241,16 @@ class MainWindow(QMainWindow):
         # layout.addWidget(self.pie_chart, 1)
         
         # График доходов/расходов
-        # self.income_expense_chart = IncomeExpenseChart(self, self.chart_proxy)
-        #self.income_expense_chart.setMinimumHeight(250)
-        #  self.income_expense_chart.setMaximumHeight(270)
-        # layout.addWidget(self.income_expense_chart, 1)
+        from ui.widgets.income_expense_chart import IncomeExpenseChart
+        # Передаём экземпляр БД из навигационного сервиса
+        self.income_expense_chart = IncomeExpenseChart(
+            self, 
+            self.navigation_service.db
+        )
+        self.income_expense_chart.setMinimumHeight(250)
+        self.income_expense_chart.setMaximumHeight(270)
+        self.income_expense_chart.setMinimumWidth(650)
+        self.income_expense_chart.setMaximumWidth(800)
+        layout.addWidget(self.income_expense_chart, 1)
         
         return container

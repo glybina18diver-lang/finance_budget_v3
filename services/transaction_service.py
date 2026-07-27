@@ -325,7 +325,7 @@ class TransactionService:
     def get_categories_for_ui(self) -> List[Category]:
         """Возвращает список активные пользователские категории для UI (комбоксов) (без фильтров)."""
         try:
-            return self.cat_repo.get_user_categories()
+            return self.cat_repo.get_all_active_categories()
         except Exception as e:
             logger.error(f"[TransactionService] Ошибка загрузки всех категорий: {e}")
             logger.error("Ошибка: %s", e, exc_info=True)

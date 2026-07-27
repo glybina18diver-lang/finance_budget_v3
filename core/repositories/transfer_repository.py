@@ -41,7 +41,9 @@ class TransferRepository:
             type=row["type"],
             from_account_id=row["from_account_id"],
             to_account_id=row["to_account_id"],
-            description=row["description"]
+            description=row["description"],
+            is_system=row["is_system"],
+            loan_id=row["loan_id"]
         )
 
     def get_by_id(self, transfer_id: int) -> Optional[Transfer]:

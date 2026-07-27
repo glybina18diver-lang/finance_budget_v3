@@ -277,7 +277,7 @@ class CreditCardService:
                     trans_type="expense",
                     category_id=interest_category_id,
                     date_str=str(payment_date.isoformat()),
-                    description=f"Проценты по {card.account_name}"
+                    description=f'Проценты по: "{card.account_name}"'
                 )
                 logger.info(
                     f"[{self.__class__.__name__}] Записан расход на проценты {interest_amount} ₽"
