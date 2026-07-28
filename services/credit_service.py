@@ -319,6 +319,7 @@ class CreditService:
             if loan_account is None:
                 raise ValueError(f"Счёт кредита #{loan.account_id} не найден")
 
+            # Плтеж тело долга
             data = {
                 "from_account_id": from_account_id,
                 "to_account_id": loan.account_id,
@@ -329,6 +330,7 @@ class CreditService:
             }
             transfer = self.transfer_service.create_transfer(data)
 
+            # Платеж процентов
             transaction_id = None
             if interest_amount > 0:
                 interest_category_id = self._get_interest_category_id()

@@ -5,7 +5,7 @@ from typing import List, Dict, Any, Optional
 from typing import List
 from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QTreeWidget, QTreeWidgetItem,
-    QLabel, QLineEdit, QComboBox, QFrame, QMessageBox, QWidget, QHeaderView, QDateEdit, QPushButton, QTextEdit
+    QLabel, QLineEdit, QComboBox, QFrame, QMessageBox, QWidget, QHeaderView, QDateEdit, QPushButton, QTextEdit, QMenu
 )
 from PySide6.QtCore import Qt, QTimer, QDate
 from PySide6.QtGui import QFont, QDoubleValidator
@@ -48,7 +48,7 @@ class OperationDialog(BaseDialog):
         layout.setContentsMargins(10, 10, 10, 10)
 
         layout.addWidget(self._create_top_panel())
-        layout.addWidget(self._create_filter_panel())
+        # layout.addWidget(self._create_filter_panel())
         layout.addWidget(self._create_input_panel())
         layout.addWidget(self._create_table(), stretch=1)
         layout.addWidget(self._create_bottom_panel())
@@ -119,19 +119,33 @@ class OperationDialog(BaseDialog):
         """
         Обрабатывает нажатие клавиш в диалоге операций.
         
-        Перехватывает Enter для вызова _get_form_data,
-        игнорируя другие виджеты, которые могут перехватить событие.
+        Перехватывает:
+        - Enter для вызова _get_form_data (добавление операции)
+        - Delete для удаления выбранной транзакции
         
         Args:
             event: событие нажатия клавиши
         """
-        if event.key() in (Qt.Key_Return, Qt.Key_Enter):
+        key = event.key()
+        
+        # Обработка Enter (добавление операции)
+        if key in (Qt.Key_Return, Qt.Key_Enter):
             # Игнорируем, если фокус в многострочном поле (чтобы не ломать перенос строки)
             focus_widget = self.focusWidget()
             if not isinstance(focus_widget, QTextEdit):
                 self._get_form_data()
                 event.accept()
                 return
+        
+        # Обработка Delete (удаление транзакции)
+        elif key == Qt.Key_Delete:
+            # Проверяем, что есть выбранная транзакция в таблице
+            selected_items = self.transactions_tree.selectedItems()
+            if selected_items:
+                self.delete_transaction()
+                event.accept()
+                return
+        
         super().keyPressEvent(event)
 
     def _create_input_panel(self) -> QWidget:
@@ -153,9 +167,10 @@ class OperationDialog(BaseDialog):
         self.amount_input.setFixedHeight(26)
         self.amount_input.setMinimumWidth(120)
         layout.addWidget(self.amount_input)
-        validator = QDoubleValidator(0.0, 999999999.0, 2)  # min=0, max=999M, 2 знака после запятой
-        validator.setNotation(QDoubleValidator.StandardNotation)
-        self.amount_input.setValidator(validator)
+        self.amount_input.setFocus()
+        # validator = QDoubleValidator(0.0, 999999999.0, 2)  # min=0, max=999M, 2 знака после запятой
+        # # validator.setNotation(QDoubleValidator.StandardNotation)
+        # self.amount_input.setValidator(validator)
 
         # Тип операции
         self.type_combo = QComboBox()
@@ -227,7 +242,7 @@ class OperationDialog(BaseDialog):
         
         # Контекстное меню (заглушка)
         self.transactions_tree.setContextMenuPolicy(Qt.CustomContextMenu)
-        self.transactions_tree.customContextMenuRequested.connect(self._stub_method)
+        self.transactions_tree.customContextMenuRequested.connect(self._show_transactions_context_menu)
         return self.transactions_tree
 
     def _create_bottom_panel(self) -> QWidget:
@@ -259,9 +274,6 @@ class OperationDialog(BaseDialog):
         """Сбрасывает поля ввода формы к значениям по умолчанию."""
         self.amount_input.clear()
         self.description_input.clear()
-        # self.date_input.setDate(QDate.currentDate())
-        # self.type_combo.setCurrentIndex(0)  # Расход
-        #self.show_status("Форма очищена", "info")
 
     def create_caches(self, accounts: List[Account], categories: List[Category]):
         """
@@ -330,41 +342,51 @@ class OperationDialog(BaseDialog):
     #============Загрузка данных и заполнение UI============
     def load_accounts_combos(self, accounts: List):
         """
-        Заполняет комбобоксы счетов данными из БД.
+        Заполняет комбобоксы счетов данными из БД (исключая системные).
         Вызывается презентером.
-        
+
         Args:
             accounts: список объектов Account из презентера
+            
+        Note:
+            Системные счета (is_system=True) исключаются из комбобокса
         """
-        # Очищаем оба комбобокса
-        self.account_combo.clear()
-        #self.account_filter_combo.clear()
-        
-        # Добавляем опцию "Все счета" в фильтр
-        #self.account_filter_combo.addItem("Все счета", userData=None)
-        
-        if not accounts:
-            # Если счетов нет, показываем подсказку
-            self.account_combo.addItem("Нет активных счетов", userData=None)
-            self.show_status("⚠️ Нет активных счетов. Создайте счёт в управлении счетами.", message_type="warning")
-            return
-        
-        # Заполняем комбобоксы реальными счетами
-        for account in accounts:
-            # Формируем текст с балансом
-            display_text = f"{account.name} ({account.current_balance:,.2f} {account.currency})"
+        try:
+            self.account_combo.clear()
             
-            # Добавляем в комбобокс ввода (основной)
-            self.account_combo.addItem(display_text, userData=account.id)
+            if not accounts:
+                self.account_combo.addItem("Нет счетов", userData=None)
+                self.show_status("⚠️ Нет доступных счетов. Создайте счёт в управлении счетами.", message_type="warning")
+                return
+
+            # Фильтруем системные счета
+            user_accounts = [account for account in accounts if not getattr(account, 'is_system', False)]
             
-            # Добавляем в комбобокс фильтра
-            #self.account_filter_combo.addItem(display_text, userData=account.id)
+            if not user_accounts:
+                self.account_combo.addItem("Нет пользовательских счетов", userData=None)
+                self.show_status("⚠️ Нет пользовательских счетов. Все существующие счета являются системными.", message_type="warning")
+                return
         
-        # Выбираем первый счёт по умолчанию (если есть)
-        if len(accounts) > 0:
+            # Заполняем комбобоксы реальными счетами
+            for account in user_accounts:
+                # Формируем текст с балансом
+                display_text = f"{account.name} ({account.current_balance:,.2f} {account.currency})"
+                
+                # Добавляем в основной комбобокс
+                self.account_combo.addItem(display_text, userData=account.id)
+                
+                # Если нужен комбобокс фильтра - раскомментируйте:
+                # self.account_filter_combo.addItem(display_text, userData=account.id)
+            
+            # Выбираем первый счёт по умолчанию
             self.account_combo.setCurrentIndex(0)
+                    
+            # показываем количество именно пользовательских счетов
+            # self.show_status(f"Загружено {len(user_accounts)} пользовательский(х) счёт(ов)", "success")
             
-        self.show_status(f"Загружено {len(accounts)} счёт(ов)", "success")
+        except Exception as e:
+            logger.error(f"[{self.__class__.__name__}] Ошибка загрузки счетов: {e}", exc_info=True)
+            self.show_status("Ошибка загрузки счетов", message_type="error")
 
     def load_categories_combos(self, categories: List):
         """
@@ -411,7 +433,7 @@ class OperationDialog(BaseDialog):
         """
         rows = self._prepare_transaction_rows(transactions)
         self._render_transaction_table(rows)
-        self.show_status(f"Загружено {len(transactions)} операций", message_type="success")
+        # self.show_status(f"Загружено {len(transactions)} операций", message_type="success")
 
     #========== Загрузка данных для таблицы и заполнение ==========
     def _prepare_transaction_rows(self, transactions: List[Transaction]) -> List[dict]:
@@ -535,3 +557,102 @@ class OperationDialog(BaseDialog):
             self.show_status("Данные успешно обновлены", message_type="success")
     
     #========== Функции (прочие) ==========
+    def _show_transactions_context_menu(self, position):
+        """
+        Показывает контекстное меню для выбранной транзакции.
+        
+        Args:
+            position: позиция курсора в координатах виджета
+        """
+        item = self.transactions_tree.itemAt(position)
+        if not item:
+            return
+        
+        menu = QMenu(self)
+        
+        # Получаем тип транзакции из второго столбца (индекс 1)
+        transaction_type = item.text(1)
+        
+        # Создать возврат - только для доход/расход
+        return_action = menu.addAction("↩ Создать возврат")
+        return_action.triggered.connect(self._stub_method)
+        # Отключаем для других типов (если будут)
+        if transaction_type not in ["Доход", "Расход"]:
+            return_action.setEnabled(False)
+        
+        menu.addSeparator()
+        
+        # Редактировать
+        edit_action = menu.addAction("✏️ Редактировать")
+        edit_action.triggered.connect(self._stub_method)
+        
+        # Дублировать
+        duplicate_action = menu.addAction("🔄 Дублировать (с настройками)")
+        duplicate_action.triggered.connect(self._stub_method)
+        
+        menu.addSeparator()
+        
+        # Показать детали
+        details_action = menu.addAction("🔍 Показать детали")
+        details_action.triggered.connect(self._stub_method)
+        
+        menu.addSeparator()
+        
+        # Удалить
+        delete_action = menu.addAction("❌ Удалить")
+        delete_action.triggered.connect(self.delete_transaction)
+        
+        # Показываем меню в позиции курсора
+        menu.exec(self.transactions_tree.viewport().mapToGlobal(position))
+
+    def delete_transaction(self):
+        """
+        Удаляет выбранную транзакцию после подтверждения пользователя.
+        
+        Получает ID транзакции из выбранной строки таблицы,
+        запрашивает подтверждение и вызывает метод презентера.
+        После успешного удаления обновляет таблицу операций.
+        
+        Raises:
+            ValueError: если не выбрана транзакция или презентер не подключен
+        """
+        try:
+            # Получаем выбранную строку
+            selected_items = self.transactions_tree.selectedItems()
+            if not selected_items:
+                raise ValueError("Не выбрана транзакция для удаления")
+            
+            item = selected_items[0]
+            tx_id = item.data(0, Qt.UserRole)
+            
+            if tx_id is None:
+                raise ValueError("Не удалось получить ID транзакции")
+            
+            if not self.presenter:
+                self.show_status("Презентер не подключен", message_type="error")
+            
+            # Запрашиваем подтверждение
+            reply = QMessageBox.question(
+                self,
+                "Подтверждение удаления",
+                f"Вы уверены, что хотите удалить эту операцию?\n\n"
+                f"Дата: {item.text(0)}\n"
+                f"Сумма: {item.text(2)}\n"
+                f"Категория: {item.text(4)}",
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.No
+            )
+            
+            if reply == QMessageBox.Yes:
+                # Вызываем метод презентера
+                self.presenter.delete_transaction(tx_id)
+                        
+        except ValueError as e:
+            # Ожидаемые ошибки валидации
+            logger.warning(f"[{self.__class__.__name__}] Валидация удаления: {e}")
+            self.show_status(str(e), "error")
+        
+        except Exception as e:
+            # Системные ошибки
+            logger.error(f"[{self.__class__.__name__}] Ошибка удаления транзакции: {e}", exc_info=True)
+            self.show_status("Произошла ошибка при удалении операции", "error")

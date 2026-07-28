@@ -69,11 +69,11 @@ class CreditCardDialog(BaseDialog):
         self.btn_payment.setEnabled(False)
         top_layout.addWidget(self.btn_payment)
         
-        self.btn_hide = QPushButton("Скрыть карту")
-        self.btn_hide.clicked.connect(self._on_hide_card)
-        self.btn_hide.setEnabled(False)
-        self.btn_hide.setStyleSheet("QPushButton { color: red; }")
-        top_layout.addWidget(self.btn_hide)
+        # self.btn_hide = QPushButton("Скрыть карту")
+        # self.btn_hide.clicked.connect(self._on_hide_card)
+        # self.btn_hide.setEnabled(False)
+        # self.btn_hide.setStyleSheet("QPushButton { color: red; }")
+        # top_layout.addWidget(self.btn_hide)
         
         self._main_layout.addLayout(top_layout)
         
@@ -193,7 +193,7 @@ class CreditCardDialog(BaseDialog):
         """Включает или отключает кнопки действий для карты."""
         self.btn_settings.setEnabled(enabled)
         self.btn_payment.setEnabled(enabled)
-        self.btn_hide.setEnabled(enabled)
+        # self.btn_hide.setEnabled(enabled)
 
     def _load_dashboard(self):
         """Загружает и отображает данные вкладки 'Обзор'."""

@@ -55,9 +55,10 @@ class TransactionPresenter:
                 date_str=date_str
             )
             if self.view:
-                self.view.show_status(f"Транзакция ID{tx.id} добавлена")
+                self.view.show_status(f"Транзакция создана. ID: {tx.id}, Сумма: {tx.amount}", message_type="success")
                 self.view.clear_form()
                 self.view.refresh_transactions()
+                self.view.amount_input.setFocus()
         except ValueError as e:
             if self.view:
                 self.view.show_error(str(e))
@@ -76,7 +77,7 @@ class TransactionPresenter:
         try:
             self.service.delete_transaction(tx_id)
             if self.view:
-                self.view.show_status(f"Транзакция ID{tx_id} удалена")
+                self.view.show_status(f"Транзакция ID: {tx_id} - удалена", message_type="success")
                 self.view.refresh_transactions()
         except ValueError as e:
             if self.view:

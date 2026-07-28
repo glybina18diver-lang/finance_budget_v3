@@ -252,7 +252,7 @@ class LoanService:
                 # Я возвращаю: мой счёт → контрагент
                 from_acc_id = my_account.id
                 to_acc_id = counterparty_acc.id
-                description = f"Платёж по займу: {loan.contact_name}"
+                description = f"Внесение платежа по займу: {loan.contact_name}"
 
                 my_account.current_balance -= amount
                 self.account_repo.update(my_account)
@@ -280,7 +280,7 @@ class LoanService:
                 type="external",
                 from_account_id=from_acc_id,
                 to_account_id=to_acc_id,
-                description=payment_data.get("description", description),
+                description=f"Внесение платежа по займу: {loan.contact_name}",
                 is_system=True,
                 loan_id=loan_id
             )

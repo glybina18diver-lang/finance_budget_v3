@@ -80,21 +80,30 @@ def parse_int(text: str) -> Optional[int]:
 NumericInput = Union[int, float, str, Decimal, None]
 
 
-def to_decimal(value: NumericInput) -> Decimal:
+from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
+
+def to_decimal(value: NumericInput, precision: int = 2) -> Decimal:
     """
-    Универсально преобразует числовое значение в Decimal.
+    Универсально преобразует числовое значение в Decimal с округлением.
 
     Поддерживает типы: int, float, str, Decimal.
     Для float используется преобразование через str(), чтобы избежать
     потери точности (Decimal(0.1) != Decimal('0.1')).
+    
+    По умолчанию округляет результат до 2 знаков после запятой
+    (режим ROUND_HALF_UP — стандартное математическое округление).
 
     Args:
         value: значение для преобразования. Допустимые типы:
                int, float, str (числовое представление), Decimal.
                None и пустая строка вызывают ValueError.
+        precision: количество знаков после запятой для округления.
+                   Если None — округление не выполняется.
+                   По умолчанию 2 (для финансовых операций).
 
     Returns:
-        Объект Decimal с точным числовым значением
+        Объект Decimal с точным числовым значением,
+        округлённый до указанного количества знаков
 
     Raises:
         ValueError: если значение None, пустая строка или
@@ -103,51 +112,59 @@ def to_decimal(value: NumericInput) -> Decimal:
 
     Examples:
         >>> to_decimal(100)
-        Decimal('100')
-        >>> to_decimal(123.45)
-        Decimal('123.45')
+        Decimal('100.00')
+        >>> to_decimal(123.456)
+        Decimal('123.46')
         >>> to_decimal("99.99")
         Decimal('99.99')
+        >>> to_decimal("553.05486")
+        Decimal('553.05')
         >>> to_decimal(Decimal("50.00"))
         Decimal('50.00')
+        >>> to_decimal(100, precision=None)
+        Decimal('100')
     """
     try:
         if value is None:
             raise ValueError("Значение не может быть None")
 
         if isinstance(value, Decimal):
-            return value
-
-        if isinstance(value, bool):
+            result = value
+        elif isinstance(value, bool):
             raise TypeError(
                 f"Тип bool не поддерживается, получено: {value!r}"
             )
-
-        if isinstance(value, int):
-            return Decimal(value)
-
-        if isinstance(value, float):
+        elif isinstance(value, int):
+            result = Decimal(value)
+        elif isinstance(value, float):
             # Преобразование через str() для сохранения точности
-            return Decimal(str(value))
-
-        if isinstance(value, str):
+            result = Decimal(str(value))
+        elif isinstance(value, str):
             # Удаляем пробелы (например, '1 000,50' -> '1000.50')
             value = value.replace(' ', '')
-            logger.debug(f"[to_decimal] Убераем пробелы: {value}")
-    
+            logger.debug(f"[to_decimal] Убираем пробелы: {value}")
+
             # Заменяем запятую на точку для корректного преобразования
-            value = str(value).replace(',', '.')
+            value = value.replace(',', '.')
             logger.debug(f"[to_decimal] Заменяем запятую на точку: {value}")
 
             stripped = value.strip()
             if not stripped:
                 raise ValueError("Строка не может быть пустой")
-            return Decimal(stripped)
+            result = Decimal(stripped)
+        else:
+            raise TypeError(
+                f"Неподдерживаемый тип: {type(value).__name__}, "
+                f"значение: {value!r}"
+            )
 
-        raise TypeError(
-            f"Неподдерживаемый тип: {type(value).__name__}, "
-            f"значение: {value!r}"
-        )
+        # Округление до указанного количества знаков после запятой
+        if precision is not None:
+            quantize_exp = Decimal(10) ** -precision  # 10^-2 = 0.01
+            result = result.quantize(quantize_exp, rounding=ROUND_HALF_UP)
+            # logger.debug(f"[to_decimal] Округление до {precision} знаков: {result}")
+
+        return result
 
     except (ValueError, TypeError):
         raise

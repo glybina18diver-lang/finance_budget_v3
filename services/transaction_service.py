@@ -63,14 +63,18 @@ class TransactionService:
             # 1. Парсинг суммы и количества (возвращает Decimal)
             amount_positive, quantity = self._parse_amount(raw_amount)
 
-            if amount_positive <= 0:
-                raise ValueError(f"Сумма должна быть > 0, получено: {amount_positive}")
+            # Считаем общую сумму
+            amount_summ = amount_positive*quantity
+            total_amount = to_decimal(amount_summ)
+
+            if total_amount <= 0:
+                raise ValueError(f"Сумма должна быть > 0, получено: {total_amount}")
 
             # 2. Бизнес-валидация
-            self._validate_inputs(trans_type, account_id, category_id, amount_positive)
+            self._validate_inputs(trans_type, account_id, category_id, total_amount)
 
             # 3. Применение знака по типу
-            signed_amount = amount_positive if trans_type == "income" else -amount_positive
+            signed_amount = total_amount if trans_type == "income" else -total_amount
 
             # 4. Сборка объекта
             transaction = Transaction(
@@ -237,7 +241,7 @@ class TransactionService:
             category_id: ID категории
             amount: итоговая сумма операции
         """
-        if trans_type not in ("income", "expense", "correct"):
+        if trans_type not in ("income", "expense", "correct", "refund"):
             raise ValueError(f"Недопустимый тип транзакции: {trans_type}")
 
         if amount <= 0:
@@ -274,15 +278,24 @@ class TransactionService:
 
     def get_accounts_for_ui(self) -> List[Account]:
         """
-        Возвращает список активных пользователских счетов для заполнения комбобокса.
+        Возвращает список активных  счетов для заполнения комбобокса.
 
         Returns:
             Список объектов Account
         """
         try:
-            return self.acc_repo.get_user_accounts()
+            return self.acc_repo.get_all_active()
         except Exception as e:
             logger.error(f"[TransactionService] Ошибка загрузки счетов: {e}")
+            logger.error("Ошибка: %s", e, exc_info=True)
+            raise
+    
+    def get_categories_for_ui(self) -> List[Category]:
+        """Возвращает список активные  категории для UI (комбоксов) (без фильтров)."""
+        try:
+            return self.cat_repo.get_all_active_categories()
+        except Exception as e:
+            logger.error(f"[TransactionService] Ошибка загрузки всех категорий: {e}")
             logger.error("Ошибка: %s", e, exc_info=True)
             raise
 
@@ -319,14 +332,5 @@ class TransactionService:
             return self.tx_repo.get_latest(limit)
         except Exception as e:
             logger.error(f"[TransactionService] Ошибка загрузки транзакций: {e}")
-            logger.error("Ошибка: %s", e, exc_info=True)
-            raise
-
-    def get_categories_for_ui(self) -> List[Category]:
-        """Возвращает список активные пользователские категории для UI (комбоксов) (без фильтров)."""
-        try:
-            return self.cat_repo.get_all_active_categories()
-        except Exception as e:
-            logger.error(f"[TransactionService] Ошибка загрузки всех категорий: {e}")
             logger.error("Ошибка: %s", e, exc_info=True)
             raise
