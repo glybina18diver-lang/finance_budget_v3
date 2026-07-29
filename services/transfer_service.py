@@ -3,7 +3,7 @@
 Сервис переводов.
 Инкапсулирует логику внутренних/внешних переводов, работу с контрагентами и балансами.
 """
-from typing import List
+from typing import List, Dict
 from decimal import Decimal
 import logging
 from core.repositories.transfer_repository import TransferRepository
@@ -80,24 +80,60 @@ class TransferService:
             logger.error("Ошибка: %s", e, exc_info=True)
             raise RuntimeError(f"Системная ошибка при удалении перевода: {e}") from e
 
-    def get_all_transfers(self) -> List[Transfer]:
-        """Возвращает все переводы."""
+    def get_all_transfers_id(self) -> List[Transfer]:
+        """Возвращает все переводы c ID."""
         try:
             return self.transfer_repo.get_all()
         except Exception as e:
             logger.error(f"[TransferService] Ошибка загрузки переводов: {e}", exc_info=True)
             raise
 
-    def get_transfers_with_names(self) -> List[Transfer]:
-        """Возвращает переводы с именем а не ID."""
+    def get_all_transfers(self) -> List[Transfer]:
+        """
+        Получает все пользовательские переводы через репозиторий.
+        
+        Returns:
+            Список объектов Transfer
+            
+        Raises:
+            RuntimeError: при ошибке получения данных
+        """
         try:
-            return self.transfer_repo.get_all_with_details()
+            return self.transfer_repo.get_all_with_names()
         except Exception as e:
-            logger.error(f"[TransferService] Ошибка загрузки переводов с деталями: {e}", exc_info=True)
+            logger.error(f"[{self.__class__.__name__}] Ошибка получения переводов: {e}", exc_info=True)
+            raise
+
+    def get_transfers_with_filters(self, filters: Dict) -> List[Transfer]:
+        """
+        Получает отфильтрованные переводы через репозиторий.
+        
+        Args:
+            filters: параметры фильтрации (date_from, date_to, search, account_id)
+            
+        Returns:
+            Список объектов Transfer, удовлетворяющих фильтрам
+            
+        Raises:
+            ValueError: при некорректных параметрах фильтра
+            RuntimeError: при ошибке получения данных
+        """
+        try:
+            return self.transfer_repo.get_filtered(filters)
+        except ValueError as e:
+            logger.warning(f"[{self.__class__.__name__}] Валидация фильтров: {e}")
+            raise
+        except Exception as e:
+            logger.error(f"[{self.__class__.__name__}] Ошибка получения отфильтрованных переводов: {e}", exc_info=True)
             raise
 
     def get_all_accounts_active(self) -> List:
-        """Возвращает активные счета для комбобоксов."""
+        """
+        Возвращает активные счета для комбобоксов.
+
+        Returns:
+            Список объектов Account
+        """
         try:
             return self.account_repo.get_all_active()
         except Exception as e:

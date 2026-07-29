@@ -3,7 +3,8 @@
 Инкапсулирует CRUD-операции и маппинг данных.
 """
 import logging
-from typing import List, Optional
+from datetime import datetime
+from typing import List, Optional, Dict
 from decimal import Decimal
 from core.models import Transfer
 from utils.validators import to_decimal
@@ -23,28 +24,50 @@ class TransferRepository:
         """
         self.db = db
 
-    def _row_to_transfer(self, row) -> Transfer:
+    def _row_to_transfer(self, row: Dict) -> Transfer:
         """
-        Преобразует строку результата БД в объект Transfer.
-        Числовые поля конвертируются из float (SQLite REAL) в Decimal.
-
+        Преобразует словарь данных из БД в объект Transfer.
+        Динамически добавляет имена счетов и контрагента, если они есть в словаре.
+        
         Args:
-            row: строка с данными перевода
-
+            row: словарь с данными перевода из репозитория
+            
         Returns:
-            Объект Transfer
+            Объект Transfer с заполненными полями
+            
+        Raises:
+            ValueError: при некорректных данных в словаре
+            RuntimeError: при непредвиденной ошибке маппинга
         """
-        return Transfer(
-            id=row["id"],
-            date=row["date"],
-            amount=to_decimal(row["amount"]),
-            type=row["type"],
-            from_account_id=row["from_account_id"],
-            to_account_id=row["to_account_id"],
-            description=row["description"],
-            is_system=row["is_system"],
-            loan_id=row["loan_id"]
-        )
+        try:
+            transfer = Transfer(
+                id=row.get('id'),
+                date=str(row.get('date', '')),
+                amount=Decimal(str(row.get('amount', 0))),
+                type=row.get('type', 'internal'),
+                from_account_id=row.get('from_account_id', 0),
+                to_account_id=row.get('to_account_id', 0),
+                description=row.get('description'),
+                is_system=bool(row.get('is_system', 0)),
+                loan_id=row.get('loan_id')
+            )
+            
+            # Динамически добавляем поля для отображения (их нет в базовой модели)
+            if 'from_account_name' in row:
+                setattr(transfer, 'from_account_name', row['from_account_name'])
+            if 'to_account_name' in row:
+                setattr(transfer, 'to_account_name', row['to_account_name'])
+            if 'counterparty_name' in row:
+                setattr(transfer, 'counterparty', row['counterparty_name'])
+                
+            return transfer
+            
+        except (ValueError, TypeError, KeyError) as e:
+            logger.warning(f"[{self.__class__.__name__}] Валидация: Ошибка маппинга строки перевода: {e}")
+            raise ValueError(f"Некорректные данные перевода: {e}") from e
+        except Exception as e:
+            logger.error(f"[{self.__class__.__name__}] Ошибка маппинга строки перевода: {e}", exc_info=True)
+            raise RuntimeError("Не удалось преобразовать данные перевода") from e
 
     def get_by_id(self, transfer_id: int) -> Optional[Transfer]:
         """
@@ -66,6 +89,7 @@ class TransferRepository:
 
     def get_all(self) -> List[Transfer]:
         """
+        Возвращает ID вместо имен
         Возвращает все переводы, отсортированные по дате (новые сверху).
 
         Returns:
@@ -79,12 +103,15 @@ class TransferRepository:
             logger.error("[TransferRepository] Ошибка при получении списка переводов: %s", e, exc_info=True)
             raise
 
-    def get_all_with_details(self) -> List[dict]:
+    def get_all_with_names(self) -> List[Transfer]:
         """
-        Возвращает пользовательские переводы с именами счетов и контрагентов.
-
+        Возвращает все пользовательские переводы с именами счетов и контрагентов.
+        
         Returns:
-            Список словарей с данными для UI
+            Список объектов Transfer (без системных записей)
+            
+        Raises:
+            RuntimeError: при ошибке работы с БД
         """
         try:
             query = """
@@ -92,7 +119,6 @@ class TransferRepository:
                     t.id, t.date, t.amount, t.type, t.description, t.is_system,
                     a1.name AS from_account_name,
                     a2.name AS to_account_name,
-                    -- Определяем имя контрагента для внешних переводов
                     CASE
                         WHEN t.type = 'external' AND a1.account_type = 'Counterparty' THEN a1.name
                         WHEN t.type = 'external' AND a2.account_type = 'Counterparty' THEN a2.name
@@ -101,13 +127,84 @@ class TransferRepository:
                 FROM transfers t
                 LEFT JOIN accounts a1 ON t.from_account_id = a1.id
                 LEFT JOIN accounts a2 ON t.to_account_id = a2.id
-                WHERE t.is_system = 0  -- Фильтруем системные переводы на уровне БД
+                WHERE t.is_system = 0
                 ORDER BY t.date DESC
             """
-            return self.db.fetchall(query)
+            rows = self.db.fetchall(query)
+            return [self._row_to_transfer(row) for row in rows]
+            
         except Exception as e:
-            logger.error("[TransferRepository] Ошибка при получении переводов с деталями: %s", e, exc_info=True)
+            logger.error(f"[{self.__class__.__name__}] Ошибка получения переводов: {e}", exc_info=True)
+            raise RuntimeError("Не удалось получить список переводов") from e
+
+
+    def get_filtered(self, filters: Dict) -> List[Transfer]:
+        """
+        Возвращает отфильтрованные переводы с именами счетов и контрагентов.
+        
+        Args:
+            filters: параметры фильтрации:
+                - date_from: дата начала периода (YYYY-MM-DD)
+                - date_to: дата окончания периода (YYYY-MM-DD)
+                - search: поисковый запрос по описанию/контрагенту/именам счетов
+                - account_id: ID счёта для фильтрации (from или to)
+                
+        Returns:
+            Список объектов Transfer, удовлетворяющих фильтрам
+            
+        Raises:
+            ValueError: при некорректных параметрах фильтра
+            RuntimeError: при ошибке работы с БД
+        """
+        try:
+            if not filters:
+                raise ValueError("Параметры фильтра обязательны")
+            
+            query = """
+                SELECT
+                    t.id, t.date, t.amount, t.type, t.description, t.is_system,
+                    a1.name AS from_account_name,
+                    a2.name AS to_account_name,
+                    CASE
+                        WHEN t.type = 'external' AND a1.account_type = 'Counterparty' THEN a1.name
+                        WHEN t.type = 'external' AND a2.account_type = 'Counterparty' THEN a2.name
+                        ELSE ''
+                    END AS counterparty_name
+                FROM transfers t
+                LEFT JOIN accounts a1 ON t.from_account_id = a1.id
+                LEFT JOIN accounts a2 ON t.to_account_id = a2.id
+                WHERE t.is_system = 0
+            """
+            params = []
+            
+            if filters.get('date_from'):
+                query += " AND t.date >= ?"
+                params.append(filters['date_from'])
+            
+            if filters.get('date_to'):
+                query += " AND t.date <= ?"
+                params.append(filters['date_to'])
+            
+            if filters.get('search'):
+                search_pattern = f"%{filters['search']}%"
+                query += " AND (t.description LIKE ? OR a1.name LIKE ? OR a2.name LIKE ?)"
+                params.extend([search_pattern, search_pattern, search_pattern])
+            
+            if filters.get('account_id'):
+                query += " AND (t.from_account_id = ? OR t.to_account_id = ?)"
+                params.extend([filters['account_id'], filters['account_id']])
+            
+            query += " ORDER BY t.date DESC"
+            
+            rows = self.db.fetchall(query, params) if params else self.db.fetchall(query)
+            return [self._row_to_transfer(row) for row in rows]
+            
+        except ValueError as e:
+            logger.warning(f"[{self.__class__.__name__}] Валидация фильтров: {e}")
             raise
+        except Exception as e:
+            logger.error(f"[{self.__class__.__name__}] Ошибка получения отфильтрованных переводов: {e}", exc_info=True)
+            raise RuntimeError("Не удалось получить отфильтрованный список переводов") from e
 
     def create(self, transfer: Transfer) -> int:
         try:

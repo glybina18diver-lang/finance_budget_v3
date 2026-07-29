@@ -62,7 +62,7 @@ class TransferPresenter:
         try:
             for tid in transfer_ids:
                 self.service.delete_transfer(tid)
-                self.view.show_status(f"Удалено переводов: {len(transfer_ids)}", "success")
+                self.view.show_status(f"Успешно удалено: {len(transfer_ids)} перевод(ов)",  message_type="success")
             self.view.clear_selection()
             self._load_data()
         except ValueError as e:
@@ -78,8 +78,8 @@ class TransferPresenter:
 
         try:
             # 1. Загружаем переводы
-            transfer_data = self.service.get_transfers_with_names()
-            self.view.load_transfers(transfer_data)
+            transfer_data = self.service.get_all_transfers()
+            self.view.load_transfers_tree(transfer_data)
 
             # Заполняем комбобоксы счетов
             accounts = self.service.get_all_accounts_active()
@@ -91,61 +91,46 @@ class TransferPresenter:
                 self.view.from_combo.addItem(acc.name, acc.id)
                 self.view.to_combo.addItem(acc.name, acc.id)
                 self.view.ext_account_combo.addItem(acc.name, acc.id)
+                self.view.update_account_filter(accounts)
+
         except Exception as e:
             logger.error(f"[TransferPresenter] Ошибка загрузки данных: {e}", exc_info=True)
             if self.view:
                 self.view.show_status("Ошибка загрузки данных", "error")
 
-    def check_credit_card_transfer(self, from_account_id: int, amount: Decimal) -> dict:
+    def refresh_data(self):
         """
-        Проверяет, является ли счёт кредитной картой, и рассчитывает комиссию.
-
+        Обновляет данные в представлении (счета, переводы).
+        используется при закрытии дочерних диалогов
+        
         Args:
-            from_account_id: ID счёта-источника
-            amount: сумма перевода (Decimal)
-
-        Returns:
-            Словарь {is_credit_card: bool, commission: Decimal, total: Decimal}
+            current_type: текущий выбранный тип операции для сохранения состояния UI
         """
         try:
-            from core.repositories.credit_card_repository import CreditCardRepository
-
-            repo = CreditCardRepository(self.db)  # или через DI, если есть
-            card = repo.get_card_by_account_id(from_account_id)
-
-            if not card:
-                return {"is_credit_card": False, "commission": Decimal("0.00"), "total": amount}
-
-            # Комиссия: 5.9% + 590 ₽
-            commission = (amount * Decimal("0.059") + Decimal("590.00")).quantize(Decimal("0.01"))
-            return {
-                "is_credit_card": True,
-                "commission": commission,
-                "total": amount + commission,
-                "card_name": card.name
-            }
+            # 1. Обновляем переводы в таблице
+            transfer_data = self.service.get_all_transfers()
+            self.view.load_transfers_tree(transfer_data)
         except Exception as e:
-            logger.error(f"[TransferPresenter] Ошибка проверки кредитной карты: {e}", exc_info=True)
-            return {"is_credit_card": False, "commission": Decimal("0.00"), "total": amount}
+            logger.error(f"[TransferPresenter] Ошибка обновления данных: {e}", exc_info=True)
+            self.view.show_status("Ошибка обновления данных", message_type="error")
 
-    def add_commission_expense(self, data: dict):
+    def load_transfers_filters(self, filters: Dict):
         """
-        Добавляет расход на комиссию за перевод с кредитной карты.
-
+        Загружает отфильтрованные переводы и передаёт их в View.
+        Вызывается при применении фильтров.
+        
         Args:
-            data: {date, amount (комиссия), account_id, description}
+            filters: параметры фильтрации из UI
         """
         try:
-            # Здесь используем существующий сервис транзакций/расходов
-            expense_data = {
-                "date": data["date"],
-                "type": "expense",
-                "raw_amount": data["amount"],
-                "account_id": data["account_id"],
-                "category_id": "4",  # или category_id
-                "description": data.get("description", "Комиссия за перевод с кредитной карты")
-            }
-            self.transaction_service.create_transaction(expense_data)
+            transfers = self.service.get_transfers_with_filters(filters)
+            self.view.load_transfers_tree(transfers)
+            logger.info(f"[{self.__class__.__name__}] Загружено отфильтрованных переводов: {len(transfers)}")
+        except ValueError as e:
+            logger.warning(f"[{self.__class__.__name__}] Валидация фильтров: {e}")
+            if self.view:
+                self.view.show_status(str(e), message_type="error")
         except Exception as e:
-            logger.error(f"[TransferPresenter] Ошибка добавления комиссии: {e}", exc_info=True)
-            raise
+            logger.error(f"[{self.__class__.__name__}] Ошибка загрузки отфильтрованных переводов: {e}", exc_info=True)
+            if self.view:
+                self.view.show_status("Ошибка применения фильтров", message_type="error")
