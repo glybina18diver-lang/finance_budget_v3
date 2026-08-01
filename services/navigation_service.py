@@ -41,6 +41,7 @@ from services.transfer_service import TransferService
 from services.loan_service import LoanService
 from services.credit_card_service import CreditCardService
 from services.credit_service import CreditService
+from services.main_window_service import MainWindowService
 # from services.tranche_service import TrancheService
 # from services.interest_engine import InterestEngine
 # from services.payment_waterfall import PaymentWaterfall, PaymentAllocation
@@ -124,6 +125,7 @@ class NavigationService:
                 self.tx_service,
                 self.cat_service
             )
+            self.main_window_service = MainWindowService(self.acc_repo, self.credit_card_repo)
 
             # Создаем презентеры
             self.credit_presenter = CreditPresenter(self.credit_service, self.acc_repo, self.cat_service)
@@ -302,4 +304,4 @@ class NavigationService:
                 return dialog
             except Exception as e:
                 logger.error(f"[NavigationService] Ошибка открытия диалога: {e}", exc_info=True)
-                raise
+                raise   

@@ -15,6 +15,7 @@ from ui.dialogs.base_dialog import BaseDialog
 from ui.widgets.colored_button import CompactButton
 from ui.dialogs.edit_loan_dialog import EditLoanDialog
 from ui.dialogs.loan_details_dialog import LoanDetailsDialog
+from ui.presenters.loan_presenter import LoanPresenter
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +29,7 @@ class LoanDialog(BaseDialog):
     TAB_LOANS = 0
     TAB_CREDITS = 1
 
-    def __init__(self, parent=None, presenter=None, navigation_service: Optional[Any] = None):
+    def __init__(self, presenter: LoanPresenter, parent=None,  navigation_service: Optional[Any] = None):
         """
         Инициализация диалога управления займами и кредитами.
 
@@ -36,14 +37,12 @@ class LoanDialog(BaseDialog):
             parent: родительское окно
             presenter: экземпляр LoanPresenter для обработки действий
         """
-        super().__init__(parent)
+        super().__init__(parent, navigation_service=navigation_service)
         self.presenter = presenter
-        self.navigation_service = navigation_service
         self.setWindowTitle("Управление Займами и Кредитами")
         self.resize(1000, 650)
         self._init_ui()
-        if self.presenter:
-            self.presenter.set_view(self)
+        self.presenter.set_view(self)
 
     def _init_ui(self):
         """Инициализация пользовательского интерфейса."""
@@ -259,25 +258,21 @@ class LoanDialog(BaseDialog):
     # === Методы для кредитов (часть заглушки, будут реализованы позже) ===
 
     def _open_credit_create_dialog(self) -> None:
-            """
-            Открывает диалог создания кредита через навигационный сервис.
-            """
-            try:
-                if self.navigation_service is None:
-                    self.show_error("Навигация недоступна")
-                    return
-    
-                self.navigation_service.open_credit_create_dialog(self)
-    
-            except ValueError as e:
-                logger.warning(f"[{self.__class__.__name__}] Валидация: {e}")
-                self.show_status(str(e), message_type="error")
-            except Exception as e:
-                logger.error(
-                    f"[{self.__class__.__name__}] Ошибка открытия диалога: {e}",
-                    exc_info=True,
-                )
-                self.show_error("Произошла ошибка при открытии диалога")
+        """
+        Открывает диалог создания кредита через навигационный сервис.
+        """
+        try:
+            self.navigation_service.open_credit_create_dialog(self)
+
+        except ValueError as e:
+            logger.warning(f"[{self.__class__.__name__}] Валидация: {e}")
+            self.show_status(str(e), message_type="error")
+        except Exception as e:
+            logger.error(
+                f"[{self.__class__.__name__}] Ошибка открытия диалога: {e}",
+                exc_info=True,
+            )
+            self.show_error("Произошла ошибка при открытии диалога")
 
     def _add_credit_payment(self):
         """
@@ -286,10 +281,6 @@ class LoanDialog(BaseDialog):
         Делегирует логику презентеру, который сам создаст диалог.
         """
         try:
-            if self.navigation_service is None:
-                self.show_error("Навигация недоступна")
-                return
-
             selected = self.credits_table.selectionModel().selectedRows()
             if not selected:
                 self.show_status("Выберите кредит для внесения платежа", "warning")

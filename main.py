@@ -7,6 +7,7 @@ from core.db import Database
 from core.logger import setup_logger
 from ui.main_window import MainWindow
 from services.navigation_service import NavigationService
+from ui.presenters.main_window_presenter import MainWindowPresenter
 
 logger = logging.getLogger(__name__)
 
@@ -31,11 +32,17 @@ def main():
         QMessageBox.critical(None, "Ошибка БД", f"Не удалось открыть базу данных:\n{e}")
         sys.exit(1)
 
-    # 2. Создаём навигационный сервис
+    # 2. Создаём навигационный сервис и главное окно
     nav_service = NavigationService(db=db)
 
+    # Создаём презентер, получая сервисы ИЗ навигации
+    presenter = MainWindowPresenter(
+        service=nav_service.main_window_service,
+        credit_card_service=nav_service.credit_card_service
+    )
+
     # 3. Передаём его в главное окно
-    main_window = MainWindow(navigation_service=nav_service)
+    main_window = MainWindow(presenter, navigation_service=nav_service)
     main_window.show()
 
     # 4. Корректное завершение

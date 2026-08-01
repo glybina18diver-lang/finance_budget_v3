@@ -5,10 +5,11 @@
 """
 from PySide6.QtWidgets import QDialog
 import logging
+from typing import TYPE_CHECKING
 from services.loan_service import LoanService
 from services.credit_service import CreditService
-
-from ui.dialogs.loan_dialog import LoanDialog
+if TYPE_CHECKING:
+    from ui.dialogs.loan_dialog import LoanDialog
 from ui.dialogs.add_loan_dialog import AddLoanDialog
 from ui.dialogs.add_payment_dialog import AddPaymentDialog
 

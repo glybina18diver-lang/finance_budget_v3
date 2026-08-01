@@ -99,7 +99,7 @@ class CreditCardPresenter:
             Список словарей со счетами
         """
         try:
-            accounts = self.account_service.get_all_active_accounts()
+            accounts = self.account_service.get_user_accounts()
             return [
                 {
                     "id": acc.id,

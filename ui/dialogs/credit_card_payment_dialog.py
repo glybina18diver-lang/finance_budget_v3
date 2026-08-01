@@ -1,17 +1,18 @@
 """
 Диалог внесения платежа по кредитной карте (CreditCardPaymentDialog).
 
-Позволяет внести платёж с автоматическим распределением на тело долга, 
+Позволяет внести платёж с автоматическим распределением на тело долга,
 проценты и комиссии. Использует стандартные сервисы переводов и транзакций.
 """
 
 import logging
 from datetime import date
+from decimal import Decimal
 from typing import Optional
 
 from PySide6.QtWidgets import (
-    QComboBox, QPushButton, QLabel, QLineEdit, 
-    QDateEdit, QFormLayout, QDialogButtonBox, QGroupBox, 
+    QComboBox, QPushButton, QLabel, QLineEdit,
+    QDateEdit, QFormLayout, QDialogButtonBox, QGroupBox,
     QVBoxLayout, QCheckBox
 )
 from PySide6.QtGui import QDoubleValidator
@@ -19,8 +20,13 @@ from PySide6.QtCore import Signal
 
 from ui.dialogs.base_dialog import BaseDialog
 from utils.validators import parse_float
+from utils.validators import to_decimal
 
 logger = logging.getLogger(__name__)
+
+# Константа для нулевого Decimal, чтобы не создавать каждый раз
+_DECIMAL_ZERO = Decimal('0.00')
+
 
 class CreditCardPaymentDialog(BaseDialog):
     """
@@ -32,7 +38,7 @@ class CreditCardPaymentDialog(BaseDialog):
     
     payment_made = Signal()
 
-    def __init__(self, parent, presenter, card_id: int, card_name: str, card_account_id: int, current_debt: float):
+    def __init__(self, parent, presenter, card_id: int, card_name: str, card_account_id: int, current_debt: Decimal):
         """
         Инициализация диалога платежа.
         
@@ -51,7 +57,7 @@ class CreditCardPaymentDialog(BaseDialog):
         self.current_debt = current_debt
         
         self.setWindowTitle(f"Внесение платежа: {card_name}")
-        self.resize(450, 550)
+        self.resize(450, 330)
         
         self._setup_ui()
         self._load_accounts()
@@ -85,6 +91,7 @@ class CreditCardPaymentDialog(BaseDialog):
         # Дата
         self.date_edit = QDateEdit()
         self.date_edit.setDate(date.today())
+        self.date_edit.setDisplayFormat("dd.MM.yyyy")
         self.date_edit.setCalendarPopup(True)
         form_layout.addRow("Дата платежа:", self.date_edit)
         
@@ -122,6 +129,19 @@ class CreditCardPaymentDialog(BaseDialog):
         split_layout.addLayout(breakdown_form)
         split_group.setLayout(split_layout)
         self._main_layout.addWidget(split_group)
+        
+        # Блок результата (изначально скрыт)
+        self.result_group = QGroupBox("Результат платежа")
+        result_layout = QVBoxLayout()
+        self.result_label = QLabel()
+        self.result_label.setWordWrap(True)
+        self.result_label.setStyleSheet(
+            "font-family: monospace; padding: 8px; background-color: #f0f8f0; border-radius: 4px;"
+        )
+        result_layout.addWidget(self.result_label)
+        self.result_group.setLayout(result_layout)
+        self.result_group.setVisible(False)
+        self._main_layout.addWidget(self.result_group)
         
         # Кнопки
         self.button_box = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
@@ -162,10 +182,10 @@ class CreditCardPaymentDialog(BaseDialog):
     def _update_principal_label(self):
         """Автоматически пересчитывает сумму на погашение основного долга."""
         try:
-            total = parse_float(self.total_input.text()) or 0.0
-            interest = parse_float(self.interest_input.text()) or 0.0 if self.interest_input.isEnabled() else 0.0
+            total = (self.total_input.text()) or _DECIMAL_ZERO
+            interest = (self.interest_input.text()) or _DECIMAL_ZERO if self.interest_input.isEnabled() else _DECIMAL_ZERO
             
-            principal = total - interest
+            principal = to_decimal(total) - to_decimal(interest)
             
             if principal < 0:
                 self.principal_label.setText(f"{principal:,.2f} ₽".replace(",", " "))
@@ -181,9 +201,14 @@ class CreditCardPaymentDialog(BaseDialog):
             logger.error(f"[{self.__class__.__name__}] Ошибка UI при пересчёте: {e}", exc_info=True)
     
     def _on_pay(self):
-        """Обрабатывает нажатие кнопки 'Внести платёж'."""
+        """
+        Обрабатывает нажатие кнопки 'Внести платёж'.
+        
+        После успешного платежа форма очищается и готовится к следующему платежу.
+        Текущий долг обновляется, чтобы следующий платёж видел актуальные данные.
+        """
         try:
-            total = parse_float(self.total_input.text())
+            total = to_decimal(self.total_input.text())
             if total is None or total <= 0:
                 raise ValueError("Общая сумма платежа должна быть больше нуля")
                 
@@ -191,7 +216,7 @@ class CreditCardPaymentDialog(BaseDialog):
             if not account_id:
                 raise ValueError("Не выбран счёт для списания")
                 
-            interest = parse_float(self.interest_input.text()) or 0.0 if self.interest_input.isEnabled() else 0.0
+            interest = to_decimal(self.interest_input.text()) if self.interest_input.isEnabled() else _DECIMAL_ZERO
             
             # Расчёт тела долга
             principal = total - interest
@@ -199,8 +224,9 @@ class CreditCardPaymentDialog(BaseDialog):
             # Проверка: тело долга не должно превышать сумму долга
             if principal > self.current_debt:
                 raise ValueError(
-                    f"Сумма погашения тела долга ({principal:,.2f} ₽) превышает текущий долг ({self.current_debt:,.2f} ₽). "
-                    f"Увеличьте сумму процентов или уменьшите общую сумму платежа.".replace(",", " ")
+                    f"Сумма погашения тела долга ({principal:,.2f} ₽) превышает текущий долг "
+                    f"({self.current_debt:,.2f} ₽). Увеличьте сумму процентов или уменьшите "
+                    f"общую сумму платежа.".replace(",", " ")
                 )
             
             if principal < 0:
@@ -209,7 +235,7 @@ class CreditCardPaymentDialog(BaseDialog):
             payment_date = self.date_edit.date().toString("yyyy-MM-dd")
             
             # Вызов презентера
-            self.presenter.make_payment(
+            result = self.presenter.make_payment(
                 card_id=self.card_id,
                 amount_str=str(total),
                 interest_str=str(interest),
@@ -217,12 +243,87 @@ class CreditCardPaymentDialog(BaseDialog):
                 from_account_id=account_id
             )
             
+            # Показываем результат и обновляем состояние
+            self._display_result(result, principal)
+            self._reset_form_after_payment(principal)
+            
             self.show_status("Платёж успешно внесён", "success")
             self.payment_made.emit()
-            self.accept()
+            # self.accept()
             
         except ValueError as e:
             self.show_status(str(e), "error")
         except Exception as e:
             logger.error(f"[{self.__class__.__name__}] Ошибка UI при внесении платежа: {e}", exc_info=True)
             self.show_status("Произошла ошибка при внесении платежа", "error")
+
+    def _display_result(self, result: dict, principal: Decimal):
+        """
+        Отображает результат распределения платежа.
+        
+        Args:
+            result: словарь с детализацией (principal_amount, interest_amount, total_amount)
+            principal: сумма, направленная на погашение тела долга
+        """
+        try:
+            total = result.get("total_amount", _DECIMAL_ZERO)
+            interest = result.get("interest_amount", _DECIMAL_ZERO)
+            new_debt = self.current_debt - principal
+            
+            text = (
+                f"✅ Платёж успешно внесён!\n\n"
+                f"Внесено всего:        {total:>12,.2f} ₽\n"
+                f"─────────────────────────────────\n"
+                f"На погашение долга:   {principal:>12,.2f} ₽\n"
+                f"На проценты:          {interest:>12,.2f} ₽\n"
+                f"─────────────────────────────────\n"
+                f"Остаток долга:        {new_debt:>12,.2f} ₽"
+            )
+            self.result_label.setText(text.replace(",", " "))
+            self.result_group.setVisible(True)
+        except Exception as e:
+            logger.error(f"[{self.__class__.__name__}] Ошибка отображения результата: {e}", exc_info=True)
+    
+    def _reset_form_after_payment(self, principal_paid: Decimal):
+        """
+        Очищает форму после успешного платежа и обновляет текущий долг.
+        
+        Подготавливает диалог к следующему платежу: сбрасывает поля ввода,
+        обновляет отображение долга и возвращает фокус на поле суммы.
+        
+        Args:
+            principal_paid: сумма, направленная на погашение тела долга
+        """
+        try:
+            # Обновляем текущий долг
+            self.current_debt = max(_DECIMAL_ZERO, self.current_debt - principal_paid)
+            self.lbl_debt.setText(f"Текущий долг: {self.current_debt:,.2f} ₽".replace(",", " "))
+            
+            # Если долг погашен полностью — меняем цвет на зелёный
+            if self.current_debt <= 0:
+                self.lbl_debt.setStyleSheet("font-weight: bold; color: #2e7d32;")
+                self.show_status("Долг погашен полностью!", "success")
+            else:
+                self.lbl_debt.setStyleSheet("font-weight: bold; color: #d32f2f;")
+            
+            # Очищаем поля ввода
+            self.total_input.clear()
+            self.interest_input.clear()
+            
+            # Сбрасываем чекбокс разбивки
+            self.split_checkbox.setChecked(False)
+            self.interest_input.setEnabled(False)
+            
+            # Пересчитываем метку основного долга
+            self._update_principal_label()
+            
+            # Возвращаем фокус на поле суммы для удобства ввода следующего платежа
+            self.total_input.setFocus()
+            
+            # Скрываем блок результата через 5 секунд (чтобы не загромождать UI)
+            # Но оставляем его видимым, если пользователь хочет посмотреть
+        except Exception as e:
+            logger.error(
+                f"[{self.__class__.__name__}] Ошибка при очистке формы: {e}",
+                exc_info=True
+            )

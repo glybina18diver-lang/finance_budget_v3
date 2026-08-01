@@ -135,6 +135,25 @@ class CreditCardService:
             logger.error(f"[{self.__class__.__name__}] Ошибка получения карты по счёту: {e}", exc_info=True)
             raise
 
+    def get_by_account_id(self, account_id: int) -> Optional[CreditCard]:
+            """
+            Получает активную карту, привязанную к счёту.
+            
+            Args:
+                account_id: ID счёта в таблице accounts
+                
+            Returns:
+                Объект CreditCard или None
+            """
+            try:
+                self.card_repo.get_by_account_id(account_id)
+            except Exception as e:
+                logger.error(
+                    f"[{self.__class__.__name__}] Ошибка получения карты по account_id={account_id}: {e}",
+                    exc_info=True
+                )
+                raise
+    
     def get_all_cards(self) -> List[CreditCard]:
         """
         Получает список всех активных кредитных карт.

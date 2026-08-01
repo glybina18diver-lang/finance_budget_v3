@@ -291,8 +291,9 @@ class CreditCardDialog(BaseDialog):
                 current_debt
             )
             dialog.payment_made.connect(self._load_dashboard)
-            
-            if dialog.exec() == QDialog.Accepted:
+
+            # dialog.exec()
+            if  dialog.show() == QDialog.Accepted:
                 self.show_status("Платёж успешно внесён", "success")
                 self._load_dashboard()
                 self.data_updated.emit()
