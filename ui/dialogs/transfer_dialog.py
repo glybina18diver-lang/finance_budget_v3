@@ -84,12 +84,12 @@ class TransferDialog(BaseDialog):
             # Создаем комбобоксы
             self.from_combo = QComboBox()
             self.from_combo.setFixedHeight(26)
-            self.from_combo.setMinimumWidth(150)
+            self.from_combo.setMinimumWidth(100)
             self.from_combo.setMaximumWidth(300)
         
             self.to_combo = QComboBox()
             self.to_combo.setFixedHeight(26)
-            self.to_combo.setMinimumWidth(150)
+            self.to_combo.setMinimumWidth(100)
             self.to_combo.setMaximumWidth(300)
 
             # Счета рядом по горизонтали
@@ -132,12 +132,12 @@ class TransferDialog(BaseDialog):
             # Счет 
             self.ext_account_combo = QComboBox()
             self.ext_account_combo.setFixedHeight(26)
-            self.ext_account_combo.setMinimumWidth(230)
+            self.ext_account_combo.setMinimumWidth(100)
 
             # Контрагент
             self.counterparty_input = QLineEdit()
             self.counterparty_input.setFixedHeight(26)
-            self.counterparty_input.setMinimumWidth(230)
+            self.counterparty_input.setMinimumWidth(100)
             self.counterparty_input.setPlaceholderText("Имя контрагента")
 
             # # Автодополнение для контрагентов
@@ -176,14 +176,6 @@ class TransferDialog(BaseDialog):
             date_amount_layout = QHBoxLayout()
             date_amount_layout.setSpacing(10)
 
-            # Дата
-            self.date_input = QDateEdit()
-            self.date_input.setCalendarPopup(True)
-            self.date_input.setDate(QDate.currentDate())
-            self.date_input.setDisplayFormat("dd.MM.yyyy")
-            self.date_input.setFixedHeight(26)
-            self.date_input.setFixedWidth(80)
-
             # Сумма
             self.amount_input = QLineEdit()
             self.amount_input.setPlaceholderText("0.00")
@@ -193,6 +185,14 @@ class TransferDialog(BaseDialog):
             validator.setNotation(QDoubleValidator.StandardNotation)
             self.amount_input.setValidator(validator)
 
+            # Дата
+            self.date_input = QDateEdit()
+            self.date_input.setCalendarPopup(True)
+            self.date_input.setDate(QDate.currentDate())
+            self.date_input.setDisplayFormat("dd.MM.yyyy")
+            self.date_input.setFixedHeight(26)
+            self.date_input.setFixedWidth(80)
+
             # Описание
             self.description_input = QLineEdit()
             self.description_input.setPlaceholderText("Описание перевода (необязательно)")
@@ -200,10 +200,10 @@ class TransferDialog(BaseDialog):
             self.description_input.setMinimumWidth(300)
             # form_layout.addRow("Описание:", self.description_input)
 
-            date_amount_layout.addWidget(QLabel("Дата:"))
-            date_amount_layout.addWidget(self.date_input)
             date_amount_layout.addWidget(QLabel("Сумма:"))
             date_amount_layout.addWidget(self.amount_input)
+            date_amount_layout.addWidget(QLabel("Дата:"))
+            date_amount_layout.addWidget(self.date_input)
             date_amount_layout.addWidget(QLabel("Описание:"))
             date_amount_layout.addWidget(self.description_input)
             date_amount_layout.addStretch()

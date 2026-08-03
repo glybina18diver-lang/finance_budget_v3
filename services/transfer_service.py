@@ -39,9 +39,13 @@ class TransferService:
         """
         try:
             if data["type"] == "internal":
-                return self._create_internal_transfer(data)
+                transfer_in = self._create_internal_transfer(data)
+                logger.debug(f"[{self.__class__.__name__}] ID создаваемого перевода = {transfer_in.id}")
+                return transfer_in                
             else:
-                return self._create_external_transfer(data)
+                transfer_ext = self._create_external_transfer(data)
+                logger.debug(f"[{self.__class__.__name__}] ID создаваемого перевода = {transfer_ext.id}")
+                return transfer_ext
         except ValueError as e:
             logger.warning(f"[TransferService] Валидация: {e}")
             raise
@@ -135,7 +139,7 @@ class TransferService:
             Список объектов Account
         """
         try:
-            return self.account_repo.get_all_active()
+            return self.account_repo.get_user_accounts()
         except Exception as e:
             logger.error(f"[TransferService] Ошибка загрузки активных счетов: {e}", exc_info=True)
             raise
