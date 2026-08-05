@@ -9,7 +9,7 @@ from PySide6.QtGui import QDoubleValidator
 import logging
 from datetime import datetime, date
 
-from ui.widgets.colored_button import CompactButton, ColoredDialogButtonBox
+from ui.widgets.buttons import CompactButton
 from ui.dialogs.base_dialog import BaseDialog
 from core.models import Account
 
@@ -122,8 +122,9 @@ class AccountDialog(BaseDialog):
         layout.addWidget(form_group)
 
         # 3. Кнопки диалога
-        dialog_buttons = ColoredDialogButtonBox(color="#4CAF50")
+        dialog_buttons = QDialogButtonBox(parent=self)
         close_btn = dialog_buttons.addButton("Закрыть", QDialogButtonBox.RejectRole)
+        self.apply_button_purpose(close_btn, "success")   # #4CAF50 теперь живёт в теме
         close_btn.clicked.connect(self.accept)
         layout.addWidget(dialog_buttons)
 

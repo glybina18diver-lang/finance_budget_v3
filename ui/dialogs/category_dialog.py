@@ -11,7 +11,8 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QFont, QDoubleValidator
-from ui.widgets.colored_button import CompactButton, ColoredDialogButtonBox
+from ui.widgets.colored_button import ColoredDialogButtonBox
+from ui.widgets.buttons import CompactButton
 from ui.dialogs.base_dialog import BaseDialog
 from core.models import Category
 

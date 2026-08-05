@@ -8,28 +8,28 @@ class CompactButton(QPushButton):
     def __init__(self, text="", parent=None):
         super().__init__(text, parent)
         self.setObjectName("compactButton")
-        self.setStyleSheet("""
-            QPushButton {
-                background-color: #4CAF50;
-                color: white;
-                border: none;
-                border-radius: 4px;
-                padding: 5px 10px;
-                font-weight: 500;
-                font-size: 12px;
-                margin: 1px;
-            }
-            QPushButton:hover {
-                background-color: #45a049;
-            }
-            QPushButton:pressed {
-                background-color: #3d8b40;
-            }
-            QPushButton:disabled {
-                background-color: #cccccc;
-                color: #666666;
-            }
-        """)
+        # self.setStyleSheet("""
+        #     QPushButton {
+        #         background-color: #4CAF50;
+        #         color: white;
+        #         border: none;
+        #         border-radius: 4px;
+        #         padding: 5px 10px;
+        #         font-weight: 500;
+        #         font-size: 12px;
+        #         margin: 1px;
+        #     }
+        #     QPushButton:hover {
+        #         background-color: #45a049;
+        #     }
+        #     QPushButton:pressed {
+        #         background-color: #3d8b40;
+        #     }
+        #     QPushButton:disabled {
+        #         background-color: #cccccc;
+        #         color: #666666;
+        #     }
+        # """)
         self.setFixedHeight(26)
 
 

@@ -13,7 +13,7 @@ from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QAction, QFont, QIcon
 from config import WINDOW_TITLE, ICON_DIR
 from core.db import Database
-from ui.widgets.colored_button import ColoredButton, CompactButton
+from ui.widgets.buttons import CompactButton
 from services.navigation_service import NavigationService
 from ui.dialogs.base_dialog import BaseDialog
 
@@ -115,21 +115,21 @@ class MainWindow(BaseDialog):
             layout.setContentsMargins(5, 5, 5, 5)
 
             # Кнопка "Обновить"
-            refresh_btn = ColoredButton("🔄 Обновить", "#3498db")
+            refresh_btn = CompactButton("🔄 Обновить", "info")
             refresh_btn.setMaximumWidth(100)
             refresh_btn.setObjectName("refresh_btn")
             refresh_btn.clicked.connect(self._refresh_data)
             layout.addWidget(refresh_btn)
 
             # Кнопка "+ Операции"
-            add_op_btn = ColoredButton("+ Операции", "#3498db")
+            add_op_btn = CompactButton("+ Операции", "success")
             add_op_btn.setMaximumWidth(100)
             add_op_btn.setObjectName("add_op_btn")
             add_op_btn.clicked.connect(self._open_operations_dialog)
             layout.addWidget(add_op_btn)
 
             # Кнопка "Дашборд"
-            dashboard_btn = ColoredButton("📊 Дашборд", "#2ecc71")
+            dashboard_btn = CompactButton("📊 Дашборд", "info")
             dashboard_btn.setMaximumWidth(100)
             dashboard_btn.setObjectName("dashboard_btn")
             dashboard_btn.clicked.connect(self._open_dashboard)
@@ -369,30 +369,22 @@ class MainWindow(BaseDialog):
 
     def _update_balance_style(self, balance):
         """
-        Обновляет стиль отображения баланса.
-
+        Обновляет визуальный стиль виджета общего баланса.
+        
         Args:
-            balance: текущий баланс для определения цвета
+            balance: Текущее значение баланса (float/int).
         """
         try:
             if balance < 0:
-                color = "#e74c3c"  # Красный
+                self.total_balance_label.setProperty("variant", "danger")
             elif balance == 0:
-                color = "#f39c12"  # Оранжевый
+                self.total_balance_label.setProperty("variant", "default") 
             else:
-                color = "#27ae60"  # Зеленый
-
-            self.total_balance_label.setStyleSheet(f"""
-                QLabel {{
-                    font-size: 16px;
-                    font-weight: bold;
-                    color: {color};
-                    padding: 6px 12px;
-                    background-color: white;
-                    border-radius: 3px;
-                    border: 1px solid #ced4da;
-                }}
-            """)
+                self.total_balance_label.setProperty("variant", "success")
+                
+            # КРИТИЧЕСКИ ВАЖНО: Заставляем Qt пересчитать стили для виджета после смены свойства
+            self.total_balance_label.style().unpolish(self.total_balance_label)
+            self.total_balance_label.style().polish(self.total_balance_label)
         except Exception as e:
             logger.error(f"[{self.__class__.__name__}] Ошибка обновления стиля баланса: {e}", exc_info=True)
 

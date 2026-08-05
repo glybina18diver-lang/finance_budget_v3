@@ -1,0 +1,65 @@
+/* ========== ТАБЛИЦЫ: QTableWidget / QTableView / QTreeWidget ========== */
+
+QTableWidget, QTableView, QTreeWidget {
+    background-color: $TABLE_BG$;
+    border: 1px solid $BORDER$;
+    border-radius: $RADIUS_SMALL$;
+    alternate-background-color: $TABLE_ROW_ALT$;
+    gridline-color: $TABLE_GRID$;
+    color: $TEXT_PRIMARY$;
+    font-size: $FONT_SIZE_TABLE$;
+}
+
+/* Строки */
+QTableWidget::item, QTableView::item, QTreeWidget::item {
+    padding: 2px;
+    min-height: 22px;
+    border: none;
+}
+
+/* Наведение — контрастное (если hover вообще не нужен, удалить блок) */
+QTableWidget::item:hover, QTableView::item:hover, QTreeWidget::item:hover {
+    background-color: $TABLE_HOVER$;
+}
+
+/* Выделение строки */
+QTableWidget::item:selected, QTableView::item:selected, QTreeWidget::item:selected {
+    background-color: $TABLE_SELECTION$;
+    color: $TABLE_SELECTION_TEXT$;
+}
+
+/* ========== ЗАГОЛОВКИ ТАБЛИЦ ========== */
+
+QHeaderView::section {
+    background-color: $TABLE_HEADER_BG$;
+    color: $TEXT_PRIMARY$;
+    padding: 4px 8px;
+    border: 1px solid $BORDER$;
+    border-left: none;
+    border-right: none;
+    font-weight: bold;
+    font-size: $FONT_SIZE_TABLE$;
+}
+
+QHeaderView::section:first {
+    border-left: 1px solid $BORDER$;
+}
+
+QHeaderView::section:last {
+    border-right: 1px solid $BORDER$;
+}
+
+QHeaderView::section:hover {
+    background-color: $TABLE_HEADER_HOVER$;
+}
+
+QHeaderView::section:pressed {
+    background-color: $TABLE_HEADER_PRESSED$;
+}
+
+/* ========== ОПЦИОНАЛЬНО: акцент сущности в заголовке ========== */
+/*
+QTableWidget[purpose="accounts"] QHeaderView::section {
+    border-bottom: 2px solid $ENTITY_ACCOUNTS$;
+}
+*/

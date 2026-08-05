@@ -1,0 +1,79 @@
+QWidget {
+    font-family: $FONT_FAMILY$;
+    font-size: $FONT_SIZE_BASE$;
+    color: $TEXT_PRIMARY$;
+    background-color: $BG_PRIMARY$;
+}
+
+QLabel {
+    color: $TEXT_PRIMARY$;
+    background: transparent;
+}
+
+/* Динамические свойства для QLabel (для баланса) */
+QLabel[variant="success"] { 
+    color: $SUCCESS$; 
+    font-weight: bold;
+    border: 1px solid $SUCCESS$;
+    border-radius: 4px;
+    padding: 4px 12px;
+    background-color: $BG_SECONDARY$;
+}
+
+QLabel[variant="header"] {
+    font-size: $FONT_SIZE_HEADER$;
+    font-weight: bold;
+}
+
+QLabel[variant="danger"] { 
+    color: $DANGER$; 
+    font-weight: bold;
+    border: 1px solid $DANGER$;
+    border-radius: 4px;
+    padding: 4px 12px;
+    background-color: $BG_SECONDARY$;
+}
+
+/* ========== ПОЛОСЫ ПРОКРУТКИ ========== */
+
+QScrollBar:vertical {
+    border: none;
+    background-color: $SCROLLBAR_BG$;
+    width: 10px;
+    margin: 0px;
+}
+
+QScrollBar::handle:vertical {
+    background-color: $SCROLLBAR_HANDLE$;
+    border-radius: 5px;
+    min-height: 20px;
+}
+
+QScrollBar::handle:vertical:hover {
+    background-color: $SCROLLBAR_HANDLE_HOVER$;
+}
+
+QScrollBar:horizontal {
+    border: none;
+    background-color: $SCROLLBAR_BG$;
+    height: 10px;
+    margin: 0px;
+}
+
+QScrollBar::handle:horizontal {
+    background-color: $SCROLLBAR_HANDLE$;
+    border-radius: 5px;
+    min-width: 20px;
+}
+
+QScrollBar::handle:horizontal:hover {
+    background-color: $SCROLLBAR_HANDLE_HOVER$;
+}
+
+/* Убираем стрелки прокрутки */
+QScrollBar::add-line, QScrollBar::sub-line {
+    border: none;
+    background: none;
+    height: 0px;
+    width: 0px;
+}

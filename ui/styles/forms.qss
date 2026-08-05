@@ -1,0 +1,12 @@
+QLineEdit, QComboBox, QDateEdit, QSpinBox, QDoubleSpinBox {
+    background-color: $BG_SECONDARY$;
+    border: 1px solid $BORDER$;
+    border-radius: 4px;
+    padding: 6px 10px;
+    color: $TEXT_PRIMARY$;
+    min-height: 22px;
+}
+
+QLineEdit:focus, QComboBox:focus {
+    border: 1px solid $ACCENT_PRIMARY$;
+}

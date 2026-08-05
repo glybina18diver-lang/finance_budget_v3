@@ -10,7 +10,7 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Qt, QTimer, QDate
 from PySide6.QtGui import QFont, QDoubleValidator
 
-from ui.widgets.colored_button import ColoredButton, CompactButton
+from ui.widgets.buttons import OperationButton, CompactButton
 from ui.dialogs.base_dialog import BaseDialog
 from core.models import Transaction, Account, Category
 
@@ -65,17 +65,17 @@ class OperationDialog(BaseDialog):
         layout.setContentsMargins(0, 0, 0, 0)
 
         buttons = [
-            ("🏦 Счета", self._open_account_management, "#2196F3"), 
-            ("📊 Категории", self._open_category_management, "#9C27B0"),
-            ("📤 Переводы", self._open_transfer_dialog, "#FF9800"), 
-            #("🔍 Сверка", self._stub_method, "#607D8B"),
-            ("💰 Займы", self._open_loan_dialog, "#795548"), 
-            ("💳 Кредитные карты", self._open_credit_card_dialog, "#E91E63")
+            ("🏦 Счета", self._open_account_management, "accounts"),
+            ("📊 Категории", self._open_category_management, "categories"),
+            ("📤 Переводы", self._open_transfer_dialog, "transfers"),
+            # ("🔍 Сверка", self._stub_method, "reconciliation"),
+            ("💰 Займы", self._open_loan_dialog, "loans"),
+            ("💳 Кредитные карты", self._open_credit_card_dialog, "credit_cards"),
         ]
 
-        for text, callback, color in buttons:
-            btn = ColoredButton(text, color)
-            btn.clicked.connect(callback)
+        for text, handler, purpose in buttons:
+            btn = OperationButton(text, purpose=purpose)
+            btn.clicked.connect(handler)
             layout.addWidget(btn)
 
             
@@ -107,7 +107,7 @@ class OperationDialog(BaseDialog):
         self.search_input.textChanged.connect(self._stub_method)
         layout.addWidget(self.search_input)
 
-        reset_btn = ColoredButton("Сбросить", "#6c757d")
+        reset_btn = CompactButton("Сбросить", "info")
         reset_btn.clicked.connect(self._stub_method)
         layout.addWidget(reset_btn)
         layout.addStretch()
@@ -157,10 +157,6 @@ class OperationDialog(BaseDialog):
 
         layout.addWidget(QLabel("Новая:"))
 
-        # Календарь (изолирован для легкой замены на кастомный виджет)
-        self.date_input = self._init_date_widget()
-        layout.addWidget(self.date_input)
-
         # Сумма (передается как строка, парсинг в сервисе)
         self.amount_input = QLineEdit()
         self.amount_input.setPlaceholderText("Сумма (100 или 100*3)")
@@ -171,6 +167,10 @@ class OperationDialog(BaseDialog):
         # validator = QDoubleValidator(0.0, 999999999.0, 2)  # min=0, max=999M, 2 знака после запятой
         # # validator.setNotation(QDoubleValidator.StandardNotation)
         # self.amount_input.setValidator(validator)
+
+        # Календарь (изолирован для легкой замены на кастомный виджет)
+        self.date_input = self._init_date_widget()
+        layout.addWidget(self.date_input)
 
         # Тип операции
         self.type_combo = QComboBox()
@@ -257,11 +257,11 @@ class OperationDialog(BaseDialog):
         layout.addWidget(self.summary_label)
         layout.addStretch()
 
-        export_btn = ColoredButton("📥 Экспорт", "#17a2b8")
+        export_btn = CompactButton("📥 Экспорт", "neutral") 
         export_btn.clicked.connect(self._stub_method)
         layout.addWidget(export_btn)
 
-        close_btn = ColoredButton("❌ Закрыть", "#dc3545")
+        close_btn = CompactButton("❌ Закрыть", "danger")
         close_btn.clicked.connect(self.accept)
         layout.addWidget(close_btn)
 

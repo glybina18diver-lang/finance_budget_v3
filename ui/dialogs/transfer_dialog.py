@@ -17,7 +17,7 @@ from typing import List, Optional
 from PySide6.QtGui import QFont, QDoubleValidator
 
 from ui.dialogs.base_dialog import BaseDialog
-from ui.widgets.colored_button import CompactButton
+from ui.widgets.buttons import CompactButton
 from core.models import Transfer
 
 logger = logging.getLogger(__name__)
@@ -191,7 +191,7 @@ class TransferDialog(BaseDialog):
             self.date_input.setDate(QDate.currentDate())
             self.date_input.setDisplayFormat("dd.MM.yyyy")
             self.date_input.setFixedHeight(26)
-            self.date_input.setFixedWidth(80)
+            self.date_input.setFixedWidth(90)
 
             # Описание
             self.description_input = QLineEdit()

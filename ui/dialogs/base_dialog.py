@@ -110,3 +110,20 @@ class BaseDialog(QDialog):
         layout.addWidget(button_box)
         
         dialog.exec()
+
+    def apply_button_purpose(self, button, purpose: str):
+        """Задаёт кнопке цветовой purpose через динамическое свойство.
+
+        Args:
+            button: экземпляр QPushButton (в т.ч. из QDialogButtonBox)
+            purpose: назначение цвета (success/info/warning/danger/neutral и т.д.)
+        """
+        try:
+            button.setProperty("purpose", purpose)
+
+            # Перерисовка стилей после смены свойства
+            button.style().unpolish(button)
+            button.style().polish(button)
+        except Exception as e:
+            logger.error(f"[{self.__class__.__name__}] Ошибка: {e}", exc_info=True)
+            raise 

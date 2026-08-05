@@ -9,6 +9,9 @@ from ui.main_window import MainWindow
 from services.navigation_service import NavigationService
 from ui.presenters.main_window_presenter import MainWindowPresenter
 
+from ui.styles.theme_manager import ThemeManager 
+from ui.styles.themes import DARK_THEME, LIGHT_THEME
+
 logger = logging.getLogger(__name__)
 
 
@@ -20,6 +23,13 @@ def main():
 
     app = QApplication(sys.argv)
     app.setApplicationName(APP_NAME)
+
+    try:
+        # ThemeManager.apply_theme(DARK_THEME)
+        ThemeManager.apply_theme(LIGHT_THEME)
+    except Exception as e:
+        logger.critical(f"Критическая ошибка применения темы: {e}", exc_info=True)
+        QMessageBox.critical(None, "Ошибка UI", f"Не удалось загрузить стили:\n{e}")
 
     # 1. Инициализация фасада БД
     try:

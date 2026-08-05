@@ -12,7 +12,7 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Qt, Signal
 
 from ui.dialogs.base_dialog import BaseDialog
-from ui.widgets.colored_button import CompactButton
+from ui.widgets.buttons import CompactButton
 from ui.dialogs.edit_loan_dialog import EditLoanDialog
 from ui.dialogs.loan_details_dialog import LoanDetailsDialog
 from ui.presenters.loan_presenter import LoanPresenter
