@@ -250,7 +250,7 @@ class TransferDialog(BaseDialog):
             self.transfers_tree.setHeaderLabels([
                 "Дата", "Тип", "Сумма", "Откуда", "Куда", "Контрагент", "Описание"
             ])
-            
+            self.transfers_tree.setSortingEnabled(True)
             # Множественное выделение
             self.transfers_tree.setSelectionMode(QTreeWidget.ExtendedSelection)
             self.transfers_tree.setSelectionBehavior(QTreeWidget.SelectRows)

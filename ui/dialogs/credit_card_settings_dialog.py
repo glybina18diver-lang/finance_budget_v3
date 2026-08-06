@@ -58,7 +58,7 @@ class CreditCardSettingsDialog(BaseDialog):
         # Информационная плашка
         info_label = QLabel("💡 Название карты изменяется в диалоге управления счетами.")
         info_label.setWordWrap(True)
-        info_label.setStyleSheet("color: #757575; margin-bottom: 10px;")
+        # info_label.setStyleSheet("color: #757575; margin-bottom: 10px;")
         self._main_layout.addWidget(info_label)
 
         form_group = QGroupBox("Параметры кредитной карты (опционально)")

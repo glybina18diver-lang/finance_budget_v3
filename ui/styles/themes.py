@@ -106,6 +106,10 @@ LIGHT_THEME = {
     "SCROLLBAR_BG": "#F8F9FA",
     "SCROLLBAR_HANDLE": "#CED4DA",
     "SCROLLBAR_HANDLE_HOVER": "#ADB5BD",
+
+    # Цвета вкладок (QTabWidget)
+    "TAB_BG": "#E8EDF2",      # неактивная вкладка
+    "TAB_HOVER": "#DCE4EB",
 }
 
 DARK_THEME = {
@@ -158,4 +162,7 @@ DARK_THEME = {
     "SCROLLBAR_HANDLE": "#4A4A4A",
     "SCROLLBAR_HANDLE_HOVER": "#5F5F5F",
 
+    # Цвета вкладок (QTabWidget)
+    "TAB_BG": "#2A2A2A",
+    "TAB_HOVER": "#353535",
 }   

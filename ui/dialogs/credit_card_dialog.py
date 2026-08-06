@@ -16,6 +16,8 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Signal, Qt
 
+from ui.widgets.buttons import CompactButton
+
 from ui.dialogs.base_dialog import BaseDialog
 
 logger = logging.getLogger(__name__)
@@ -59,12 +61,12 @@ class CreditCardDialog(BaseDialog):
         top_layout.addWidget(QLabel("Карта:"), 1)
         top_layout.addWidget(self.card_combo, 3)
         
-        self.btn_settings = QPushButton("️ Настройки")
+        self.btn_settings = CompactButton("️ Настройки", "info")
         self.btn_settings.clicked.connect(self._on_open_settings)
         self.btn_settings.setEnabled(False)
         top_layout.addWidget(self.btn_settings)
         
-        self.btn_payment = QPushButton("💳 Внести платёж")
+        self.btn_payment = CompactButton("💳 Внести платёж", "warning")
         self.btn_payment.clicked.connect(self._on_make_payment)
         self.btn_payment.setEnabled(False)
         top_layout.addWidget(self.btn_payment)

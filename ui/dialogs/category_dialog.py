@@ -33,7 +33,7 @@ class CategoryDialog(BaseDialog):
         self.parent = parent
         self.presenter = presenter
         self.setWindowTitle("Управление Категориями")
-        self.resize(600, 550)
+        self.resize(600, 650)
         
         # Состояние редактирования
         self.editing_category_id: Optional[int] = None
@@ -69,7 +69,8 @@ class CategoryDialog(BaseDialog):
         self.categories_tree.itemSelectionChanged.connect(self._on_category_select)
         self.categories_tree.setContextMenuPolicy(Qt.CustomContextMenu)
         self.categories_tree.customContextMenuRequested.connect(self._show_context_menu)
-        
+
+        self.categories_tree.setSortingEnabled(True)
         tree_layout.addWidget(self.categories_tree)
         layout.addWidget(tree_group, 1)
 
@@ -125,10 +126,10 @@ class CategoryDialog(BaseDialog):
         self.cancel_button.setEnabled(True)
         button_layout.addWidget(self.cancel_button)
         
-        dialog_buttons = ColoredDialogButtonBox(color="#4CAF50")
-        close_btn = dialog_buttons.addButton("Закрыть", QDialogButtonBox.RejectRole)
-        close_btn.clicked.connect(self.accept)
-        layout.addWidget(dialog_buttons)
+        # dialog_buttons = ColoredDialogButtonBox(color="#4CAF50")
+        # close_btn = dialog_buttons.addButton("Закрыть", QDialogButtonBox.RejectRole)
+        # close_btn.clicked.connect(self.accept)
+        # layout.addWidget(dialog_buttons)
 
         # 6. Строка статуса
         layout.addWidget(self.status_bar)

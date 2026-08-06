@@ -49,6 +49,7 @@ class AccountDialog(BaseDialog):
         self.accounts_tree = QTreeWidget()
         self.accounts_tree.setHeaderLabels(["Название", "Тип", "Баланс"])
         self.accounts_tree.setAlternatingRowColors(True)
+        self.accounts_tree.setSortingEnabled(True)
         self.accounts_tree.itemSelectionChanged.connect(self._on_account_select)
         self.accounts_tree.setContextMenuPolicy(Qt.CustomContextMenu)
         self.accounts_tree.customContextMenuRequested.connect(self._show_context_menu)
@@ -121,12 +122,12 @@ class AccountDialog(BaseDialog):
         form_layout.addLayout(button_layout, row, 0, 1, 2)
         layout.addWidget(form_group)
 
-        # 3. Кнопки диалога
-        dialog_buttons = QDialogButtonBox(parent=self)
-        close_btn = dialog_buttons.addButton("Закрыть", QDialogButtonBox.RejectRole)
-        self.apply_button_purpose(close_btn, "success")   # #4CAF50 теперь живёт в теме
-        close_btn.clicked.connect(self.accept)
-        layout.addWidget(dialog_buttons)
+        # # 3. Кнопки диалога
+        # dialog_buttons = QDialogButtonBox(parent=self)
+        # close_btn = dialog_buttons.addButton("Закрыть", QDialogButtonBox.RejectRole)
+        # self.apply_button_purpose(close_btn, "success")   # #4CAF50 теперь живёт в теме
+        # close_btn.clicked.connect(self.accept)
+        # layout.addWidget(dialog_buttons)
 
         # 4. Строка статуса
         layout.addWidget(self.status_bar)

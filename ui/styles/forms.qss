@@ -1,12 +1,18 @@
-QLineEdit, QComboBox, QDateEdit, QSpinBox, QDoubleSpinBox {
+QLineEdit:focus, QComboBox:focus {
+    border: 1px solid $ACCENT_PRIMARY$;
+}
+
+/* Виджеты с фиксированной высотой 26px */
+QLineEdit,
+QComboBox,
+QDateEdit,
+QDateTimeEdit,
+QSpinBox,
+QDoubleSpinBox {
+    height: 24px;
     background-color: $BG_SECONDARY$;
     border: 1px solid $BORDER$;
     border-radius: 4px;
-    padding: 6px 10px;
+    padding: 1px 3px;
     color: $TEXT_PRIMARY$;
-    min-height: 22px;
-}
-
-QLineEdit:focus, QComboBox:focus {
-    border: 1px solid $ACCENT_PRIMARY$;
 }

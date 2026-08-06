@@ -82,6 +82,7 @@ class LoanDialog(BaseDialog):
             "Кому", "Тип", "Сумма", "Остаток", "Статус",
             "Дата выдачи", "Дата погашения", "Описание"
         ])
+        self.loans_table.setSortingEnabled(True)
         self._setup_table(self.loans_table, [120, 120, 90, 90, 80, 100, 100, 150])
         self.loans_table.customContextMenuRequested.connect(
             lambda pos: self._show_context_menu(pos, is_loans_tab=True)
@@ -101,6 +102,7 @@ class LoanDialog(BaseDialog):
             "Название", "Тип", "Сумма", "Остаток", "Статус",
             "Дата выдачи", "Дата окончания"
         ])
+        self.credits_table.setSortingEnabled(True)
         self._setup_table(self.credits_table, [150, 120, 100, 100, 80, 100, 100])
         self.credits_table.customContextMenuRequested.connect(
             lambda pos: self._show_context_menu(pos, is_loans_tab=False)

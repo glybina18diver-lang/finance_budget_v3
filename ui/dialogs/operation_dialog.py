@@ -153,7 +153,7 @@ class OperationDialog(BaseDialog):
         panel = QWidget()
         layout = QHBoxLayout()
         layout.setSpacing(8)
-        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setContentsMargins(0, 0, 0, 2)
 
         layout.addWidget(QLabel("Новая:"))
 

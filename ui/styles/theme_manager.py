@@ -27,7 +27,7 @@ class ThemeManager:
             styles_dir = os.path.join(current_dir)
             
             # Файлы, которые нужно склеить в один большой CSS
-            qss_files = ["global.qss", "forms.qss", "buttons.qss", "tables.qss"]
+            qss_files = ["global.qss", "forms.qss", "buttons.qss", "tables.qss", "widgets.qss"]
             final_qss = ""
             
             for file_name in qss_files:

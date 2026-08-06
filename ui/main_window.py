@@ -62,7 +62,7 @@ class MainWindow(BaseDialog):
         try:
             # _main_layout уже создан в BaseDialog
             main_layout = self._main_layout
-            main_layout.setContentsMargins(4, 0, 4, 1)
+            main_layout.setContentsMargins(3, 0, 3, 1)
             main_layout.setSpacing(8)
 
             # === МЕНЮ ===
@@ -112,7 +112,7 @@ class MainWindow(BaseDialog):
         try:
             container = QWidget()
             layout = QHBoxLayout(container)
-            layout.setContentsMargins(5, 5, 5, 5)
+            layout.setContentsMargins(5, 1, 5, 1)
 
             # Кнопка "Обновить"
             refresh_btn = CompactButton("🔄 Обновить", "info")
@@ -153,7 +153,7 @@ class MainWindow(BaseDialog):
             container = QWidget()
             container.setObjectName("balance_container")
             layout = QHBoxLayout(container)
-            layout.setContentsMargins(8, 4, 8, 4)
+            layout.setContentsMargins(2, 2, 2, 2)
             layout.setSpacing(8)
 
             # Текст "Общий баланс:"
@@ -179,7 +179,7 @@ class MainWindow(BaseDialog):
         try:
             container = QWidget()
             layout = QHBoxLayout(container)
-            layout.setContentsMargins(0, 0, 0, 0)
+            layout.setContentsMargins(5, 0, 5, 0)
             layout.setSpacing(10)
 
             # ЛЕВАЯ КОЛОНКА - Обычные счета
@@ -231,6 +231,7 @@ class MainWindow(BaseDialog):
 
             # Контейнер для счетов
             scroll_widget = QWidget()
+            scroll_widget.setObjectName("accounts_content")
             scroll_widget.setLayout(accounts_layout)
             scroll.setWidget(scroll_widget)
 
@@ -245,7 +246,7 @@ class MainWindow(BaseDialog):
             try:
                 container = QWidget()
                 layout = QHBoxLayout(container)
-                layout.setContentsMargins(0, 0, 0, 0)
+                layout.setContentsMargins(5, 0, 5, 0)
                 layout.setSpacing(10)
 
                 # Круговая диаграмма РАСХОДОВ

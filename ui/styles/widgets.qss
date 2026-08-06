@@ -1,0 +1,79 @@
+/* ========== QTabWidget (вкладки) ========== */
+
+QTabWidget::pane {
+    border: 1px solid $BORDER$;
+    border-radius: $RADIUS_SMALL$;
+    background-color: $BG_SECONDARY$;
+}
+
+QTabBar::tab {
+    background-color: $TAB_BG$;
+    color: $TEXT_SECONDARY$;
+    padding: 6px 14px;
+    border: 1px solid $BORDER$;
+    border-bottom: none;
+    border-top-left-radius: $RADIUS_SMALL$;
+    border-top-right-radius: $RADIUS_SMALL$;
+    min-width: 80px;
+}
+
+QTabBar::tab:selected {
+    background-color: $BG_SECONDARY$;   /* сливается с pane */
+    color: $TEXT_PRIMARY$;
+    font-weight: 600;
+    margin-bottom: -1px;                /* «приклеивает» вкладку к панели */
+}
+
+QTabBar::tab:hover:!selected {
+    background-color: $TAB_HOVER$;
+}
+
+/* Опционально: акцент сущности на активной вкладке */
+QTabWidget[purpose="transfers"] QTabBar::tab:selected {
+    color: $ENTITY_TRANSFERS$;
+}
+QTabWidget[purpose="loans"] QTabBar::tab:selected {
+    color: $ENTITY_LOANS$;
+}
+
+/* ========== QGroupBox ========== */
+
+QGroupBox {
+    background-color: $BG_SECONDARY$;
+    border: 1px solid $BORDER$;
+    border-radius: $RADIUS_SMALL$;
+    margin-top: 8px;                    /* место под заголовок */
+    padding: 12px 8px 8px 8px;
+    font-weight: 600;
+}
+
+QGroupBox::title {
+    subcontrol-origin: margin;
+    subcontrol-position: top left;
+    left: 8px;
+    padding: 0 4px;
+    color: $TEXT_SECONDARY$;
+}
+
+/* ========== Панель (контейнер для layout) ========== */
+
+QWidget[variant="panel"] {
+    background-color: $BG_SECONDARY$;
+    border: 1px solid $BORDER$;
+    border-radius: $RADIUS_SMALL$;
+}
+
+
+/* ========== КОЛОНКИ СЧЕТОВ ========== */
+
+QScrollArea#accounts_scroll {
+    background-color: $BG_SECONDARY$;
+    border: 1px solid $BORDER$;
+    border-radius: $RADIUS_SMALL$;
+}
+
+/* Внутренние слои прозрачны, чтобы не закрывать скругление рамки */
+QScrollArea#accounts_scroll > QWidget,   /* viewport */
+QWidget#accounts_content {               /* контейнер строк */
+    background-color: transparent;
+}
