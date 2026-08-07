@@ -77,3 +77,78 @@ QScrollArea#accounts_scroll > QWidget,   /* viewport */
 QWidget#accounts_content {               /* контейнер строк */
     background-color: transparent;
 }
+
+/* ========== СЛУЖЕБНЫЕ НАДПИСИ ========== */
+
+QLabel[variant="header"] {
+    font-size: $FONT_SIZE_HEADER$;
+    font-weight: bold;
+}
+
+QLabel[variant="muted"] {
+    color: $TEXT_SECONDARY$;
+    font-style: italic;
+    padding: 40px;
+}
+
+QLabel[variant="error"] {
+    color: $DANGER$;
+    padding: 30px;
+}
+
+/* ========== КАРТОЧКИ (variant) ========== (неоновая тема) */
+
+QWidget[variant="topbar"] {
+    background-color: $BG_SECONDARY$;
+    border-radius: $RADIUS_LARGE$;
+    padding: 10px;
+}
+
+QWidget[variant="balance_card"] {
+    background: $GRADIENT_CARD$;
+    border: 1px solid $ACCENT_PRIMARY$;
+    border-radius: $RADIUS_LARGE$;
+    padding: 15px;
+}
+
+QWidget[variant="account_card"] {
+    background-color: $BG_SECONDARY$;
+    border: 1px solid $BORDER$;
+    border-radius: $RADIUS_MEDIUM$;
+    padding: 12px;
+}
+
+QWidget[variant="account_card"]:hover {
+    border: 1px solid $ACCENT_SECONDARY$;
+}
+
+QWidget[variant="chart_card"] {
+    background-color: $BG_SECONDARY$;
+    border: 1px solid $BORDER$;
+    border-radius: $RADIUS_LARGE$;
+    padding: 15px;
+}
+
+/* ========== КНОПКИ: градиент и контур ========== (неоновая тема)*/
+
+QPushButton[variant="primary"] {
+    background: $GRADIENT_ACCENT$;
+    color: white;
+    border: none;
+    border-radius: $RADIUS_MEDIUM$;
+    padding: 10px 20px;
+    font-weight: bold;
+}
+
+QPushButton[variant="primary"]:hover {
+    background: $GRADIENT_ACCENT_HOVER$;
+}
+
+QPushButton[variant="outline"] {
+    background-color: $BG_ELEVATED$;
+    color: $ACCENT_SECONDARY$;
+    border: 1px solid $ACCENT_SECONDARY$;
+    border-radius: $RADIUS_MEDIUM$;
+    padding: 10px 20px;
+    font-weight: bold;
+}

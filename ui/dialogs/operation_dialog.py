@@ -380,10 +380,7 @@ class OperationDialog(BaseDialog):
             
             # Выбираем первый счёт по умолчанию
             self.account_combo.setCurrentIndex(0)
-                    
-            # показываем количество именно пользовательских счетов
-            # self.show_status(f"Загружено {len(user_accounts)} пользовательский(х) счёт(ов)", "success")
-            
+
         except Exception as e:
             logger.error(f"[{self.__class__.__name__}] Ошибка загрузки счетов: {e}", exc_info=True)
             self.show_status("Ошибка загрузки счетов", message_type="error")
@@ -584,11 +581,11 @@ class OperationDialog(BaseDialog):
         
         # Редактировать
         edit_action = menu.addAction("✏️ Редактировать")
-        edit_action.triggered.connect(self._stub_method)
+        edit_action.triggered.connect(self._edit_transaction)
         
         # Дублировать
         duplicate_action = menu.addAction("🔄 Дублировать (с настройками)")
-        duplicate_action.triggered.connect(self._stub_method)
+        duplicate_action.triggered.connect(self._duplicate_transaction_with_options)
         
         menu.addSeparator()
         
@@ -656,3 +653,109 @@ class OperationDialog(BaseDialog):
             # Системные ошибки
             logger.error(f"[{self.__class__.__name__}] Ошибка удаления транзакции: {e}", exc_info=True)
             self.show_status("Произошла ошибка при удалении операции", "error")
+
+    def _duplicate_transaction_with_options(self):
+        """Открывает диалог дублирования транзакции с настройками."""
+        try:
+            # Получаем выбранную транзакцию
+            selected_items = self.transactions_tree.selectedItems()
+            if not selected_items:
+                raise ValueError("Выберите операцию для дублирования")
+            
+            transaction_id = selected_items[0].data(0, Qt.UserRole)
+            if not transaction_id:
+                raise ValueError("Не удалось получить ID транзакции")
+            
+            # Получаем транзакцию через презентер
+            transaction = self.presenter.get_transaction_by_id(transaction_id)
+            if not transaction:
+                raise ValueError("Операция не найдена")
+            
+            # Проверяем тип
+            if transaction.trans_type not in ['income', 'expense']:
+                raise ValueError("Дублировать можно только доходы и расходы")
+            
+            # Получаем названия из кэша
+            account = self._account_cache.get(transaction.account_id)
+            category = self._category_cache.get(transaction.category_id) if transaction.category_id else None
+            
+            account_name = account.name if account else "—"
+            category_name = category.name if category else "—"
+            currency = account.currency if account else "₽"
+            
+            # Импортируем и открываем диалог
+            from ui.dialogs.duplicate_dialog import DuplicateTransactionDialog
+            
+            dialog = DuplicateTransactionDialog(
+                transaction=transaction,
+                account_name=account_name,
+                category_name=category_name,
+                currency=currency,
+                parent=self
+            )
+            
+            if dialog.exec():
+                data = dialog.get_duplicate_data()
+                
+                # Формируем raw_amount
+                if data['quantity'] != 1.0:
+                    raw_amount = f"{data['amount']}*{data['quantity']}"
+                else:
+                    raw_amount = str(data['amount'])
+                
+                # Создаём копию
+                self.presenter.add_transaction(
+                    raw_amount=raw_amount,
+                    trans_type=transaction.trans_type,
+                    account_id=transaction.account_id,
+                    category_id=transaction.category_id,
+                    description=data['description'],
+                    date_str=data['date']
+                )
+                
+                self.refresh_transactions()
+                self.show_status("Копия операции создана", message_type="success")
+                logger.info(f"[{self.__class__.__name__}] Дублирована транзакция ID={transaction_id}")
+        
+        except ValueError as e:
+            logger.warning(f"[{self.__class__.__name__}] Валидация дублирования: {e}")
+            self.show_status(str(e), message_type="error")
+        
+        except Exception as e:
+            logger.error(f"[{self.__class__.__name__}] Ошибка дублирования: {e}", exc_info=True)
+            self.show_status("Ошибка при дублировании", message_type="error")
+
+    def _edit_transaction(self):
+        """Открывает диалог редактирования выбранной транзакции."""
+        try:
+            selected_items = self.transactions_tree.selectedItems()
+            if not selected_items:
+                raise ValueError("Выберите операцию для редактирования")
+            
+            transaction_id = selected_items[0].data(0, Qt.UserRole)
+            if not transaction_id:
+                raise ValueError("Не удалось получить ID транзакции")
+            
+            transaction = self.presenter.get_transaction_by_id(transaction_id)
+            if not transaction:
+                raise ValueError("Операция не найдена")
+            
+            from ui.dialogs.edit_transaction_dialog import EditTransactionDialog
+            
+            dialog = EditTransactionDialog(
+                parent=self,
+                presenter=self.presenter,
+                transaction=transaction,
+                account_cache=self._account_cache,
+                category_cache=self._category_cache
+            )
+            
+            dialog.data_updated.connect(self.refresh_transactions)
+            dialog.exec()
+        
+        except ValueError as e:
+            logger.warning(f"[{self.__class__.__name__}] Валидация редактирования: {e}")
+            self.show_status(str(e), message_type="error")
+        except Exception as e:
+            logger.error(f"[{self.__class__.__name__}] Ошибка редактирования: {e}", exc_info=True)
+            self.show_status("Ошибка при открытии диалога редактирования", message_type="error")

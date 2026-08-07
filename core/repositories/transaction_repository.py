@@ -99,6 +99,57 @@ class TransactionRepository:
             logger.error("[TransactionRepository] Ошибка при получении транзакции по ID %s: %s", transaction_id, e, exc_info=True)
             raise
 
+    def update(self, transaction: Transaction) -> Transaction:
+        """
+        Обновляет существующую транзакцию в БД.
+
+        Args:
+            transaction: объект Transaction с заполненным полем id и новыми данными
+
+        Returns:
+            Переданный объект Transaction (с обновлённым updated_at, если триггер сработал)
+
+        Raises:
+            ValueError: если у транзакции не указан id
+            Exception: при системной ошибке БД
+        """
+        try:
+            if not transaction.id:
+                raise ValueError("У транзакции не указан id — невозможно обновить")
+
+            query = """
+                UPDATE transactions
+                SET date = ?,
+                    amount = ?,
+                    trans_type = ?,
+                    account_id = ?,
+                    category_id = ?,
+                    description = ?,
+                    quantity = ?,
+                    original_transaction_id = ?
+                WHERE id = ?
+            """
+            params = (
+                transaction.date,
+                float(transaction.amount),
+                transaction.trans_type,
+                transaction.account_id,
+                transaction.category_id,
+                transaction.description,
+                float(transaction.quantity),
+                transaction.original_transaction_id,
+                transaction.id
+            )
+            self.db.execute(query, params)
+            return transaction
+
+        except ValueError as e:
+            logger.warning(f"[{self.__class__.__name__}] Валидация обновления: {e}")
+            raise
+        except Exception as e:
+            logger.error(f"[{self.__class__.__name__}] Ошибка обновления транзакции ID={transaction.id}: {e}", exc_info=True)
+            raise
+
     def get_all(self, account_id: Optional[int] = None, limit: int = 200, offset: int = 0) -> List[Transaction]:
         """
         Возвращает список транзакций с опциональной фильтрацией по счёту и пагинацией.

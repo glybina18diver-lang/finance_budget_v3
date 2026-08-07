@@ -9,7 +9,9 @@ logger = logging.getLogger(__name__)
 
 class ThemeManager:
     """Менеджер тем для приложения."""
-    
+
+    _current_theme: dict = LIGHT_THEME # Словарь активной темы
+
     @staticmethod
     def apply_theme(theme_dict: dict = None):
         """
@@ -27,7 +29,7 @@ class ThemeManager:
             styles_dir = os.path.join(current_dir)
             
             # Файлы, которые нужно склеить в один большой CSS
-            qss_files = ["global.qss", "forms.qss", "buttons.qss", "tables.qss", "widgets.qss"]
+            qss_files = ["global.qss", "forms.qss", "buttons.qss", "tables.qss", "widgets.qss", "menus.qss"]
             final_qss = ""
             
             for file_name in qss_files:
@@ -49,6 +51,9 @@ class ThemeManager:
             if app:
                 app.setStyleSheet(final_qss)
                 logger.info("Глобальная тема успешно применена.")
+                ThemeManager._current_theme = theme
+                # для отладки создаем итоговый CSS файл
+                # ThemeManager._dump_for_debug(final_qss)
             else:
                 logger.error("QApplication не инициализирован до применения темы.")
                 
@@ -83,4 +88,26 @@ class ThemeManager:
             raise
         except Exception as e:
             logger.error(f"[{ThemeManager.__class__.__name__}] Ошибка затемнения: {e}", exc_info=True)
+            raise
+
+    @classmethod
+    def current(cls) -> dict:
+        """Возвращает словарь активной темы."""
+        return cls._current_theme
+
+    # в ThemeManager
+    @staticmethod
+    def _dump_for_debug(qss: str):
+        """Сохраняет итоговый QSS в файл для ручного разбора.
+
+        Args:
+            qss: итоговая строка стилей после подстановки значений
+        """
+        try:
+            path = os.path.join(os.getcwd(), "debug_styles.css")
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(qss)
+            logger.info(f"[{ThemeManager.__name__}] Итоговый QSS сохранён: {path}")
+        except Exception as e:
+            logger.error(f"[{ThemeManager.__name__}] Ошибка: {e}", exc_info=True)
             raise

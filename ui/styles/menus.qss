@@ -1,0 +1,35 @@
+/* ========== МЕНЮ ========== */
+
+QMenuBar {
+    background-color: $BG_SECONDARY$;
+    color: $TEXT_PRIMARY$;
+    padding: 5px;
+    border-bottom: 1px solid $BORDER$;
+}
+
+QMenuBar::item {
+    padding: 5px 15px;
+    background: transparent;
+}
+
+QMenuBar::item:selected {
+    background: $ACCENT_PRIMARY$;
+    border-radius: $RADIUS_SMALL$;
+}
+
+QMenu {
+    background-color: $BG_SECONDARY$;
+    border: 1px solid $BORDER$;
+    border-radius: $RADIUS_SMALL$;
+    padding: 5px;
+}
+
+QMenu::item {
+    padding: 8px 20px;
+    color: $TEXT_PRIMARY$;
+}
+
+QMenu::item:selected {
+    background: $ACCENT_PRIMARY$;
+    border-radius: $RADIUS_SMALL$;
+}

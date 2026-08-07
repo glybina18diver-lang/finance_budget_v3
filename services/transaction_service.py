@@ -5,7 +5,7 @@ from core.repositories.transaction_repository import TransactionRepository
 from core.repositories.account_repository import AccountRepository
 from core.repositories.category_repository import CategoryRepository
 from core.models import Transaction, Account, Category
-from typing import Tuple, List, Union
+from typing import Tuple, List, Union, Optional
 from datetime import date, datetime
 from utils.validators import to_decimal
 
@@ -158,6 +158,103 @@ class TransactionService:
             logger.error("Ошибка: %s", e, exc_info=True)
             raise RuntimeError(f"Системная ошибка при удалении транзакции: {e}") from e
 
+    def update_transaction(
+        self,
+        transaction_id: int,
+        raw_amount: str,
+        trans_type: str,
+        account_id: int,
+        category_id: Optional[int],
+        description: str,
+        date_str: str
+    ) -> Transaction:
+        """
+        Обновляет существующую транзакцию с пересчётом баланса счёта.
+        
+        Алгоритм:
+        1. Получает старую транзакцию.
+        2. Откатывает её влияние на баланс старого счёта.
+        3. Парсит и валидирует новые данные.
+        4. Сохраняет обновлённую транзакцию.
+        5. Применяет новое влияние на баланс (возможно, нового) счёта.
+
+        Args:
+            transaction_id: ID транзакции для обновления
+            raw_amount: строка суммы (может содержать "*", например "100*2")
+            trans_type: тип транзакции ('income', 'expense', 'correct')
+            account_id: ID счёта
+            category_id: ID категории (None для корректировки)
+            description: описание транзакции
+            date_str: дата в формате yyyy-MM-dd
+
+        Returns:
+            Обновлённый объект Transaction
+
+        Raises:
+            ValueError: если транзакция не найдена или данные некорректны
+            Exception: при системной ошибке
+        """
+        try:
+            # 1. Получаем старую транзакцию через существующий метод репозитория
+            old_tx = self.tx_repo.get_by_id(transaction_id)
+            if not old_tx:
+                raise ValueError(f"Транзакция с ID {transaction_id} не найдена")
+
+            # 2. Парсим новую сумму (используем ваш существующий метод парсинга)
+            amount_positive, quantity = self._parse_amount(raw_amount)
+            total_amount = to_decimal(amount_positive * quantity)
+
+            # 3. Валидация новых данных
+            if total_amount <= 0:
+                raise ValueError(f"Сумма должна быть > 0, получено: {total_amount}")
+            
+            if trans_type not in ['income', 'expense', 'correct']:
+                raise ValueError(f"Некорректный тип транзакции: {trans_type}")
+            
+            if trans_type != 'correct' and not category_id:
+                raise ValueError("Для дохода или расхода обязательна категория")
+
+            # 4. Применяем знак к новой сумме
+            signed_amount = total_amount if trans_type == "income" else -total_amount
+
+            # 5. Откатываем старую транзакцию с баланса старого счёта
+            self._update_account_balance(old_tx.account_id, -old_tx.amount)
+            logger.debug(
+                f"[{self.__class__.__name__}] Откат баланса счёта {old_tx.account_id}: {-old_tx.amount}"
+            )
+
+            # 6. Собираем новый объект транзакции (сохраняем original_transaction_id, если был)
+            updated_tx = Transaction(
+                id=transaction_id,
+                date=date_str,
+                amount=signed_amount,
+                trans_type=trans_type,
+                account_id=account_id,
+                category_id=category_id,
+                description=description.strip(),
+                quantity=quantity,
+                original_transaction_id=old_tx.original_transaction_id
+            )
+
+            # 7. Сохраняем в репозитории
+            self.tx_repo.update(updated_tx)
+            logger.debug(f"[{self.__class__.__name__}] Транзакция ID={transaction_id} обновлена в БД")
+
+            # 8. Применяем новую транзакцию к балансу (возможно, уже нового) счёта
+            self._update_account_balance(account_id, signed_amount)
+            logger.debug(
+                f"[{self.__class__.__name__}] Применение к балансу счёта {account_id}: {signed_amount}"
+            )
+
+            logger.info(f"[{self.__class__.__name__}] Транзакция ID={transaction_id} успешно обновлена")
+            return updated_tx
+
+        except ValueError as e:
+            logger.warning(f"[{self.__class__.__name__}] Валидация обновления: {e}")
+            raise
+        except Exception as e:
+            logger.error(f"[{self.__class__.__name__}] Ошибка обновления транзакции ID={transaction_id}: {e}", exc_info=True)
+            raise
     # ------Проверки, валидация, преобразование------
     def _parse_amount(self, raw_amount: Union[str, Decimal]) -> Tuple[Decimal, Decimal]:
         """
@@ -332,5 +429,40 @@ class TransactionService:
             return self.tx_repo.get_latest(limit)
         except Exception as e:
             logger.error(f"[TransactionService] Ошибка загрузки транзакций: {e}")
+            logger.error("Ошибка: %s", e, exc_info=True)
+            raise
+
+    def get_transactions_by_date(self, date: datetime.date) -> List[Transaction]:
+        """
+        ЗАГЛУШКА
+        Возвращает транзакции за указанную дату для отображения в UI.
+
+        Args:
+            date: дата в формате datetime.date
+
+        Returns:
+            Список объектов Transaction, отсортированный по дате (новые первыми)
+        """
+        try:
+            return #self.tx_repo.get_by_date(date)
+        except Exception as e:
+            logger.error(f"[TransactionService] Ошибка загрузки транзакций: {e}")
+            logger.error("Ошибка: %s", e, exc_info=True)
+            raise
+
+    def get_by_id(self, tx_id: int) -> Transaction:
+        """
+        Возвращает транзакцию по ID для отображения в UI.
+
+        Args:
+            tx_id: ID транзакции
+
+        Returns:
+            Объект Transaction
+        """
+        try:
+            return self.tx_repo.get_by_id(tx_id)
+        except Exception as e:
+            logger.error(f"[TransactionService] Ошибка загрузки транзакции: {e}")
             logger.error("Ошибка: %s", e, exc_info=True)
             raise

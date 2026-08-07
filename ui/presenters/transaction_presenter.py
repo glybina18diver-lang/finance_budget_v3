@@ -87,6 +87,84 @@ class TransactionPresenter:
             if self.view:
                 self.view.show_error(f"Ошибка удаления: {e}")
 
+    def get_transaction_by_id(self, transaction_id: int) -> Optional[Transaction]:
+        """
+        Возвращает транзакцию по ID.
+        
+        Args:
+            transaction_id: идентификатор транзакции
+        
+        Returns:
+            Объект Transaction или None, если не найдена
+        
+        Raises:
+            ValueError: если ID некорректен
+        """
+        try:
+            if not isinstance(transaction_id, int) or transaction_id <= 0:
+                raise ValueError(f"Некорректный ID транзакции: {transaction_id}")
+            
+            return self.service.get_by_id(transaction_id)
+        
+        except ValueError as e:
+            logger.warning(f"[{self.__class__.__name__}] Валидация: {e}")
+            raise
+        except Exception as e:
+            logger.error(f"[{self.__class__.__name__}] Ошибка получения транзакции: {e}", exc_info=True)
+            raise
+    
+    def update_transaction(
+        self,
+        transaction_id: int,
+        raw_amount: str,
+        trans_type: str,
+        account_id: int,
+        category_id: Optional[int],
+        description: str,
+        date_str: str
+    ):
+        """
+        Обновляет транзакцию через сервис и инициирует обновление View.
+
+        Args:
+            transaction_id: ID транзакции
+            raw_amount: строка суммы (например, "100*3")
+            trans_type: тип операции ('income', 'expense', 'correct')
+            account_id: ID счёта
+            category_id: ID категории (None для корректировки)
+            description: описание
+            date_str: дата (yyyy-MM-dd)
+
+        Raises:
+            ValueError: при некорректных данных
+            Exception: при системной ошибке
+        """
+        try:
+            # Если это корректировка и категория не передана, можно подставить системную или None
+            # (зависит от вашей бизнес-логики, здесь оставляем как есть)
+            
+            self.service.update_transaction(
+                transaction_id=transaction_id,
+                raw_amount=raw_amount,
+                trans_type=trans_type,
+                account_id=account_id,
+                category_id=category_id,
+                description=description,
+                date_str=date_str
+            )
+
+            # Сообщаем View, что нужно перезагрузить данные
+            if self.view:
+                # Предполагается, что во View есть метод refresh_transactions
+                self.view.refresh_transactions()
+
+        except ValueError as e:
+            logger.warning(f"[{self.__class__.__name__}] Валидация: {e}")
+            raise
+        except Exception as e:
+            logger.error(f"[{self.__class__.__name__}] Ошибка обновления: {e}", exc_info=True)
+            raise
+
     # ================= Работа с UI =================
     def refresh_data(self, current_type: str = "Расход"):
         """

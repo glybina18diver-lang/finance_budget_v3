@@ -55,6 +55,14 @@ SHARED_ACCENTS = {
     # Типографика и геометрия таблиц
     "FONT_SIZE_TABLE": "11px",
     "RADIUS_SMALL": "4px",
+    
+    # Общая типографика ==================
+    "FONT_FAMILY": "Segoe UI, Roboto, sans-serif", # Шрифт
+    "FONT_SIZE_BASE": "13px", # БАзавый размер текста
+    "FONT_SIZE_COMPACT": "12px", # Для кнопок
+    "FONT_SIZE_HEADER": "16px", 
+    "RADIUS_MEDIUM": "6px",
+    "RADIUS_LARGE": "8px",
 }
 
 LIGHT_THEME = {
@@ -85,12 +93,6 @@ LIGHT_THEME = {
     "DISABLED_BG": "#ECF0F1",
     "DISABLED_TEXT": "#95A5A6",   
 
-    # Типографика
-    "FONT_FAMILY": "Segoe UI, Roboto, sans-serif",
-    "FONT_SIZE_BASE": "13px",
-    "FONT_SIZE_COMPACT": "12px",
-    "FONT_SIZE_HEADER": "16px",
-
     # Таблицы
     "TABLE_BG": "#FFFFFF",
     "TABLE_ROW_ALT": "#F8F9FA",        # зебра
@@ -110,6 +112,16 @@ LIGHT_THEME = {
     # Цвета вкладок (QTabWidget)
     "TAB_BG": "#E8EDF2",      # неактивная вкладка
     "TAB_HOVER": "#DCE4EB",
+
+    # новые при добовение неоновой темы (для меню)
+    "ACCENT_SECONDARY": "#0077b6",
+    "ACCENT_SECONDARY_HOVER": "#0096c7",
+    "BG_ELEVATED": "#E8EDF2",
+    "BORDER_STRONG": "#AAB4C0",
+    "GRADIENT_ACCENT": "qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #0096c7, stop:1 #7b2cbf)",
+    "GRADIENT_ACCENT_HOVER": "qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #00b4e8, stop:1 #9d4edd)",
+    "GRADIENT_CARD": "qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #FFFFFF, stop:1 #F3E8FF)",
+
 }
 
 DARK_THEME = {
@@ -140,12 +152,6 @@ DARK_THEME = {
     "DISABLED_BG": "#2C2C2C",
     "DISABLED_TEXT": "#555555",
 
-    # Типографика ==================
-    "FONT_FAMILY": "Segoe UI, Roboto, sans-serif", # Шрифт
-    "FONT_SIZE_BASE": "13px", # БАзавый размер текста
-    "FONT_SIZE_COMPACT": "12px", # Для кнопок
-    "FONT_SIZE_HEADER": "16px", 
-
     # Таблицы
     "TABLE_BG": "#1E1E1E",
     "TABLE_ROW_ALT": "#252525",
@@ -165,4 +171,93 @@ DARK_THEME = {
     # Цвета вкладок (QTabWidget)
     "TAB_BG": "#2A2A2A",
     "TAB_HOVER": "#353535",
+
+    # новые при добовение неоновой темы (для меню)
+    "ACCENT_SECONDARY": "#00b4d8",
+    "ACCENT_SECONDARY_HOVER": "#48cae4",
+    "BG_ELEVATED": "#2C2C2C",
+    "BORDER_STRONG": "#444444",
+    "GRADIENT_ACCENT": "qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #00d4ff, stop:1 #7b2cbf)",
+    "GRADIENT_ACCENT_HOVER": "qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #00e5ff, stop:1 #9d4edd)",
+    "GRADIENT_CARD": "qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #1E1E1E, stop:1 #2a1a3e)",
 }   
+
+NEON_THEME = {
+    **SHARED_ACCENTS,
+
+    # Геометрия — неоновые скругления крупнее
+    "RADIUS_SMALL": "8px",
+    "RADIUS_MEDIUM": "10px",
+    "RADIUS_LARGE": "12px",
+
+    # Фоны
+    "BG_PRIMARY": "#0f0f1e",
+    "BG_SECONDARY": "#1a1a2e",
+    "BG_ELEVATED": "#2a2a4a",
+
+    # Текст
+    "TEXT_PRIMARY": "#E0E0E0",
+    "TEXT_SECONDARY": "#a0a0c0",
+
+    # Акценты
+    "ACCENT_PRIMARY": "#7b2cbf",
+    "ACCENT_PRIMARY_HOVER": "#9d4edd",
+    "ACCENT_PRIMARY_PRESSED": "#5a189a",
+    "ACCENT_SECONDARY": "#00d4ff",
+    "ACCENT_SECONDARY_HOVER": "#00e5ff",
+
+    # Статусные
+    "SUCCESS": "#00ff88",
+    "WARNING": "#ffb703",
+    "DANGER": "#ff4466",
+
+    # Градиенты
+    "GRADIENT_ACCENT": "qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #00d4ff, stop:1 #7b2cbf)",
+    "GRADIENT_ACCENT_HOVER": "qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #00e5ff, stop:1 #9d4edd)",
+    "GRADIENT_CARD": "qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #1a1a2e, stop:1 #2a1a3e)",
+
+    # Границы и disabled
+    "BORDER": "#2a2a4a",
+    "BORDER_STRONG": "#3a3a5a",
+    "DISABLED_BG": "#2a2a4a",
+    "DISABLED_TEXT": "#5a5a7a",
+
+    # Компактные кнопки — неоновые аналоги
+    "COMPACT_SUCCESS": "#00a86b",
+    "COMPACT_SUCCESS_HOVER": "#00c483",
+    "COMPACT_SUCCESS_PRESSED": "#008f5b",
+    "COMPACT_INFO": "#0096c7",
+    "COMPACT_INFO_HOVER": "#00b4e8",
+    "COMPACT_INFO_PRESSED": "#007aa3",
+    "COMPACT_WARNING": "#ff9f1c",
+    "COMPACT_WARNING_HOVER": "#ffb347",
+    "COMPACT_WARNING_PRESSED": "#e08900",
+    "COMPACT_DANGER": "#ff4466",
+    "COMPACT_DANGER_HOVER": "#ff6680",
+    "COMPACT_DANGER_PRESSED": "#d92646",
+    "COMPACT_NEUTRAL": "#3a3a5a",
+    "COMPACT_NEUTRAL_HOVER": "#4a4a6a",
+    "COMPACT_NEUTRAL_PRESSED": "#2a2a4a",
+    "COMPACT_DISABLED_BG": "#2a2a4a",
+    "COMPACT_DISABLED_TEXT": "#5a5a7a",
+
+    # Таблицы
+    "TABLE_BG": "#1a1a2e",
+    "TABLE_ROW_ALT": "#20203a",
+    "TABLE_GRID": "#2a2a4a",
+    "TABLE_HEADER_BG": "#2a2a4a",
+    "TABLE_HEADER_HOVER": "#3a3a5a",
+    "TABLE_HEADER_PRESSED": "#4a4a6a",
+    "TABLE_HOVER": "#262649",
+    "TABLE_SELECTION": "#4a2585",
+    "TABLE_SELECTION_TEXT": "#FFFFFF",
+
+    # Вкладки
+    "TAB_BG": "#2a2a4a",
+    "TAB_HOVER": "#3a3a5a",
+
+    # Скроллбары
+    "SCROLLBAR_BG": "#1a1a2e",
+    "SCROLLBAR_HANDLE": "#3a3a5a",
+    "SCROLLBAR_HANDLE_HOVER": "#7b2cbf",
+}

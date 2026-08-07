@@ -246,7 +246,7 @@ class MainWindow(BaseDialog):
             try:
                 container = QWidget()
                 layout = QHBoxLayout(container)
-                layout.setContentsMargins(5, 0, 5, 0)
+                layout.setContentsMargins(550, 0, 5, 0)
                 layout.setSpacing(10)
 
                 # Круговая диаграмма РАСХОДОВ
@@ -624,6 +624,8 @@ class MainWindow(BaseDialog):
         try:
             self.status_bar.setText("Обновление данных...")
             self.presenter._load_accounts()
+            # Обноваляем график после смены темы TODO: нужно реализоввать смену типа через натрики проги
+            self.income_expense_chart.update_chart()
             self.status_bar.setText("Данные обновлены")
             logger.info(f"[{self.__class__.__name__}] Данные обновлены")
         except Exception as e:
