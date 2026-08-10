@@ -1,9 +1,11 @@
 # ui/presenters/transaction_presenter.py
 from typing import Optional
-from typing import List
+from typing import List, Dict
 import logging
 from services.transaction_service import TransactionService
 from core.models import Transaction, Account, Category
+from utils.validators import to_decimal
+
 
 logger = logging.getLogger(__name__)
 
@@ -165,6 +167,157 @@ class TransactionPresenter:
             logger.error(f"[{self.__class__.__name__}] Ошибка обновления: {e}", exc_info=True)
             raise
 
+    # возврат транзакции
+    def get_refund_info(self, original_transaction_id: int) -> dict:
+        """
+        Возвращает информацию о доступной сумме возврата по оригинальной транзакции.
+
+        Args:
+            original_transaction_id: ID оригинальной транзакции
+
+        Returns:
+            Словарь:
+            - max_refundable: Decimal, доступная сумма для возврата
+            - already_refunded: Decimal, уже возвращённая сумма
+            - original_amount: Decimal, абсолютная сумма оригинала
+
+        Raises:
+            ValueError: если оригинальная транзакция не найдена
+            Exception: при системной ошибке
+        """
+        try:
+            if not isinstance(original_transaction_id, int) or original_transaction_id <= 0:
+                raise ValueError(f"Некорректный ID транзакции: {original_transaction_id}")
+
+            original = self.service.get_by_id(original_transaction_id)
+            if not original:
+                raise ValueError(f"Транзакция ID={original_transaction_id} не найдена")
+
+            if original.trans_type not in ["income", "expense"]:
+                raise ValueError(
+                    "Возврат можно создать только для операции типа Доход или Расход"
+                )
+
+            # Получаем все существующие возвраты
+            refunds = self.service.get_refunds_for_transaction(original_transaction_id)
+
+            original_amount = abs(original.amount)
+            already_refunded = sum(abs(r.amount) for r in refunds)
+            max_refundable = original_amount - already_refunded
+
+            return {
+                "max_refundable": max_refundable,
+                "already_refunded": already_refunded,
+                "original_amount": original_amount,
+            }
+
+        except ValueError as e:
+            logger.warning(f"[{self.__class__.__name__}] Валидация: {e}")
+            raise
+        except Exception as e:
+            logger.error(
+                f"[{self.__class__.__name__}] Ошибка получения информации о возврате: {e}",
+                exc_info=True,
+            )
+            raise
+
+
+    def create_refund(self, original_transaction_id: int, data: dict) -> Transaction:
+        """
+        Создаёт возврат по оригинальной транзакции.
+
+        Знак суммы определяется автоматически:
+        - Если оригинал был Расход (amount < 0) → возврат положительный (+X)
+        - Если оригинал был Доход (amount > 0) → возврат отрицательный (-X)
+
+        Args:
+            original_transaction_id: ID оригинальной транзакции
+            data: словарь с параметрами возврата:
+                - date: str, формат yyyy-MM-dd
+                - amount: float, положительная сумма возврата
+                - description: str, описание возврата
+
+        Returns:
+            Созданный объект Transaction с trans_type='refund'
+
+        Raises:
+            ValueError: если оригинал не найден, данные некорректны или сумма превышает доступную
+            Exception: при системной ошибке
+        """
+        try:
+            if not isinstance(original_transaction_id, int) or original_transaction_id <= 0:
+                raise ValueError(f"Некорректный ID транзакции: {original_transaction_id}")
+
+            if not isinstance(data, dict):
+                raise ValueError("Параметр data должен быть словарём")
+
+            # Валидация обязательных ключей
+            required_keys = {"date", "amount", "description"}
+            missing_keys = required_keys - set(data.keys())
+            if missing_keys:
+                raise ValueError(f"В data отсутствуют ключи: {missing_keys}")
+
+            # Получаем оригинальную транзакцию
+            original = self.service.get_by_id(original_transaction_id)
+            if not original:
+                raise ValueError(f"Оригинальная транзакция ID={original_transaction_id} не найдена")
+
+            if original.trans_type not in ["income", "expense"]:
+                raise ValueError("Возврат можно создать только для операции типа Доход или Расход")
+
+            # Проверяем доступную сумму
+            refund_info = self.get_refund_info(original_transaction_id)
+            amount = to_decimal(data["amount"])
+
+            if amount <= 0:
+                raise ValueError("Сумма возврата должна быть больше нуля")
+
+            if amount > refund_info["max_refundable"]:
+                raise ValueError(
+                    f"Сумма возврата ({amount}) превышает доступную "
+                    f"({refund_info['max_refundable']})"
+                )
+
+            # Определяем знак: инвертируем знак оригинала
+            # Расход (отрицательный) → возврат положительный
+            # Доход (положительный) → возврат отрицательный
+            signed_amount = -amount if original.trans_type == "income" else amount
+
+            # Сохраняем в БД
+            saved_tx = self.service.create_transaction(
+                raw_amount=str(signed_amount),
+                trans_type="refund",
+                account_id=original.account_id,
+                category_id=original.category_id,
+                description=str(data["description"].strip()),
+                date_str=str(data["date"]),
+                original_transaction_id=original_transaction_id,
+                )
+            logger.debug(f"[{self.__class__.__name__}] Создан возврат ID={saved_tx.id}")
+
+            # Обновляем баланс счёта
+            # self.account_service.update_balance(original.account_id, signed_amount)
+            logger.debug(
+                f"[{self.__class__.__name__}] Баланс счёта {original.account_id} "
+                f"обновлён на {signed_amount}"
+            )
+
+            logger.info(
+                f"[{self.__class__.__name__}] Возврат ID={saved_tx.id} создан "
+                f"для транзакции ID={original_transaction_id}, сумма={signed_amount}"
+            )
+            return saved_tx
+
+        except ValueError as e:
+            logger.warning(f"[{self.__class__.__name__}] Валидация возврата: {e}")
+            raise
+        except Exception as e:
+            logger.error(
+                f"[{self.__class__.__name__}] Ошибка создания возврата: {e}",
+                exc_info=True,
+            )
+            raise
+
     # ================= Работа с UI =================
     def refresh_data(self, current_type: str = "Расход"):
         """
@@ -195,6 +348,42 @@ class TransactionPresenter:
             logger.error(f"[TransactionPresenter] Ошибка обновления данных: {e}", exc_info=True)
             if self.view:
                 self.view.show_error(f"Ошибка обновления данных: {e}")
+
+    def load_with_filters(self, filters: Optional[Dict] = None):
+        """
+        Загружает транзакции с учётом фильтров и передаёт их в View.
+
+        Координирует вызов сервиса и обновление таблицы.
+        При ошибке показывает сообщение пользователю через View.
+
+        Args:
+            filters: словарь с параметрами фильтрации. Если None — загружает последние 300 записей.
+
+        Raises:
+            ValueError: при некорректных параметрах
+            Exception: при системной ошибке
+        """
+        try:
+            if filters:
+                transactions = self.service.get_filtered_transactions(filters=filters, limit=300)
+                logger.debug(f"[{self.__class__.__name__}] Загружено {len(transactions)} транзакций с фильтрами")
+            else:
+                transactions = self.service.get_filtered_transactions(filters=None, limit=300)
+                logger.debug(f"[{self.__class__.__name__}] Загружено {len(transactions)} транзакций без фильтров")
+
+            if self.view:
+                self.view.load_transactions(transactions)
+
+        except ValueError as e:
+            logger.warning(f"[{self.__class__.__name__}] Валидация загрузки: {e}")
+            if self.view:
+                self.view.show_status(str(e), message_type="error")
+            raise
+        except Exception as e:
+            logger.error(f"[{self.__class__.__name__}] Ошибка загрузки транзакций: {e}", exc_info=True)
+            if self.view:
+                self.view.show_status("Произошла ошибка при загрузке операций", message_type="error")
+            raise
 
     def load_initial_data(self):
         """Загружает начальные данные при открытии диалога."""

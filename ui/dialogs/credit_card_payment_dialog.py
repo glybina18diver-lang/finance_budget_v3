@@ -135,9 +135,7 @@ class CreditCardPaymentDialog(BaseDialog):
         result_layout = QVBoxLayout()
         self.result_label = QLabel()
         self.result_label.setWordWrap(True)
-        self.result_label.setStyleSheet(
-            "font-family: monospace; padding: 8px; background-color: #f0f8f0; border-radius: 4px;"
-        )
+        
         result_layout.addWidget(self.result_label)
         self.result_group.setLayout(result_layout)
         self.result_group.setVisible(False)

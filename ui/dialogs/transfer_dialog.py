@@ -11,7 +11,7 @@ from PySide6.QtWidgets import (
     QDateEdit, QLineEdit, QComboBox, QLabel, QTreeWidget, QCompleter,
     QTreeWidgetItem, QHeaderView, QMenu, QMessageBox, QAbstractItemView, QFrame
 )
-from PySide6.QtCore import Qt, QDate, QPoint
+from PySide6.QtCore import Qt, QDate, QPoint, QStringListModel, QTimer
 from typing import List, Optional
 
 from PySide6.QtGui import QFont, QDoubleValidator
@@ -38,6 +38,10 @@ class TransferDialog(BaseDialog):
         self.presenter = presenter
         self.setWindowTitle("Управление Переводами")
         self.resize(700, 500)
+
+        # Модель автодополнения
+        self.counterparty_model = QStringListModel([], self)
+
         self._init_ui()
         if self.presenter:
             self.presenter.set_view(self)
@@ -140,14 +144,15 @@ class TransferDialog(BaseDialog):
             self.counterparty_input.setMinimumWidth(100)
             self.counterparty_input.setPlaceholderText("Имя контрагента")
 
-            # # Автодополнение для контрагентов
-            # self.counterparty_completer = QCompleter()
-            # self.counterparty_completer.setModel(self.counterparty_model)
-            # self.counterparty_completer.setCaseSensitivity(Qt.CaseInsensitive)
-            # self.counterparty_completer.setFilterMode(Qt.MatchContains)
-            # self.counterparty_completer.setCompletionMode(QCompleter.PopupCompletion)
-            # self.counterparty_input.setCompleter(self.counterparty_completer)
-            
+            # Автодополнение для контрагентов
+            self.counterparty_completer = QCompleter(self)
+            self.counterparty_completer.setModel(self.counterparty_model)
+            self.counterparty_completer.setCaseSensitivity(Qt.CaseInsensitive)
+            self.counterparty_completer.setFilterMode(Qt.MatchContains)
+            self.counterparty_completer.setCompletionMode(QCompleter.PopupCompletion)
+
+            self.counterparty_input.setCompleter(self.counterparty_completer)
+
             acc_count_layout.addWidget(QLabel("Счет:"))
             acc_count_layout.addWidget(self.ext_account_combo)
             acc_count_layout.addWidget(QLabel("Контрагент:"))
@@ -349,23 +354,39 @@ class TransferDialog(BaseDialog):
     def _toggle_transfer_type(self):
         """
         Переключает видимость блоков внутреннего/внешнего перевода.
-        Вызывается сигналом toggled от radio_internal.
+
+        Raises:
+            AttributeError: если UI-элементы не инициализированы
         """
         try:
             is_internal = self.radio_internal.isChecked()
+
             self.internal_frame.setVisible(is_internal)
-            self.external_frame.setVisible(not is_internal)
-            
-            logger.debug(f"[{self.__class__.__name__}] Переключён тип перевода: "
-                        f"{'внутренний' if is_internal else 'внешний'}")
-            
+
+            is_external = not is_internal
+            self.external_frame.setVisible(is_external)
+
+            if is_external:
+                self._load_counterparty_suggestions()
+
+            logger.debug(
+                f"[{self.__class__.__name__}] Переключён тип перевода: "
+                f"{'внутренний' if is_internal else 'внешний'}"
+            )
+
         except AttributeError as e:
-            logger.warning(f"[{self.__class__.__name__}] Валидация: UI-элементы не инициализированы: {e}")
+            logger.warning(
+                f"[{self.__class__.__name__}] UI-элементы не инициализированы: {e}",
+                exc_info=True,
+            )
             raise
         except Exception as e:
-            logger.error(f"[{self.__class__.__name__}] Ошибка переключения типа перевода: {e}", exc_info=True)
+            logger.error(
+                f"[{self.__class__.__name__}] Ошибка переключения типа перевода: {e}",
+                exc_info=True,
+            )
             raise
-
+        
     def _on_add_clicked(self):
         """Обработчик нажатия кнопки 'Добавить'."""
         try:
@@ -679,3 +700,22 @@ class TransferDialog(BaseDialog):
     def clear_selection(self):
         """Очищает выделение в таблице."""
         self.transfers_tree.clearSelection()
+
+    def _load_counterparty_suggestions(self):
+        """Загружает список контрагентов для автодополнения."""
+        try:
+            search_text = self.counterparty_input.text()
+
+            counterparties_list = self.presenter.search_counterparties(
+                search_text=search_text,
+                limit=100,
+            )
+
+            if self.counterparty_model:
+                self.counterparty_model.setStringList(counterparties_list)
+
+        except ValueError as e:
+            self.show_status(str(e), "error")
+        except Exception as e:
+            logger.error(f"Ошибка UI: {e}", exc_info=True)
+            self.show_status("Произошла ошибка", "error")

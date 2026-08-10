@@ -5,7 +5,7 @@ from core.repositories.transaction_repository import TransactionRepository
 from core.repositories.account_repository import AccountRepository
 from core.repositories.category_repository import CategoryRepository
 from core.models import Transaction, Account, Category
-from typing import Tuple, List, Union, Optional
+from typing import Tuple, List, Union, Optional, Dict
 from datetime import date, datetime
 from utils.validators import to_decimal
 
@@ -29,29 +29,39 @@ class TransactionService:
         self.cat_repo = cat_repo
 
     # ------Работа с транзакциями------
-    def create_transaction(self, raw_amount: Union[str, Decimal], trans_type: str, account_id: int,
-                           category_id: int, description: str, date_str: str) -> Transaction:
+    def create_transaction(
+        self,
+        raw_amount: Union[str, Decimal],
+        trans_type: str,
+        account_id: int,
+        category_id: int,
+        description: str,
+        date_str: str,
+        original_transaction_id: Optional[int] = None
+    ) -> Transaction:
         """
-        Создаёт транзакцию, с парсингом суммы, валидацией и обновлением баланса счёта.
+        Создаёт транзакцию с парсингом суммы, валидацией и обновлением баланса счёта.
 
         Принимает сумму в двух форматах:
         - Decimal: прямое значение (например, из CreditService)
         - str: строка с возможностью выражения "сумма * количество"
-               (например, "100 * 5" = 500, или "104883,10")
+            (например, "100 * 5" = 500, или "104883,10")
 
         Args:
-            raw_amount: сумма транзакции (Decimal или строка суммы из UI (например, "100*3" или "10,50")
-            trans_type: тип операции ("income", "expense", "correct")
+            raw_amount: сумма транзакции (Decimal или строка суммы из UI, например, "100*3" или "10,50")
+            trans_type: тип операции ("income", "expense", "refund", "correct")
             account_id: ID счёта
             category_id: ID категории
             description: описание операции/транзакции
             date_str: дата в формате YYYY-MM-DD
+            original_transaction_id: ID оригинальной транзакции (для возвратов).
+                                    Если None — транзакция не является возвратом.
 
         Returns:
-            Созданный объект Transaction
+            Созданный объект Transaction с заполненным полем id
 
         Raises:
-            ValueError: если сумма некорректна или <= 0 или данных
+            ValueError: если сумма некорректна или <= 0, или данные не валидны
             Exception: при системной ошибке
         """
         try:
@@ -60,11 +70,16 @@ class TransactionService:
             if not isinstance(category_id, int) or category_id <= 0:
                 raise ValueError("Некорректный ID категории")
             
+            # Валидация original_transaction_id, если передан
+            if original_transaction_id is not None:
+                if not isinstance(original_transaction_id, int) or original_transaction_id <= 0:
+                    raise ValueError(f"Некорректный ID оригинальной транзакции: {original_transaction_id}")
+
             # 1. Парсинг суммы и количества (возвращает Decimal)
             amount_positive, quantity = self._parse_amount(raw_amount)
 
             # Считаем общую сумму
-            amount_summ = amount_positive*quantity
+            amount_summ = amount_positive * quantity
             total_amount = to_decimal(amount_summ)
 
             if total_amount <= 0:
@@ -73,9 +88,18 @@ class TransactionService:
             # 2. Бизнес-валидация
             self._validate_inputs(trans_type, account_id, category_id, total_amount)
 
-            # 3. Применение знака по типу
-            signed_amount = total_amount if trans_type == "income" else -total_amount
-
+            # 3. Применение знака по типу 
+            # TODO: не забудь отипизировать применение знака
+            # signed_amount = total_amount if trans_type == "income" else -total_amount            
+            if  trans_type == "income":
+                signed_amount = total_amount
+            elif trans_type == "expense":
+                signed_amount = -total_amount
+            elif trans_type == "refund":
+                signed_amount = to_decimal(raw_amount)
+            else:
+                raise ValueError(f"Некорректный тип транзакции: {trans_type}")      
+            
             # 4. Сборка объекта
             transaction = Transaction(
                 date=date_str,
@@ -84,7 +108,8 @@ class TransactionService:
                 account_id=account_id,
                 category_id=category_id,
                 description=description.strip(),
-                quantity=quantity
+                quantity=quantity,
+                original_transaction_id=original_transaction_id
             )
 
             # 5. Сохранение в БД
@@ -96,28 +121,6 @@ class TransactionService:
             self._update_account_balance(account_id, signed_amount)
 
             return saved_tx
-
-            # вариант исполнгния логики
-            # # Бизнес-логика создания транзакции
-            # transaction = self.transaction_repo.create(
-            #     account_id=account_id,
-            #     category_id=category_id,
-            #     amount=amount_positive,
-            #     quantity=quantity,
-            #     date=date,
-            #     type=type,
-            #     description=description,
-            # )
-
-            # # Обновляем баланс счёта
-            # delta = amount_positive if type == "income" else -amount_positive
-            # self.account_repo.update_balance(account_id, delta)
-
-            # logger.info(
-            #     f"[{self.__class__.__name__}] Создана транзакция "
-            #     f"id={transaction.id}, type={type}, amount={amount_positive}"
-            # )
-            # return transaction
 
         except ValueError as e:
             logger.warning(f"[{self.__class__.__name__}] Валидация: {e}")
@@ -465,4 +468,50 @@ class TransactionService:
         except Exception as e:
             logger.error(f"[TransactionService] Ошибка загрузки транзакции: {e}")
             logger.error("Ошибка: %s", e, exc_info=True)
+            raise
+
+    def get_refunds_for_transaction(self, original_transaction_id: int) -> List[Transaction]:
+        """
+        Возвращает список всех возвратов для указанной оригинальной транзакции.
+
+        Args:
+            original_transaction_id: ID оригинальной транзакции
+
+        Returns:
+            Список объектов Transaction с trans_type='refund'
+            Если не найдено, возвращается пустой список
+        """
+        try:
+            return self.tx_repo.get_refunds_for_transaction(original_transaction_id)
+        except Exception as e:
+            logger.error(f"[TransactionService] Ошибка загрузки возвратов: {e}")
+            logger.error("Ошибка: %s", e, exc_info=True)
+            raise
+
+    def get_filtered_transactions(self, filters: Optional[Dict] = None, limit: int = 300) -> List[Transaction]:
+        """
+        Возвращает отфильтрованные транзакции через репозиторий.
+
+        Тонкая прослойка — делегирует запрос в репозиторий.
+        При необходимости сюда можно добавить дополнительную бизнес-валидацию.
+
+        Args:
+            filters: словарь с параметрами фильтрации (см. TransactionRepository.get_filtered)
+            limit: максимальное количество записей (по умолчанию 300)
+
+        Returns:
+            Список объектов Transaction
+
+        Raises:
+            ValueError: если параметры некорректны
+            Exception: при системной ошибке
+        """
+        try:
+            return self.tx_repo.get_filtered(filters=filters, limit=limit)
+
+        except ValueError as e:
+            logger.warning(f"[{self.__class__.__name__}] Валидация: {e}")
+            raise
+        except Exception as e:
+            logger.error(f"[{self.__class__.__name__}] Ошибка получения отфильтрованных транзакций: {e}", exc_info=True)
             raise

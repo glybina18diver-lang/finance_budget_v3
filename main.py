@@ -25,9 +25,9 @@ def main():
     app.setApplicationName(APP_NAME)
 
     try:
-        # ThemeManager.apply_theme(DARK_THEME)
+        ThemeManager.apply_theme(DARK_THEME)
         # ThemeManager.apply_theme(LIGHT_THEME)
-        ThemeManager.apply_theme(NEON_THEME)
+        # ThemeManager.apply_theme(NEON_THEME)
     except Exception as e:
         logger.critical(f"Критическая ошибка применения темы: {e}", exc_info=True)
         QMessageBox.critical(None, "Ошибка UI", f"Не удалось загрузить стили:\n{e}")

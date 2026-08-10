@@ -10,6 +10,8 @@ from core.repositories.transfer_repository import TransferRepository
 from core.repositories.account_repository import AccountRepository
 from core.models import Transfer
 
+from utils.validators import to_decimal
+
 logger = logging.getLogger(__name__)
 
 
@@ -131,6 +133,39 @@ class TransferService:
             logger.error(f"[{self.__class__.__name__}] Ошибка получения отфильтрованных переводов: {e}", exc_info=True)
             raise
 
+    def search_counterparties(self, search_text: str = "", limit: int = 100) -> list[str]:
+        """
+        Возвращает список контрагентов для автодополнения.
+
+        Args:
+            search_text: текст для поиска
+            limit: максимальное количество результатов
+
+        Returns:
+            Список имён контрагентов
+
+        Raises:
+            ValueError: если limit меньше или равен нулю
+        """
+        try:
+            if limit <= 0:
+                raise ValueError("Лимит результатов должен быть больше нуля")
+
+            return self.account_repo.search_counterparties(
+                search_text=search_text,
+                limit=limit,
+            )
+
+        except ValueError as e:
+            logger.warning(f"[{self.__class__.__name__}] Валидация: {e}")
+            raise
+        except Exception as e:
+            logger.error(
+                f"[{self.__class__.__name__}] Ошибка поиска контрагентов: {e}",
+                exc_info=True,
+            )
+            raise
+
     def get_all_accounts_active(self) -> List:
         """
         Возвращает активные счета для комбобоксов.
@@ -187,47 +222,95 @@ class TransferService:
         return self.transfer_repo.create(transfer)
 
     def _create_external_transfer(self, data: dict) -> Transfer:
-        """Логика внешнего перевода (Счёт ↔ Контрагент)."""
-        counterparty_name = data["counterparty"].strip()
+        """
+        Создаёт внешний перевод между счётом пользователя и контрагентом.
 
-        # Конвертируем amount в Decimal
-        amount = Decimal(str(data["amount"]))
+        Args:
+            data: данные перевода из UI
 
-        # Получаем объект Account контрагента (создает или находит)
-        counterparty_account = self.account_repo.get_or_create_counterparty(counterparty_name)
-        counterparty_id = counterparty_account.id
+        Returns:
+            Созданный объект Transfer
 
-        # Получаем объекты счетов пользователя
-        if data["direction"] == "incoming":
-            from_account = self.account_repo.get_by_id(counterparty_id)
-            to_account = self.account_repo.get_by_id(data["account_id"])
-        else:
-            from_account = self.account_repo.get_by_id(data["account_id"])
-            to_account = self.account_repo.get_by_id(counterparty_id)
+        Raises:
+            ValueError: если данные перевода некорректны
+        """
+        try:
+            raw_counterparty = str(data.get("counterparty", "")).strip()
 
-        if not from_account or not to_account:
-            raise ValueError("Ошибка при получении счетов для перевода")
+            if not raw_counterparty:
+                raise ValueError("Укажите имя контрагента")
 
-        # Обновляем балансы (Decimal арифметика)
-        from_account.current_balance -= amount
-        to_account.current_balance += amount
+            counterparty_name = self._normalize_counterparty_name(raw_counterparty)
 
-        # Сохраняем изменения
-        self.account_repo.update(from_account)
-        self.account_repo.update(to_account)
+            amount_raw = str(data.get("amount", "")).strip().replace(",", ".")
+            amount = to_decimal(amount_raw)
 
-        # Создаём перевод
-        transfer = Transfer(
-            date=data["date"],
-            amount=amount,
-            type="external",
-            from_account_id=from_account.id,
-            to_account_id=to_account.id,
-            description=data.get("description"),
-            is_system=False,
-            loan_id=None
-        )
-        return self.transfer_repo.create(transfer)
+            direction = data.get("direction")
+
+            account_id = data.get("account_id")
+            if not account_id:
+                raise ValueError("Не выбран счёт для перевода")
+
+            transfer_date = data.get("date")
+            if not transfer_date:
+                raise ValueError("Не указана дата перевода")
+
+            # Получаем объект Account контрагента
+            counterparty_account = self.account_repo.get_or_create_counterparty(
+                counterparty_name
+            )
+
+            if not counterparty_account or not counterparty_account.id:
+                raise ValueError("Не удалось получить или создать контрагента")
+
+            # Получаем объекты счетов пользователя
+            if direction == "incoming":
+                from_account = self.account_repo.get_by_id(counterparty_account.id)
+                to_account = self.account_repo.get_by_id(account_id)
+            else:
+                from_account = self.account_repo.get_by_id(account_id)
+                to_account = self.account_repo.get_by_id(counterparty_account.id)
+
+            if not from_account or not to_account:
+                raise ValueError("Ошибка при получении счетов для перевода")
+
+            # Приводим балансы к Decimal, если из репозитория приходят не Decimal
+            from_account.current_balance = Decimal(str(from_account.current_balance))
+            to_account.current_balance = Decimal(str(to_account.current_balance))
+
+            # Обновляем балансы
+            from_account.current_balance -= amount
+            to_account.current_balance += amount
+
+            # Сохраняем изменения
+            self.account_repo.update(from_account)
+            self.account_repo.update(to_account)
+
+            # Создаём перевод
+            transfer = Transfer(
+                date=transfer_date,
+                amount=amount,
+                type="external",
+                from_account_id=from_account.id,
+                to_account_id=to_account.id,
+                description=data.get("description"),
+                is_system=False,
+                loan_id=None,
+            )
+
+            return self.transfer_repo.create(transfer)
+
+        except ValueError as e:
+            logger.warning(f"[{self.__class__.__name__}] Валидация: {e}")
+            raise
+        except Exception as e:
+            logger.error(
+                f"[{self.__class__.__name__}] Ошибка: {e}",
+                exc_info=True,
+            )
+            raise RuntimeError(
+                "Системная ошибка при создании внешнего перевода"
+            ) from e
 
     def _reverse_balance_changes(self, tx: Transfer):
         """
@@ -259,3 +342,44 @@ class TransferService:
             logger.error(f"[TransferService] Ошибка отката балансов при удалении перевода #{tx.id}: {e}")
             logger.error("Ошибка: %s", e, exc_info=True)
             raise
+
+    def _normalize_counterparty_name(self, name: str) -> str:
+        """
+        Нормализует имя контрагента к отображаемому виду.
+
+        Args:
+            name: исходное имя контрагента
+
+        Returns:
+            Нормализованное имя контрагента
+
+        Raises:
+            ValueError: если имя пустое или содержит только символы без букв
+        """
+        cleaned = " ".join(name.strip().split())
+
+        if not cleaned:
+            raise ValueError("Имя контрагента не может быть пустым")
+
+        words = []
+
+        for word in cleaned.split():
+            parts = word.split("-")
+            normalized_parts = []
+
+            for part in parts:
+                if not part:
+                    continue
+
+                normalized_part = part[:1].upper() + part[1:].lower()
+                normalized_parts.append(normalized_part)
+
+            if normalized_parts:
+                words.append("-".join(normalized_parts))
+
+        normalized = " ".join(words)
+
+        if not normalized:
+            raise ValueError("Имя контрагента содержит только символы без букв")
+
+        return normalized

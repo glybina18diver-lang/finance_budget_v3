@@ -99,6 +99,41 @@ class TransactionRepository:
             logger.error("[TransactionRepository] Ошибка при получении транзакции по ID %s: %s", transaction_id, e, exc_info=True)
             raise
 
+    def get_refunds_for_transaction(self, original_transaction_id: int) -> List[Transaction]:
+        """
+        Возвращает список всех возвратов для указанной оригинальной транзакции.
+
+        Args:
+            original_transaction_id: ID оригинальной транзакции
+
+        Returns:
+            Список объектов Transaction с trans_type='refund'
+
+        Raises:
+            ValueError: если ID некорректен
+            Exception: при системной ошибке БД
+        """
+        try:
+            if not isinstance(original_transaction_id, int) or original_transaction_id <= 0:
+                raise ValueError(f"Некорректный ID транзакции: {original_transaction_id}")
+
+            query = """
+                SELECT * FROM transactions
+                WHERE original_transaction_id = ? AND trans_type = 'refund'
+            """
+            rows = self.db.fetchall(query, (original_transaction_id,))
+            return [self._row_to_transaction(row) for row in rows]
+
+        except ValueError as e:
+            logger.warning(f"[{self.__class__.__name__}] Валидация: {e}")
+            raise
+        except Exception as e:
+            logger.error(
+                f"[{self.__class__.__name__}] Ошибка получения возвратов: {e}",
+                exc_info=True,
+            )
+            raise
+
     def update(self, transaction: Transaction) -> Transaction:
         """
         Обновляет существующую транзакцию в БД.
@@ -215,4 +250,76 @@ class TransactionRepository:
             return [self._row_to_transaction(row) for row in rows]
         except Exception as e:
             logger.error("[TransactionRepository] Ошибка при получении последних транзакций: %s", e, exc_info=True)
+            raise
+
+    def get_filtered(self, filters: Optional[Dict] = None, limit: int = 300) -> List[Transaction]:
+        """
+        Возвращает транзакции с применением динамических фильтров.
+
+        Строит SQL-запрос с условиями WHERE на основе переданных фильтров.
+        Если фильтры не переданы, возвращает последние N транзакций.
+
+        Args:
+            filters: словарь с параметрами фильтрации. Поддерживаемые ключи:
+                - date_from: str, формат yyyy-MM-dd (начало периода, включительно)
+                - date_to: str, формат yyyy-MM-dd (конец периода, включительно)
+                - trans_type: str ('income', 'expense', 'refund', 'correct')
+                - account_id: int, ID счёта
+                - category_id: int, ID категории
+                - search: str, поиск по описанию (LIKE '%...%')
+            limit: максимальное количество возвращаемых записей (по умолчанию 300)
+
+        Returns:
+            Список объектов Transaction, удовлетворяющих условиям фильтрации
+
+        Raises:
+            ValueError: если параметры фильтров некорректны
+            Exception: при системной ошибке БД
+        """
+        try:
+            query = "SELECT * FROM transactions WHERE 1=1"
+            params = []
+
+            if filters:
+                # Период
+                if filters.get('date_from'):
+                    query += " AND date >= ?"
+                    params.append(filters['date_from'])
+
+                if filters.get('date_to'):
+                    query += " AND date <= ?"
+                    params.append(filters['date_to'])
+
+                # Тип транзакции
+                if filters.get('trans_type'):
+                    query += " AND trans_type = ?"
+                    params.append(filters['trans_type'])
+
+                # Счёт
+                if filters.get('account_id'):
+                    query += " AND account_id = ?"
+                    params.append(filters['account_id'])
+
+                # Категория
+                if filters.get('category_id'):
+                    query += " AND category_id = ?"
+                    params.append(filters['category_id'])
+
+                # Поиск по описанию
+                if filters.get('search'):
+                    query += " AND description LIKE ?"
+                    params.append(f"%{filters['search']}%")
+
+            # Сортировка и лимит
+            query += " ORDER BY date DESC, id DESC LIMIT ?"
+            params.append(limit)
+
+            rows = self.db.fetchall(query, tuple(params))
+            return [self._row_to_transaction(row) for row in rows]
+
+        except ValueError as e:
+            logger.warning(f"[{self.__class__.__name__}] Валидация фильтров: {e}")
+            raise
+        except Exception as e:
+            logger.error(f"[{self.__class__.__name__}] Ошибка получения отфильтрованных данных: {e}", exc_info=True)
             raise

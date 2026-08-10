@@ -8,7 +8,7 @@
 - Counterparty: контрагент (системный, для займов)
 - Credit: кредит (системный, для банковских кредитов)
 """
-
+import sqlite3
 from typing import Optional, Dict, Any, List
 from decimal import Decimal
 import logging
@@ -66,7 +66,7 @@ class AccountRepository:
         """
         try:
             query = "SELECT * FROM accounts WHERE id = ?"
-            row = self.db.fetchone(query, (account_id,))
+            row = self.db.fetch_one(query, (account_id,))
             return self._row_to_account(row) if row else None
         except Exception as e:
             logger.error(
@@ -133,7 +133,7 @@ class AccountRepository:
         """
         try:
             query = "SELECT * FROM accounts WHERE name = ?"
-            row = self.db.fetchone(query, (name,))
+            row = self.db.fetch_one(query, (name,))
             return self._row_to_account(row) if row else None
         except Exception as e:
             logger.error(
@@ -239,26 +239,46 @@ class AccountRepository:
 
     def get_or_create_counterparty(self, name: str) -> Account:
         """
-        Ищет счет контрагента по имени. Если не найден — создает новый системный счет.
+        Возвращает счёт контрагента по имени, создавая его при необходимости.
 
         Args:
             name: имя контрагента
 
         Returns:
-            Объект Account созданного или найденного контрагента
+            Объект Account найденного или созданного контрагента
+
+        Raises:
+            ValueError: если имя пустое, уже занято другим счётом или контрагент не может быть создан
         """
         try:
-            normalized_name = name.strip().lower()
+            if name is None:
+                raise ValueError("Имя контрагента не может быть пустым")
 
-            # 1. Проверяем существование
-            query = "SELECT * FROM accounts WHERE LOWER(name) = ? AND account_type = 'Counterparty'"
-            row = self.db.fetchone(query, (normalized_name,))
+            counterparty_name = str(name).strip()
+
+            if not counterparty_name:
+                raise ValueError("Имя контрагента не может быть пустым")
+
+            select_query = """
+                SELECT *
+                FROM accounts
+                WHERE name = ?
+            """
+
+            row = self.db.fetch_one(select_query, (counterparty_name,))
+
             if row:
-                return self._row_to_account(row)
+                account = self._row_to_account(row)
 
-            # 2. Создаем новый объект Account
+                if account.account_type == "Counterparty":
+                    return account
+
+                raise ValueError(
+                    f"Имя '{counterparty_name}' уже занято другим счётом"
+                )
+
             new_account = Account(
-                name=name.strip(),
+                name=counterparty_name,
                 account_type="Counterparty",
                 initial_balance=Decimal("0.00"),
                 current_balance=Decimal("0.00"),
@@ -267,13 +287,18 @@ class AccountRepository:
                 is_system=True,
             )
 
-            # 3. Сохраняем в БД
             insert_query = """
                 INSERT INTO accounts (
-                    name, account_type, initial_balance, current_balance, 
-                    currency, is_active, is_system
+                    name,
+                    account_type,
+                    initial_balance,
+                    current_balance,
+                    currency,
+                    is_active,
+                    is_system
                 ) VALUES (?, ?, ?, ?, ?, ?, ?)
             """
+
             params = (
                 new_account.name,
                 new_account.account_type,
@@ -283,12 +308,103 @@ class AccountRepository:
                 1 if new_account.is_active else 0,
                 1 if new_account.is_system else 0,
             )
-            new_id = self.db.execute(insert_query, params)
+
+            try:
+                new_id = self.db.execute(insert_query, params)
+            except sqlite3.IntegrityError as e:
+                if "accounts.name" not in str(e):
+                    raise
+
+                row = self.db.fetch_one(select_query, (counterparty_name,))
+
+                if row:
+                    account = self._row_to_account(row)
+
+                    if account.account_type == "Counterparty":
+                        return account
+
+                raise ValueError(
+                    f"Контрагент с именем '{counterparty_name}' уже существует"
+                ) from e
+
+            if not new_id:
+                row = self.db.fetch_one(select_query, (counterparty_name,))
+
+                if row:
+                    account = self._row_to_account(row)
+
+                    if account.account_type == "Counterparty":
+                        return account
+
+                raise ValueError(
+                    f"Не удалось получить идентификатор контрагента '{counterparty_name}'"
+                )
+
             new_account.id = new_id
             return new_account
+
+        except ValueError as e:
+            logger.warning(f"[{self.__class__.__name__}] Валидация: {e}")
+            raise
         except Exception as e:
             logger.error(
-                f"[AccountRepository] Ошибка создания/получения контрагента '{name}': {e}",
+                f"[{self.__class__.__name__}] Ошибка: {e}",
+                exc_info=True,
+            )
+            raise
+
+    def search_counterparties(self, search_text: str = "", limit: int = 100) -> list[str]:
+        """
+        Возвращает список активных контрагентов, отфильтрованный по тексту.
+
+        Args:
+            search_text: текст для поиска
+            limit: максимальное количество результатов
+
+        Returns:
+            Список имён контрагентов
+
+        Raises:
+            ValueError: если limit меньше или равен нулю
+        """
+        try:
+            if limit <= 0:
+                raise ValueError("Лимит результатов должен быть больше нуля")
+
+            query = """
+                SELECT name
+                FROM accounts
+                WHERE account_type = 'Counterparty'
+                  AND is_active = 1
+                ORDER BY name
+            """
+
+            rows = self.db.fetchall(query)
+
+            # Если fetchall возвращает dict-like строки:
+            names = [row["name"] for row in rows]
+
+            # Если fetchall возвращает кортежи, используй:
+            # names = [row[0] for row in rows]
+
+            if search_text:
+                needle = search_text.strip().casefold()
+
+                if needle:
+                    names = [
+                        name
+                        for name in names
+                        if needle in name.casefold()
+                    ]
+
+            return names[:limit]
+
+        except ValueError as e:
+            logger.warning(f"[{self.__class__.__name__}] Валидация: {e}")
+            raise
+        except Exception as e:
+            logger.error(
+                f"[{self.__class__.__name__}] Ошибка поиска контрагентов: {e}",
                 exc_info=True,
             )
             raise
@@ -366,7 +482,7 @@ class AccountRepository:
                 INNER JOIN loans l ON l.account_id = a.id
                 WHERE l.id = ? AND l.source_type = 'bank'
             """
-            row = self.db.fetchone(query, (loan_id,))
+            row = self.db.fetch_one(query, (loan_id,))
             return self._row_to_account(row) if row else None
         except Exception as e:
             logger.error(

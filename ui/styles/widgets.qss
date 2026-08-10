@@ -63,6 +63,11 @@ QWidget[variant="panel"] {
     border-radius: $RADIUS_SMALL$;
 }
 
+/* ========== QCheckBox ========== */
+QCheckBox {
+    background-color: $BG_SECONDARY$;
+    color: $TEXT_SECONDARY$;
+}
 
 /* ========== КОЛОНКИ СЧЕТОВ ========== */
 

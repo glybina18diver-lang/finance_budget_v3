@@ -134,3 +134,36 @@ class TransferPresenter:
             logger.error(f"[{self.__class__.__name__}] Ошибка загрузки отфильтрованных переводов: {e}", exc_info=True)
             if self.view:
                 self.view.show_status("Ошибка применения фильтров", message_type="error")
+
+    def search_counterparties(self, search_text: str = "", limit: int = 100) -> list[str]:
+        """
+        Возвращает список контрагентов для автодополнения.
+
+        Args:
+            search_text: текст из поля ввода
+            limit: максимальное количество результатов
+
+        Returns:
+            Список имён контрагентов
+
+        Raises:
+            ValueError: если limit меньше или равен нулю
+        """
+        try:
+            if limit <= 0:
+                raise ValueError("Лимит результатов должен быть больше нуля")
+
+            return self.service.search_counterparties(
+                search_text=search_text,
+                limit=limit,
+            )
+
+        except ValueError as e:
+            logger.warning(f"[{self.__class__.__name__}] Валидация: {e}")
+            raise
+        except Exception as e:
+            logger.error(
+                f"[{self.__class__.__name__}] Ошибка поиска контрагентов: {e}",
+                exc_info=True,
+            )
+            raise

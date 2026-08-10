@@ -38,6 +38,8 @@ class OperationDialog(BaseDialog):
         # Загружаем данные через презентер (если он подключен)
         if self.presenter:
             self.presenter.set_view(self)  # ← Устанавливаем связь
+        # Заполняем комбоксы фильтров
+        self.load_filter_combos()
         
 
     # ================= Создание интерфейса =================
@@ -48,7 +50,7 @@ class OperationDialog(BaseDialog):
         layout.setContentsMargins(10, 10, 10, 10)
 
         layout.addWidget(self._create_top_panel())
-        # layout.addWidget(self._create_filter_panel())
+        layout.addWidget(self._create_filter_panel())
         layout.addWidget(self._create_input_panel())
         layout.addWidget(self._create_table(), stretch=1)
         layout.addWidget(self._create_bottom_panel())
@@ -85,33 +87,80 @@ class OperationDialog(BaseDialog):
         return panel
 
     def _create_filter_panel(self) -> QWidget:
-        """Панель фильтров (визуальная заглушка)."""
+        """
+        Панель фильтров для операций.
+
+        Содержит фильтры по типу, категории, счёту, периоду и поиску по описанию.
+        Все изменения автоматически применяют фильтры через _apply_filters().
+
+        Returns:
+            QWidget с панелью фильтров
+        """
         panel = QWidget()
         layout = QHBoxLayout()
         layout.setSpacing(6)
         layout.setContentsMargins(0, 0, 0, 0)
 
-        labels = ["Тип:", "Категория:", "Счет:", "Период:", "Поиск:"]
-        for lbl_text in labels:
-            layout.addWidget(QLabel(lbl_text))
-            combo = QComboBox()
-            combo.addItem("Все")
-            combo.setFixedHeight(26)
-            combo.setMinimumWidth(100)
-            combo.currentTextChanged.connect(self._stub_method)
-            layout.addWidget(combo)
+        # --- Период ---
+        layout.addWidget(QLabel("С:"))
+        self.filter_date_from = QDateEdit()
+        self.filter_date_from.setCalendarPopup(True)
+        self.filter_date_from.setDisplayFormat("dd.MM.yyyy")
+        self.filter_date_from.setDate(QDate.currentDate().addMonths(-1))
+        self.filter_date_from.setFixedHeight(26)
+        self.filter_date_from.dateChanged.connect(self._apply_filters)
+        layout.addWidget(self.filter_date_from)
 
-        self.search_input = QLineEdit()
-        self.search_input.setPlaceholderText("по описанию...")
-        self.search_input.setFixedHeight(26)
-        self.search_input.textChanged.connect(self._stub_method)
-        layout.addWidget(self.search_input)
+        layout.addWidget(QLabel("По:"))
+        self.filter_date_to = QDateEdit()
+        self.filter_date_to.setCalendarPopup(True)
+        self.filter_date_to.setDisplayFormat("dd.MM.yyyy")
+        self.filter_date_to.setDate(QDate.currentDate())
+        self.filter_date_to.setFixedHeight(26)
+        self.filter_date_to.dateChanged.connect(self._apply_filters)
+        layout.addWidget(self.filter_date_to)
 
+        # --- Тип ---
+        layout.addWidget(QLabel("Тип:"))
+        self.filter_type_combo = QComboBox()
+        self.filter_type_combo.addItems(["Все", "Доход", "Расход", "Возврат"])
+        self.filter_type_combo.setFixedHeight(26)
+        self.filter_type_combo.setMinimumWidth(90)
+        self.filter_type_combo.currentTextChanged.connect(self._apply_filters)
+        layout.addWidget(self.filter_type_combo)
+
+        # --- Счёт ---
+        layout.addWidget(QLabel("Счёт:"))
+        self.filter_account_combo = QComboBox()
+        self.filter_account_combo.addItem("Все", userData=None)
+        self.filter_account_combo.setFixedHeight(26)
+        self.filter_account_combo.setMinimumWidth(120)
+        self.filter_account_combo.currentIndexChanged.connect(self._apply_filters)
+        layout.addWidget(self.filter_account_combo)
+
+        # --- Категория ---
+        layout.addWidget(QLabel("Категория:"))
+        self.filter_category_combo = QComboBox()
+        self.filter_category_combo.addItem("Все", userData=None)
+        self.filter_category_combo.setFixedHeight(26)
+        self.filter_category_combo.setMinimumWidth(130)
+        self.filter_category_combo.currentIndexChanged.connect(self._apply_filters)
+        layout.addWidget(self.filter_category_combo)
+
+        # --- Поиск ---
+        self.filter_search = QLineEdit()
+        self.filter_search.setPlaceholderText("🔍 поиск по описанию...")
+        self.filter_search.setFixedHeight(26)
+        self.filter_search.setMinimumWidth(150)
+        self.filter_search.textChanged.connect(self._on_search_changed)
+        layout.addWidget(self.filter_search)
+
+        # --- Кнопка сброса ---
         reset_btn = CompactButton("Сбросить", "info")
-        reset_btn.clicked.connect(self._stub_method)
+        reset_btn.clicked.connect(self._reset_filters)
         layout.addWidget(reset_btn)
-        layout.addStretch()
 
+        layout.addStretch()
         panel.setLayout(layout)
         return panel
     
@@ -235,7 +284,10 @@ class OperationDialog(BaseDialog):
         self.transactions_tree.setSortingEnabled(True)
         self.transactions_tree.sortItems(0, Qt.DescendingOrder)
         self.transactions_tree.setAlternatingRowColors(True)
-        
+
+        self.transactions_tree.setSelectionMode(QTreeWidget.ExtendedSelection)
+        self.transactions_tree.setSelectionBehavior(QTreeWidget.SelectRows)
+
         header = self.transactions_tree.header()
         header.setStretchLastSection(True)
         header.setSectionsClickable(True)
@@ -288,13 +340,23 @@ class OperationDialog(BaseDialog):
 
     def refresh_transactions(self):
         """
-        Обновляет таблицу транзакций, запрашивая свежие данные через презентер.
-        Вызывается после добавления или удаления операции.
+        Обновляет таблицу транзакций с учётом текущих фильтров.
+
+        Если панель фильтров активна — применяет фильтры.
+        Иначе загружает последние 300 записей.
         """
         if self.presenter:
-            # Просим презентер перезагрузить последние 300 записей
-            self.presenter.load_transactions(limit=300)
-            #self.show_status("Таблица обновлена", message_type="success")
+            # Проверяем, есть ли активные фильтры
+            has_filters = (
+                self.filter_type_combo.currentText() != "Все"
+                or self.filter_account_combo.currentData() is not None
+                or self.filter_category_combo.currentData() is not None
+                or self.filter_search.text().strip()
+            )
+            if has_filters:
+                self._apply_filters()
+            else:
+                self.presenter.load_transactions()
         else:
             self.show_error("Презентер не подключен или ошибка метода")
 
@@ -385,40 +447,37 @@ class OperationDialog(BaseDialog):
             logger.error(f"[{self.__class__.__name__}] Ошибка загрузки счетов: {e}", exc_info=True)
             self.show_status("Ошибка загрузки счетов", message_type="error")
 
-    def load_categories_combos(self, categories: List):
+    def load_categories_combos(self, categories: List[Category]):
         """
-        Заполняет комбобокс категорий данными из БД (исключая системные).
+        Заполняет комбобокс категорий данными из БД в виде дерева.
         Вызывается презентером.
 
         Args:
-            categories: список объектов Categories
-            
-        Note:
-            Системные категории (is_system=True) исключаются из комбобокса
+            categories: список объектов Category
         """
         try:
             self.category_combo.clear()
-            
             if not categories:
                 self.category_combo.addItem("Нет категорий", userData=None)
-                self.show_status("⚠️ Нет доступных категорий", message_type="warning")
+                self.show_status("️ Нет доступных категорий", message_type="warning")
                 return
 
             # Фильтруем системные категории
-            user_categories = [cat for cat in categories if not getattr(cat, 'is_system', False)]
-            
+            user_categories = [
+                cat for cat in categories
+                if not getattr(cat, 'is_system', False)
+            ]
             if not user_categories:
-                self.category_combo.addItem("Нет категорий", userData=None)
+                self.category_combo.addItem("Нет пользовательских категорий", userData=None)
                 self.show_status("⚠️ Нет пользовательских категорий", message_type="warning")
                 return
 
-            for cat in user_categories:
-                # text = имя, userData = ID категории
-                self.category_combo.addItem(cat.name, userData=cat.id)
-            
+            # Заполняем комбобокс деревом
+            self._load_categories_to_combo(self.category_combo, categories)
+
             # Выбираем первую категорию по умолчанию
             self.category_combo.setCurrentIndex(0)
-            
+
         except Exception as e:
             logger.error(f"[{self.__class__.__name__}] Ошибка загрузки категорий: {e}", exc_info=True)
             self.show_status("Ошибка загрузки категорий", message_type="error")
@@ -465,7 +524,14 @@ class OperationDialog(BaseDialog):
             
             amount_str = f"{tx.amount:+,.2f} {currency}"
             qty_str = f"{tx.quantity:.2f}" if tx.quantity != 1.0 else "1"
-            type_str = "Доход" if tx.trans_type == "income" else "Расход"
+            # Маппинг типов транзакций
+            type_map = {
+                "income": "Доход",
+                "expense": "Расход",
+                "refund": "Возврат",
+                "correct": "Корректировка",
+            }
+            type_str = type_map.get(tx.trans_type, tx.trans_type)
             
             rows.append({
                 'date': tx.date,
@@ -557,50 +623,57 @@ class OperationDialog(BaseDialog):
     def _show_transactions_context_menu(self, position):
         """
         Показывает контекстное меню для выбранной транзакции.
-        
+
         Args:
             position: позиция курсора в координатах виджета
         """
-        item = self.transactions_tree.itemAt(position)
-        if not item:
-            return
-        
-        menu = QMenu(self)
-        
-        # Получаем тип транзакции из второго столбца (индекс 1)
-        transaction_type = item.text(1)
-        
-        # Создать возврат - только для доход/расход
-        return_action = menu.addAction("↩ Создать возврат")
-        return_action.triggered.connect(self._stub_method)
-        # Отключаем для других типов (если будут)
-        if transaction_type not in ["Доход", "Расход"]:
-            return_action.setEnabled(False)
-        
-        menu.addSeparator()
-        
-        # Редактировать
-        edit_action = menu.addAction("✏️ Редактировать")
-        edit_action.triggered.connect(self._edit_transaction)
-        
-        # Дублировать
-        duplicate_action = menu.addAction("🔄 Дублировать (с настройками)")
-        duplicate_action.triggered.connect(self._duplicate_transaction_with_options)
-        
-        menu.addSeparator()
-        
-        # Показать детали
-        details_action = menu.addAction("🔍 Показать детали")
-        details_action.triggered.connect(self._stub_method)
-        
-        menu.addSeparator()
-        
-        # Удалить
-        delete_action = menu.addAction("❌ Удалить")
-        delete_action.triggered.connect(self.delete_transaction)
-        
-        # Показываем меню в позиции курсора
-        menu.exec(self.transactions_tree.viewport().mapToGlobal(position))
+        try:
+            item = self.transactions_tree.itemAt(position)
+            if not item:
+                return
+
+            # Выделяем строку под курсором
+            self.transactions_tree.setCurrentItem(item)
+
+            menu = QMenu(self)
+
+            # Получаем тип транзакции из второго столбца (индекс 1)
+            transaction_type = item.text(1)
+            transaction_id = item.data(0, Qt.UserRole)
+
+            # Создать возврат - только для доход/расход
+            return_action = menu.addAction("↩ Создать возврат")
+            return_action.triggered.connect(self._create_refund_with_options)
+            if transaction_type not in ["Доход", "Расход"]:
+                return_action.setEnabled(False)
+
+            menu.addSeparator()
+
+            # Редактировать
+            edit_action = menu.addAction("✏️ Редактировать")
+            edit_action.triggered.connect(self._edit_transaction)
+
+            # Дублировать
+            duplicate_action = menu.addAction("🔄 Дублировать (с настройками)")
+            duplicate_action.triggered.connect(self._duplicate_transaction_with_options)
+
+            menu.addSeparator()
+
+            # Показать детали
+            details_action = menu.addAction("🔍 Показать детали")
+            details_action.triggered.connect(self._show_transaction_details)
+
+            menu.addSeparator()
+
+            # Удалить
+            delete_action = menu.addAction("❌ Удалить")
+            delete_action.triggered.connect(self.delete_transaction)
+
+            # Показываем меню в позиции курсора
+            menu.exec(self.transactions_tree.viewport().mapToGlobal(position))
+
+        except Exception as e:
+            logger.error(f"[{self.__class__.__name__}] Ошибка контекстного меню: {e}", exc_info=True)
 
     def delete_transaction(self):
         """
@@ -759,3 +832,398 @@ class OperationDialog(BaseDialog):
         except Exception as e:
             logger.error(f"[{self.__class__.__name__}] Ошибка редактирования: {e}", exc_info=True)
             self.show_status("Ошибка при открытии диалога редактирования", message_type="error")
+
+    def _create_refund_with_options(self):
+        """
+        Открывает диалог создания возврата для выбранной транзакции.
+
+        Получает оригинальную транзакцию, рассчитывает доступную сумму возврата
+        (с учётом уже существующих возвратов) и открывает модальное окно
+        RefundDialog. После подтверждения вызывает презентер для создания возврата.
+
+        Raises:
+            ValueError: если не выбрана транзакция или она не подходит для возврата
+            Exception: при системных ошибках
+        """
+        try:
+            # 1. Получаем выбранную транзакцию
+            selected_items = self.transactions_tree.selectedItems()
+            if not selected_items:
+                raise ValueError("Выберите операцию для создания возврата")
+
+            transaction_id = selected_items[0].data(0, Qt.UserRole)
+            if not transaction_id:
+                raise ValueError("Не удалось получить ID транзакции")
+
+            if not self.presenter:
+                raise ValueError("Презентер не подключен")
+
+            # 2. Получаем оригинальную транзакцию
+            transaction = self.presenter.get_transaction_by_id(transaction_id)
+            if not transaction:
+                raise ValueError("Операция не найдена в базе данных")
+
+            # 3. Проверяем тип транзакции
+            if transaction.trans_type not in ["income", "expense"]:
+                raise ValueError(
+                    "Возврат можно создать только для операции типа Доход или Расход"
+                )
+
+            # 4. Получаем названия из кэша
+            account = self._account_cache.get(transaction.account_id)
+            category = (
+                self._category_cache.get(transaction.category_id)
+                if transaction.category_id
+                else None
+            )
+            account_name = account.name if account else "—"
+            category_name = category.name if category else "—"
+            currency = account.currency if account else "₽"
+
+            # 5. Рассчитываем доступную сумму возврата через презентер
+            refund_info = self.presenter.get_refund_info(transaction_id)
+            max_refundable = refund_info["max_refundable"]
+            already_refunded = refund_info["already_refunded"]
+
+            if max_refundable <= 0:
+                raise ValueError("Полный возврат по этой операции уже создан")
+
+            # 6. Открываем диалог
+            from ui.dialogs.refund_dialog import RefundDialog
+
+            dialog = RefundDialog(
+                parent=self,
+                transaction=transaction,
+                max_refundable=max_refundable,
+                already_refunded=already_refunded,
+                account_name=account_name,
+                category_name=category_name,
+                currency=currency,
+            )
+
+            if dialog.exec():
+                data = dialog.get_refund_data()
+
+                # 7. Создаём возврат через презентер
+                self.presenter.create_refund(
+                    original_transaction_id=transaction_id,
+                    data=data,
+                )
+
+                # 8. Обновляем таблицу
+                self.refresh_transactions()
+                self.show_status(
+                    f"Возврат на {data['amount']:.2f} {currency} успешно создан",
+                    message_type="success",
+                )
+                logger.info(
+                    f"[{self.__class__.__name__}] Создан возврат для транзакции "
+                    f"ID={transaction_id}, сумма={data['amount']}"
+                )
+
+        except ValueError as e:
+            logger.warning(f"[{self.__class__.__name__}] Валидация возврата: {e}")
+            self.show_status(str(e), message_type="error")
+
+        except Exception as e:
+            logger.error(
+                f"[{self.__class__.__name__}] Ошибка создания возврата: {e}",
+                exc_info=True,
+            )
+            self.show_status("Произошла ошибка при создании возврата", message_type="error")
+
+    def _show_transaction_details(self):
+        """
+        Открывает диалог с подробной информацией о выбранной транзакции.
+        """
+        try:
+            selected_items = self.transactions_tree.selectedItems()
+            if not selected_items:
+                raise ValueError("Выберите операцию для просмотра деталей")
+
+            transaction_id = selected_items[0].data(0, Qt.UserRole)
+            if not transaction_id:
+                raise ValueError("Не удалось получить ID транзакции")
+
+            transaction = self.presenter.get_transaction_by_id(transaction_id)
+            if not transaction:
+                raise ValueError("Операция не найдена")
+
+            # Получаем данные из кэша
+            account = self._account_cache.get(transaction.account_id)
+            category = self._category_cache.get(transaction.category_id) if transaction.category_id else None
+
+            type_map = {
+                "income": "Доход",
+                "expense": "Расход",
+                "refund": "Возврат",
+                "correct": "Корректировка",
+            }
+            type_str = type_map.get(transaction.trans_type, transaction.trans_type)
+
+            details = (
+                f"ID: {transaction.id}\n"
+                f"Дата: {transaction.date}\n"
+                f"Тип: {type_str}\n"
+                f"Сумма: {transaction.amount:+,.2f}\n"
+                f"Количество: {transaction.quantity}\n"
+                f"Счёт: {account.name if account else '—'}\n"
+                f"Категория: {category.name if category else '—'}\n"
+                f"Описание: {transaction.description or '—'}\n"
+            )
+
+            if transaction.original_transaction_id:
+                details += f"Оригинальная транзакция: #{transaction.original_transaction_id}\n"
+
+            QMessageBox.information(self, "Детали операции", details)
+
+        except ValueError as e:
+            logger.warning(f"[{self.__class__.__name__}] Валидация деталей: {e}")
+            self.show_status(str(e), message_type="error")
+        except Exception as e:
+            logger.error(f"[{self.__class__.__name__}] Ошибка показа деталей: {e}", exc_info=True)
+            self.show_status("Ошибка при открытии деталей", message_type="error")
+
+    # ================= Фильтры =================
+    def _on_search_changed(self, text: str):
+        """
+        Обрабатывает изменение текста поиска с задержкой (debounce).
+
+        Использует QTimer, чтобы не дёргать БД при каждом нажатии клавиши.
+
+        Args:
+            text: текущий текст в поле поиска
+        """
+        if not hasattr(self, '_search_timer'):
+            self._search_timer = QTimer()
+            self._search_timer.setSingleShot(True)
+            self._search_timer.timeout.connect(self._apply_filters)
+        self._search_timer.start(300)  # 300 мс задержка
+
+    def _apply_filters(self):
+        """
+        Собирает параметры фильтров из UI и передаёт их в презентер.
+
+        Вызывается автоматически при изменении любого фильтра.
+        Если все фильтры сброшены, загружает данные без ограничений.
+        """
+        try:
+            if not self.presenter:
+                return
+
+            # Собираем параметры
+            filters = {}
+
+            # Период
+            date_from = self.filter_date_from.date().toString("yyyy-MM-dd")
+            date_to = self.filter_date_to.date().toString("yyyy-MM-dd")
+            if date_from:
+                filters['date_from'] = date_from
+            if date_to:
+                filters['date_to'] = date_to
+
+            # Тип
+            type_text = self.filter_type_combo.currentText()
+            type_map = {
+                "Доход": "income",
+                "Расход": "expense",
+                "Возврат": "refund",
+            }
+            if type_text in type_map:
+                filters['trans_type'] = type_map[type_text]
+            # "Все" — не добавляем фильтр
+    
+            # Счёт
+            account_id = self.filter_account_combo.currentData()
+            if account_id:
+                filters['account_id'] = account_id
+
+            # Категория
+            category_id = self.filter_category_combo.currentData()
+            if category_id:
+                filters['category_id'] = category_id
+
+            # Поиск
+            search_text = self.filter_search.text().strip()
+            if search_text:
+                filters['search'] = search_text
+
+            # Загружаем через презентер
+            self.presenter.load_with_filters(filters if filters else None)
+
+            logger.debug(f"[{self.__class__.__name__}] Применены фильтры: {filters}")
+
+        except ValueError as e:
+            logger.warning(f"[{self.__class__.__name__}] Валидация фильтров: {e}")
+            self.show_status(str(e), message_type="error")
+        except Exception as e:
+            logger.error(f"[{self.__class__.__name__}] Ошибка применения фильтров: {e}", exc_info=True)
+            self.show_status("Ошибка применения фильтров", message_type="error")
+
+
+    def _reset_filters(self):
+        """
+        Сбрасывает все фильтры к значениям по умолчанию и перезагружает таблицу.
+        """
+        try:
+            self.filter_date_from.setDate(QDate.currentDate().addMonths(-1))
+            self.filter_date_to.setDate(QDate.currentDate())
+            self.filter_type_combo.setCurrentIndex(0)  # "Все"
+            self.filter_account_combo.setCurrentIndex(0)  # "Все"
+            self.filter_category_combo.setCurrentIndex(0)  # "Все"
+            self.filter_search.clear()
+
+            # Загружаем без фильтров
+            if self.presenter:
+                self.presenter.load_with_filters(None)
+
+            self.show_status("Фильтры сброшены", message_type="info")
+            logger.debug(f"[{self.__class__.__name__}] Фильтры сброшены")
+
+        except Exception as e:
+            logger.error(f"[{self.__class__.__name__}] Ошибка сброса фильтров: {e}", exc_info=True)
+            self.show_status("Ошибка сброса фильтров", message_type="error")
+
+    def load_filter_combos(self):
+        """
+        Заполняет комбобоксы фильтров данными из локальных кэшей.
+        Использует self._account_cache и self._category_cache,
+        которые должны быть инициализированы методом create_caches().
+        Фильтрует системные объекты (is_system=True).
+        """
+        try:
+            # Счета
+            self.filter_account_combo.clear()
+            self.filter_account_combo.addItem("Все", userData=None)
+
+            if hasattr(self, '_account_cache') and self._account_cache:
+                user_accounts = [
+                    acc for acc in self._account_cache.values()
+                    if not getattr(acc, 'is_system', False)
+                ]
+                for account in user_accounts:
+                    display_text = f"{account.name} ({account.currency})"
+                    self.filter_account_combo.addItem(display_text, userData=account.id)
+            else:
+                logger.warning(f"[{self.__class__.__name__}] Кэш счетов не инициализирован")
+
+            # Категории (дерево)
+            self.filter_category_combo.clear()
+            self.filter_category_combo.addItem("Все", userData=None)
+
+            if hasattr(self, '_category_cache') and self._category_cache:
+                categories_list = list(self._category_cache.values())
+                self._load_categories_to_combo(
+                    self.filter_category_combo,
+                    categories_list,
+                    include_all=True,
+                    default_text="Все"
+                )
+            else:
+                logger.warning(f"[{self.__class__.__name__}] Кэш категорий не инициализирован")
+
+            logger.debug(f"[{self.__class__.__name__}] Заполнены комбобоксы фильтров")
+
+        except Exception as e:
+            logger.error(f"[{self.__class__.__name__}] Ошибка заполнения фильтров: {e}", exc_info=True)
+            self.show_status("Ошибка загрузки фильтров", message_type="error")
+
+    # =============== Дерево категорий ==================
+    def _build_category_tree(self, categories: List[Category]) -> List[tuple]:
+        """
+        Строит иерархический список категорий для отображения в комбобоксе.
+
+        Преобразует плоский список категорий в список кортежей
+        (display_name, category_id, level), где level — уровень вложенности.
+        Родительские категории идут без отступа, дочерние — с маркером "• ".
+
+        Args:
+            categories: плоский список объектов Category
+
+        Returns:
+            Список кортежей: [(display_name, category_id, level), ...]
+        """
+        try:
+            if not categories:
+                return []
+
+            # Фильтруем системные категории
+            user_categories = [
+                cat for cat in categories
+                if not getattr(cat, 'is_system', False)
+            ]
+
+            # Строим словарь {parent_id: [children]}
+            children_map = {}
+            roots = []
+            for cat in user_categories:
+                parent_id = getattr(cat, 'parent_id', None)
+                if parent_id:
+                    children_map.setdefault(parent_id, []).append(cat)
+                else:
+                    roots.append(cat)
+
+            # Рекурсивно обходим дерево
+            result = []
+
+            def _traverse(category: Category, level: int):
+                """Рекурсивный обход дерева категорий."""
+                indent = " " * level
+                if level > 0:
+                    display_name = f"{indent}• {category.name}"
+                else:
+                    display_name = category.name
+                result.append((display_name, category.id, level))
+
+                for child in children_map.get(category.id, []):
+                    _traverse(child, level + 1)
+
+            # Сортируем корни по имени
+            roots.sort(key=lambda c: c.name)
+            for root in roots:
+                _traverse(root, 0)
+
+            return result
+
+        except Exception as e:
+            logger.error(f"[{self.__class__.__name__}] Ошибка построения дерева категорий: {e}", exc_info=True)
+            return []
+
+
+    def _load_categories_to_combo(self, combo: QComboBox, categories: List[Category],
+                                include_all: bool = False, default_text: str = "Все"):
+        """
+        Универсальный метод заполнения комбобокса категориями в виде дерева.
+
+        Args:
+            combo: целевой QComboBox для заполнения
+            categories: список объектов Category
+            include_all: если True, добавляет пункт "Все" в начало (для фильтров)
+            default_text: текст для пункта "Все" (по умолчанию "Все")
+        """
+        try:
+            combo.clear()
+
+            if include_all:
+                combo.addItem(default_text, userData=None)
+
+            if not categories:
+                combo.addItem("Нет категорий", userData=None)
+                return
+
+            # Строим дерево
+            tree = self._build_category_tree(categories)
+
+            if not tree:
+                combo.addItem("Нет категорий", userData=None)
+                return
+
+            # Заполняем комбобокс
+            for display_name, category_id, level in tree:
+                combo.addItem(display_name, userData=category_id)
+
+            logger.debug(f"[{self.__class__.__name__}] Загружено {len(tree)} категорий в комбобокс")
+
+        except Exception as e:
+            logger.error(f"[{self.__class__.__name__}] Ошибка загрузки категорий: {e}", exc_info=True)
+            self.show_status("Ошибка загрузки категорий", message_type="error")
