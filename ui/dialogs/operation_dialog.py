@@ -53,7 +53,7 @@ class OperationDialog(BaseDialog):
         layout.addWidget(self._create_filter_panel())
         layout.addWidget(self._create_input_panel())
         layout.addWidget(self._create_table(), stretch=1)
-        layout.addWidget(self._create_bottom_panel())
+        layout.addWidget(self._create_summary_panel())
         layout.addWidget(self.status_bar)
 
         # Фокус на поле суммы при открытии
@@ -101,6 +101,33 @@ class OperationDialog(BaseDialog):
         layout.setSpacing(6)
         layout.setContentsMargins(0, 0, 0, 0)
 
+        # --- Тип ---
+        layout.addWidget(QLabel("Тип:"))
+        self.filter_type_combo = QComboBox()
+        self.filter_type_combo.addItems(["Все", "Доход", "Расход", "Возврат"])
+        self.filter_type_combo.setFixedHeight(26)
+        self.filter_type_combo.setMinimumWidth(90)
+        self.filter_type_combo.currentTextChanged.connect(self._apply_filters)
+        layout.addWidget(self.filter_type_combo)
+
+        # --- Категория ---
+        layout.addWidget(QLabel("Категория:"))
+        self.filter_category_combo = QComboBox()
+        self.filter_category_combo.addItem("Все", userData=None)
+        self.filter_category_combo.setFixedHeight(26)
+        self.filter_category_combo.setMinimumWidth(130)
+        self.filter_category_combo.currentIndexChanged.connect(self._apply_filters)
+        layout.addWidget(self.filter_category_combo)
+
+        # --- Счёт ---
+        layout.addWidget(QLabel("Счёт:"))
+        self.filter_account_combo = QComboBox()
+        self.filter_account_combo.addItem("Все", userData=None)
+        self.filter_account_combo.setFixedHeight(26)
+        self.filter_account_combo.setMinimumWidth(120)
+        self.filter_account_combo.currentIndexChanged.connect(self._apply_filters)
+        layout.addWidget(self.filter_account_combo)
+
         # --- Период ---
         layout.addWidget(QLabel("С:"))
         self.filter_date_from = QDateEdit()
@@ -119,33 +146,6 @@ class OperationDialog(BaseDialog):
         self.filter_date_to.setFixedHeight(26)
         self.filter_date_to.dateChanged.connect(self._apply_filters)
         layout.addWidget(self.filter_date_to)
-
-        # --- Тип ---
-        layout.addWidget(QLabel("Тип:"))
-        self.filter_type_combo = QComboBox()
-        self.filter_type_combo.addItems(["Все", "Доход", "Расход", "Возврат"])
-        self.filter_type_combo.setFixedHeight(26)
-        self.filter_type_combo.setMinimumWidth(90)
-        self.filter_type_combo.currentTextChanged.connect(self._apply_filters)
-        layout.addWidget(self.filter_type_combo)
-
-        # --- Счёт ---
-        layout.addWidget(QLabel("Счёт:"))
-        self.filter_account_combo = QComboBox()
-        self.filter_account_combo.addItem("Все", userData=None)
-        self.filter_account_combo.setFixedHeight(26)
-        self.filter_account_combo.setMinimumWidth(120)
-        self.filter_account_combo.currentIndexChanged.connect(self._apply_filters)
-        layout.addWidget(self.filter_account_combo)
-
-        # --- Категория ---
-        layout.addWidget(QLabel("Категория:"))
-        self.filter_category_combo = QComboBox()
-        self.filter_category_combo.addItem("Все", userData=None)
-        self.filter_category_combo.setFixedHeight(26)
-        self.filter_category_combo.setMinimumWidth(130)
-        self.filter_category_combo.currentIndexChanged.connect(self._apply_filters)
-        layout.addWidget(self.filter_category_combo)
 
         # --- Поиск ---
         self.filter_search = QLineEdit()
@@ -278,7 +278,7 @@ class OperationDialog(BaseDialog):
         return date_edit
 
     def _create_table(self) -> QTreeWidget:
-        """Таблица транзакций (сортировка включена)."""
+        """Таблица транзакций."""
         self.transactions_tree = QTreeWidget()
         self.transactions_tree.setHeaderLabels(["Дата", "Тип", "Сумма", "Кол-во", "Категория", "Счет", "Описание"])
         self.transactions_tree.setSortingEnabled(True)
@@ -292,24 +292,55 @@ class OperationDialog(BaseDialog):
         header.setStretchLastSection(True)
         header.setSectionsClickable(True)
         
-        # Контекстное меню (заглушка)
+        # Контекстное меню 
         self.transactions_tree.setContextMenuPolicy(Qt.CustomContextMenu)
         self.transactions_tree.customContextMenuRequested.connect(self._show_transactions_context_menu)
+
+        # 🔗 Сигнал изменения выделения — для суммы выделенных
+        self.transactions_tree.itemSelectionChanged.connect(self._update_selection_summary)
+
         return self.transactions_tree
 
-    def _create_bottom_panel(self) -> QWidget:
-        """Нижняя панель с итогами и кнопками действий."""
+    def _create_summary_panel(self) -> QWidget:
+        """
+        Нижняя панель с динамическими итогами, отображением периода и кнопками действий.
+
+        Слева: период дат видимых операций + общие итоги по типам.
+        Справа: сумма выделенных транзакций (обновляется при изменении выделения).
+
+        Returns:
+            QWidget с панелью итогов
+        """
         panel = QWidget()
         layout = QHBoxLayout()
         layout.setSpacing(8)
         layout.setContentsMargins(0, 0, 0, 0)
 
-        self.summary_label = QLabel("Операций: 0 | Доход: 0,00 ₽ | Расход: 0,00 ₽")
+        # --- Левая часть: общие итоги ---
+        self.summary_label = QLabel("Операций: 0")
         self.summary_label.setFixedHeight(26)
         layout.addWidget(self.summary_label)
+
+        # Разделитель
+        separator = QFrame()
+        separator.setFrameShape(QFrame.VLine)
+        separator.setFrameShadow(QFrame.Sunken)
+        layout.addWidget(separator)
+
+        # --- Период дат ---
+        self.period_label = QLabel("Период: —")
+        self.period_label.setFixedHeight(26)
+        layout.addWidget(self.period_label)
+
         layout.addStretch()
 
-        export_btn = CompactButton("📥 Экспорт", "neutral") 
+        # --- Правая часть: сумма выделенных ---
+        self.selection_summary_label = QLabel("")
+        self.selection_summary_label.setFixedHeight(26)
+        layout.addWidget(self.selection_summary_label)
+
+        # --- Кнопки ---
+        export_btn = CompactButton("📥 Экспорт", "neutral")
         export_btn.clicked.connect(self._stub_method)
         layout.addWidget(export_btn)
 
@@ -517,12 +548,14 @@ class OperationDialog(BaseDialog):
             # Получаем данные из кэшей
             account = self._account_cache.get(tx.account_id)
             category = self._category_cache.get(tx.category_id) if tx.category_id else None
-            
-            currency = account.currency if account else "–"
+
+            # при локализации вне россии переработать преоброзвание валюты
+            currency_symbol = "₽" if (account and account.currency == "RUB") else (account.currency if account else "–")
             account_name = account.name if account else "–"
             category_name = category.name if category else "–"
             
-            amount_str = f"{tx.amount:+,.2f} {currency}"
+            # Форматируем сумму: +1\xa0234,56 ₽
+            amount_str = f"{tx.amount:+,.2f}".replace(",", "\xa0").replace(".", ",") + f" {currency_symbol}"
             qty_str = f"{tx.quantity:.2f}" if tx.quantity != 1.0 else "1"
             # Маппинг типов транзакций
             type_map = {
@@ -561,6 +594,75 @@ class OperationDialog(BaseDialog):
             ])
             item.setData(0, Qt.UserRole, row['transaction_id'])
             self.transactions_tree.addTopLevelItem(item)
+
+        # Обновляем итоги и период
+        self._update_summary()
+        self._update_period_label() 
+
+    def _update_summary(self):
+        """
+        Пересчитывает и обновляет итоги по видимым строкам таблицы.
+
+        Показывает:
+        - Общее количество операций
+        - Суммы по типам (Доход, Расход, Возврат) — только если такие типы есть в таблице
+
+        Вызывается автоматически после отрисовки таблицы (_render_transaction_table).
+        """
+        try:
+            root = self.transactions_tree.invisibleRootItem()
+            row_count = root.childCount()
+
+            if row_count == 0:
+                self.summary_label.setText("Операций: 0")
+                self.selection_summary_label.setText("")
+                return
+
+            # Собираем суммы и количества по типам
+            type_sums: Dict[str, float] = {}
+            type_display_order = [
+                ("income", "Доход"),
+                ("expense", "Расход"),
+                ("refund", "Возврат"),
+            ]
+            type_text_to_key = {
+                "Доход": "income",
+                "Расход": "expense",
+                "Возврат": "refund",
+                "Корректировка": "correct",
+            }
+
+            for i in range(row_count):
+                item = root.child(i)
+                type_text = item.text(1)
+                amount_str = item.text(2)
+
+                type_key = type_text_to_key.get(type_text)
+                if not type_key:
+                    continue
+
+                amount = self._parse_amount_string(amount_str)
+                if amount is None:
+                    continue
+
+                type_sums[type_key] = type_sums.get(type_key, 0.0) + amount
+
+            # Формируем текст итогов
+            parts = [f"Операций: {row_count}"]
+
+            for type_key, display_name in type_display_order:
+                if type_key in type_sums:
+                    total = type_sums[type_key]
+                    if type_key == "expense":
+                        # Расход в БД отрицательный — показываем абсолютное значение
+                        parts.append(f"{display_name}: {abs(total):,.2f} ₽")
+                    else:
+                        parts.append(f"{display_name}: {total:+,.2f} ₽")
+
+            self.summary_label.setText(" | ".join(parts))
+
+        except Exception as e:
+            logger.error(f"[{self.__class__.__name__}] Ошибка обновления итогов: {e}", exc_info=True)
 
     #========== Открытие диалогов ==========
     def _open_account_management(self):
@@ -1227,3 +1329,198 @@ class OperationDialog(BaseDialog):
         except Exception as e:
             logger.error(f"[{self.__class__.__name__}] Ошибка загрузки категорий: {e}", exc_info=True)
             self.show_status("Ошибка загрузки категорий", message_type="error")
+
+    # Работа с строкой итогов
+    def _update_summary(self):
+        """
+        Пересчитывает и обновляет итоги по видимым строкам таблицы.
+
+        Показывает:
+        - Общее количество операций
+        - Суммы по типам (Доход, Расход, Возврат) — только если такие типы есть в таблице
+
+        Вызывается автоматически после отрисовки таблицы (_render_transaction_table).
+        """
+        try:
+            root = self.transactions_tree.invisibleRootItem()
+            row_count = root.childCount()
+
+            if row_count == 0:
+                self.summary_label.setText("Операций: 0")
+                self.selection_summary_label.setText("")
+                return
+
+            # Собираем суммы и количества по типам
+            type_sums: Dict[str, float] = {}
+            type_display_order = [
+                ("income", "Доход"),
+                ("expense", "Расход"),
+                ("refund", "Возврат"),
+            ]
+            type_text_to_key = {
+                "Доход": "income",
+                "Расход": "expense",
+                "Возврат": "refund",
+                "Корректировка": "correct",
+            }
+
+            for i in range(row_count):
+                item = root.child(i)
+                type_text = item.text(1)
+                amount_str = item.text(2)
+
+                type_key = type_text_to_key.get(type_text)
+                if not type_key:
+                    continue
+
+                amount = self._parse_amount_string(amount_str)
+                if amount is None:
+                    continue
+
+                type_sums[type_key] = type_sums.get(type_key, 0.0) + amount
+
+            # Формируем текст итогов
+            parts = [f"Операций: {row_count}"]
+
+            for type_key, display_name in type_display_order:
+                if type_key in type_sums:
+                    total = type_sums[type_key]
+                    if type_key == "expense":
+                        # Расход в БД отрицательный — показываем абсолютное значение
+                        parts.append(f"{display_name}: {abs(total):,.2f} ₽")
+                    else:
+                        parts.append(f"{display_name}: {total:+,.2f} ₽")
+
+            self.summary_label.setText(" | ".join(parts))
+
+        except Exception as e:
+            logger.error(f"[{self.__class__.__name__}] Ошибка обновления итогов: {e}", exc_info=True)
+
+    def _update_selection_summary(self):
+        """
+        Обновляет сумму выделенных транзакций.
+
+        Вызывается автоматически при изменении выделения в таблице
+        (сигнал itemSelectionChanged).
+        Показывает количество выделенных строк и их суммарное значение.
+        """
+        try:
+            selected_items = self.transactions_tree.selectedItems()
+            if not selected_items:
+                self.selection_summary_label.setText("")
+                return
+
+            # Считаем уникальные выделенные строки и их сумму
+            selected_rows = set()
+            total_sum = 0.0
+
+            for item in selected_items:
+                # В режиме SelectRows selectedItems возвращает все ячейки строки,
+                # поэтому считаем уникальные строки по индексу
+                row_index = self.transactions_tree.indexOfTopLevelItem(item)
+                if row_index == -1:
+                    continue
+                if row_index in selected_rows:
+                    continue
+                selected_rows.add(row_index)
+
+                amount_str = item.text(2)
+                amount = self._parse_amount_string(amount_str)
+                if amount is not None:
+                    total_sum += amount
+
+            count = len(selected_rows)
+            if count > 0:
+                self.selection_summary_label.setText(
+                    f"Выделено: {count} | Сумма: {total_sum:+,.2f} ₽"
+                )
+            else:
+                self.selection_summary_label.setText("")
+
+        except Exception as e:
+            logger.error(
+                f"[{self.__class__.__name__}] Ошибка обновления суммы выделенных: {e}",
+                exc_info=True,
+            )
+            self.selection_summary_label.setText("")
+
+    def _parse_amount_string(self, amount_str: str) -> Optional[float]:
+        """
+        Парсит строку суммы из таблицы в число.
+
+        Поддерживает форматы: "+1\xa0234,56 ₽", "+1 234,56 ₽", "-500,00", "1000", "–" (вернёт None).
+
+        Args:
+            amount_str: строка вида "+1 234,56 ₽" или "-500,00"
+
+        Returns:
+            float значение или None, если не удалось распарсить
+        """
+        try:
+            if not amount_str or amount_str.strip() in ("–", "-", ""):
+                return None
+
+            # Удаляем валюту, неразрывные пробелы и знак плюса
+            cleaned = amount_str.replace("₽", "").replace("\xa0", "").replace("+", "").strip()
+        
+            # Заменяем запятую на точку
+            cleaned = cleaned.replace(",", ".")
+
+            return float(cleaned)
+
+        except (ValueError, AttributeError) as e:
+            logger.warning(
+                f"[{self.__class__.__name__}] Не удалось распарсить сумму '{amount_str}': {e}"
+            )
+            return None
+
+    def _update_period_label(self):
+        """
+        Обновляет отображаемый период дат видимых операций в нижней панели.
+
+        Проходит по всем строкам таблицы, находит минимальную и максимальную дату,
+        форматирует в "dd.MM.yyyy — dd.MM.yyyy".
+        Если таблица пуста — показывает "Период: —".
+
+        Вызывается автоматически после отрисовки таблицы (_render_transaction_table).
+        """
+        try:
+            root = self.transactions_tree.invisibleRootItem()
+            row_count = root.childCount()
+
+            if row_count == 0:
+                self.period_label.setText("Период: —")
+                return
+
+            dates = []
+            for i in range(row_count):
+                item = root.child(i)
+                date_str = item.text(0)
+                try:
+                    # Формат из БД: yyyy-MM-dd
+                    dt = datetime.strptime(date_str, "%Y-%m-%d")
+                    dates.append(dt)
+                except ValueError:
+                    logger.warning(
+                        f"[{self.__class__.__name__}] Не удалось распарсить дату '{date_str}'"
+                    )
+                    continue
+
+            if not dates:
+                self.period_label.setText("Период: —")
+                return
+
+            min_date = min(dates)
+            max_date = max(dates)
+
+            # Форматируем в dd.MM.yyyy
+            if min_date == max_date:
+                period_text = min_date.strftime("%d.%m.%Y")
+            else:
+                period_text = f"{min_date.strftime('%d.%m.%Y')} — {max_date.strftime('%d.%m.%Y')}"
+
+            self.period_label.setText(f"Период: {period_text}")
+
+        except Exception as e:
+            logger.error(f"[{self.__class__.__name__}] Ошибка обновления периода: {e}", exc_info=True)
+            self.period_label.setText("Период: ошибка")
