@@ -46,8 +46,8 @@ class OperationDialog(BaseDialog):
     def _init_ui(self):
         """Инициализация интерфейса и компоновки элементов."""
         layout = self._main_layout
-        layout.setSpacing(8)
-        layout.setContentsMargins(10, 10, 10, 10)
+        layout.setSpacing(5)
+        layout.setContentsMargins(8, 8, 8, 1)
 
         layout.addWidget(self._create_top_panel())
         layout.addWidget(self._create_filter_panel())
@@ -302,54 +302,94 @@ class OperationDialog(BaseDialog):
         return self.transactions_tree
 
     def _create_summary_panel(self) -> QWidget:
-        """
-        Нижняя панель с динамическими итогами, отображением периода и кнопками действий.
+        """Нижняя панель с динамическими итогами, периодом и кнопками действий.
 
-        Слева: период дат видимых операций + общие итоги по типам.
+        Слева: отдельные метки для счётчика операций, дохода, расхода, возврата
+        (каждая со своим цветом через QSS) и период дат.
         Справа: сумма выделенных транзакций (обновляется при изменении выделения).
+        Кнопки: экспорт и закрытие.
 
         Returns:
             QWidget с панелью итогов
         """
-        panel = QWidget()
-        layout = QHBoxLayout()
-        layout.setSpacing(8)
-        layout.setContentsMargins(0, 0, 0, 0)
+        try:
+            panel = QWidget()
+            panel.setProperty("variant", "panel")
+            layout = QHBoxLayout()
+            layout.setSpacing(4)
+            layout.setContentsMargins(0, 0, 6, 0)
 
-        # --- Левая часть: общие итоги ---
-        self.summary_label = QLabel("Операций: 0")
-        self.summary_label.setFixedHeight(26)
-        layout.addWidget(self.summary_label)
+            # --- Левая часть: счётчик операций ---
+            self.operations_count_label = QLabel("Операций: 0")
+            self.operations_count_label.setProperty("variant", "summary-count")
+            layout.addWidget(self.operations_count_label)
 
-        # Разделитель
-        separator = QFrame()
-        separator.setFrameShape(QFrame.VLine)
-        separator.setFrameShadow(QFrame.Sunken)
-        layout.addWidget(separator)
+            # --- Метки типов с разделителями (показываются/скрываются парой) ---
+            self._summary_labels = {}
+            self._summary_separators = {}
 
-        # --- Период дат ---
-        self.period_label = QLabel("Период: —")
-        self.period_label.setFixedHeight(26)
-        layout.addWidget(self.period_label)
+            for type_key, initial_text, variant in (
+                ("income", "Доход: +0,00 ₽", "summary-income"),
+                ("expense", "Расход: 0,00 ₽", "summary-expense"),
+                ("refund", "Возврат: +0,00 ₽", "summary-return"),
+            ):
+                separator = QFrame()
+                separator.setFrameShape(QFrame.VLine)
+                separator.setFrameShadow(QFrame.Sunken)
+                separator.setProperty("variant", "summary-separator")
+                separator.setFixedHeight(19)
+                layout.addWidget(separator, 0, Qt.AlignVCenter)
+                self._summary_separators[type_key] = separator
 
-        layout.addStretch()
+                label = QLabel(initial_text)
+                label.setProperty("variant", variant)
+                layout.addWidget(label)
+                self._summary_labels[type_key] = label
 
-        # --- Правая часть: сумма выделенных ---
-        self.selection_summary_label = QLabel("")
-        self.selection_summary_label.setFixedHeight(26)
-        layout.addWidget(self.selection_summary_label)
+                # До первого _update_summary всё скрыто
+                separator.hide()
+                label.hide()
 
-        # --- Кнопки ---
-        export_btn = CompactButton("📥 Экспорт", "neutral")
-        export_btn.clicked.connect(self._stub_method)
-        layout.addWidget(export_btn)
+            # Разделитель перед периодом
+            separator4 = QFrame()
+            separator4.setFrameShape(QFrame.VLine)
+            separator4.setFrameShadow(QFrame.Sunken)
+            separator4.setProperty("variant", "summary-separator")
+            separator4.setFixedHeight(19)
+            layout.addWidget(separator4, 0, Qt.AlignVCenter)
+            # layout.addWidget(separator4)
 
-        close_btn = CompactButton("❌ Закрыть", "danger")
-        close_btn.clicked.connect(self.accept)
-        layout.addWidget(close_btn)
+            # --- Период дат ---
+            self.period_label = QLabel("Период: —")
+            self.period_label.setProperty("variant", "summary-period")
+            layout.addWidget(self.period_label)
 
-        panel.setLayout(layout)
-        return panel
+            layout.addStretch()
+
+            # --- Правая часть: сумма выделенных ---
+            self.selection_summary_label = QLabel("")
+            self.selection_summary_label.setProperty("variant", "summary-selection")
+            layout.addWidget(self.selection_summary_label)
+
+            # --- Кнопки ---
+            export_btn = CompactButton("📥 Экспорт", "neutral")
+            export_btn.setFixedHeight(26)
+            export_btn.clicked.connect(self._stub_method)
+            layout.addWidget(export_btn)
+
+            close_btn = CompactButton("❌ Закрыть", "danger")
+            close_btn.setFixedHeight(26)
+            close_btn.clicked.connect(self.accept)
+            layout.addWidget(close_btn)
+
+            panel.setLayout(layout)
+            return panel
+        except Exception as e:
+            logger.error(
+                f"[{self.__class__.__name__}] Ошибка создания панели итогов: {e}",
+                exc_info=True,
+            )
+            raise
 
     # ================= Контракт View <-> Presenter =================
 
@@ -600,12 +640,13 @@ class OperationDialog(BaseDialog):
         self._update_period_label() 
 
     def _update_summary(self):
-        """
-        Пересчитывает и обновляет итоги по видимым строкам таблицы.
+        """Пересчитывает и обновляет итоги по видимым строкам таблицы.
 
-        Показывает:
-        - Общее количество операций
-        - Суммы по типам (Доход, Расход, Возврат) — только если такие типы есть в таблице
+        Обновляет отдельные метки (цвета — из QSS через variant):
+        - operations_count_label: общее количество операций
+        - income_label / expense_label / return_label: суммы по типам,
+        показываются только если тип присутствует в таблице
+        (вместе со своим разделителем).
 
         Вызывается автоматически после отрисовки таблицы (_render_transaction_table).
         """
@@ -614,17 +655,15 @@ class OperationDialog(BaseDialog):
             row_count = root.childCount()
 
             if row_count == 0:
-                self.summary_label.setText("Операций: 0")
+                self.operations_count_label.setText("Операций: 0")
                 self.selection_summary_label.setText("")
+                for type_key in self._summary_labels:
+                    self._summary_labels[type_key].hide()
+                    self._summary_separators[type_key].hide()
                 return
 
             # Собираем суммы и количества по типам
             type_sums: Dict[str, float] = {}
-            type_display_order = [
-                ("income", "Доход"),
-                ("expense", "Расход"),
-                ("refund", "Возврат"),
-            ]
             type_text_to_key = {
                 "Доход": "income",
                 "Расход": "expense",
@@ -634,36 +673,44 @@ class OperationDialog(BaseDialog):
 
             for i in range(row_count):
                 item = root.child(i)
-                type_text = item.text(1)
-                amount_str = item.text(2)
-
-                type_key = type_text_to_key.get(type_text)
+                type_key = type_text_to_key.get(item.text(1))
                 if not type_key:
                     continue
 
-                amount = self._parse_amount_string(amount_str)
+                amount = self._parse_amount_string(item.text(2))
                 if amount is None:
                     continue
 
                 type_sums[type_key] = type_sums.get(type_key, 0.0) + amount
 
-            # Формируем текст итогов
-            parts = [f"Операций: {row_count}"]
+            self.operations_count_label.setText(f"Операций: {row_count}")
 
-            for type_key, display_name in type_display_order:
+            # Обновляем метки: показываем только присутствующие типы
+            display_map = {
+                "income": ("Доход", False),
+                "expense": ("Расход", True),   # расход в БД отрицательный — abs
+                "refund": ("Возврат", False),
+            }
+            for type_key, (display_name, use_abs) in display_map.items():
+                label = self._summary_labels[type_key]
+                separator = self._summary_separators[type_key]
+
                 if type_key in type_sums:
                     total = type_sums[type_key]
-                    if type_key == "expense":
-                        # Расход в БД отрицательный — показываем абсолютное значение
-                        parts.append(f"{display_name}: {abs(total):,.2f} ₽")
-                    else:
-                        parts.append(f"{display_name}: {total:+,.2f} ₽")
-
-            self.summary_label.setText(" | ".join(parts))
+                    value = abs(total) if use_abs else total
+                    sign = "" if use_abs else "+"
+                    label.setText(f"{display_name}: {sign}{value:,.2f} ₽")
+                    label.show()
+                    separator.show()
+                else:
+                    label.hide()
+                    separator.hide()
 
         except Exception as e:
-            logger.error(f"[{self.__class__.__name__}] Ошибка обновления итогов: {e}", exc_info=True)
-
+            logger.error(
+                f"[{self.__class__.__name__}] Ошибка обновления итогов: {e}",
+                exc_info=True,
+            )
     #========== Открытие диалогов ==========
     def _open_account_management(self):
         """Открывает диалог управления счетами."""
@@ -1331,71 +1378,6 @@ class OperationDialog(BaseDialog):
             self.show_status("Ошибка загрузки категорий", message_type="error")
 
     # Работа с строкой итогов
-    def _update_summary(self):
-        """
-        Пересчитывает и обновляет итоги по видимым строкам таблицы.
-
-        Показывает:
-        - Общее количество операций
-        - Суммы по типам (Доход, Расход, Возврат) — только если такие типы есть в таблице
-
-        Вызывается автоматически после отрисовки таблицы (_render_transaction_table).
-        """
-        try:
-            root = self.transactions_tree.invisibleRootItem()
-            row_count = root.childCount()
-
-            if row_count == 0:
-                self.summary_label.setText("Операций: 0")
-                self.selection_summary_label.setText("")
-                return
-
-            # Собираем суммы и количества по типам
-            type_sums: Dict[str, float] = {}
-            type_display_order = [
-                ("income", "Доход"),
-                ("expense", "Расход"),
-                ("refund", "Возврат"),
-            ]
-            type_text_to_key = {
-                "Доход": "income",
-                "Расход": "expense",
-                "Возврат": "refund",
-                "Корректировка": "correct",
-            }
-
-            for i in range(row_count):
-                item = root.child(i)
-                type_text = item.text(1)
-                amount_str = item.text(2)
-
-                type_key = type_text_to_key.get(type_text)
-                if not type_key:
-                    continue
-
-                amount = self._parse_amount_string(amount_str)
-                if amount is None:
-                    continue
-
-                type_sums[type_key] = type_sums.get(type_key, 0.0) + amount
-
-            # Формируем текст итогов
-            parts = [f"Операций: {row_count}"]
-
-            for type_key, display_name in type_display_order:
-                if type_key in type_sums:
-                    total = type_sums[type_key]
-                    if type_key == "expense":
-                        # Расход в БД отрицательный — показываем абсолютное значение
-                        parts.append(f"{display_name}: {abs(total):,.2f} ₽")
-                    else:
-                        parts.append(f"{display_name}: {total:+,.2f} ₽")
-
-            self.summary_label.setText(" | ".join(parts))
-
-        except Exception as e:
-            logger.error(f"[{self.__class__.__name__}] Ошибка обновления итогов: {e}", exc_info=True)
-
     def _update_selection_summary(self):
         """
         Обновляет сумму выделенных транзакций.

@@ -113,6 +113,14 @@ LIGHT_THEME = {
     "TAB_BG": "#E8EDF2",      # неактивная вкладка
     "TAB_HOVER": "#DCE4EB",
 
+    # Строка итогов транцакций
+    "SUMMARY_INCOME": "#2E7D32",
+    "SUMMARY_EXPENSE": "#C62828",
+    "SUMMARY_RETURN": "#2C3E50",      # обычный, только жирный
+    "SUMMARY_NEUTRAL": "#7F8C8D",     # "Операций: X"
+    "SUMMARY_PERIOD": "#6C757D",
+    "SUMMARY_SELECTION": "#1976D2",
+
     # новые при добовение неоновой темы (для меню)
     "ACCENT_SECONDARY": "#0077b6",
     "ACCENT_SECONDARY_HOVER": "#0096c7",
@@ -171,6 +179,14 @@ DARK_THEME = {
     # Цвета вкладок (QTabWidget)
     "TAB_BG": "#2A2A2A",
     "TAB_HOVER": "#353535",
+
+    # Строка итогов транцакций
+    "SUMMARY_INCOME": "#66BB6A",
+    "SUMMARY_EXPENSE": "#EF5350",
+    "SUMMARY_RETURN": "#E0E0E0",
+    "SUMMARY_NEUTRAL": "#A0A0A0",
+    "SUMMARY_PERIOD": "#90A4AE",
+    "SUMMARY_SELECTION": "#64B5F6",
 
     # новые при добовение неоновой темы (для меню)
     "ACCENT_SECONDARY": "#00b4d8",
@@ -260,4 +276,12 @@ NEON_THEME = {
     "SCROLLBAR_BG": "#1a1a2e",
     "SCROLLBAR_HANDLE": "#3a3a5a",
     "SCROLLBAR_HANDLE_HOVER": "#7b2cbf",
+
+    # Строка итогов транцакций
+    "SUMMARY_INCOME": "#00ff88",
+    "SUMMARY_EXPENSE": "#ff4466",
+    "SUMMARY_RETURN": "#e0e0e0",
+    "SUMMARY_NEUTRAL": "#a0a0c0",
+    "SUMMARY_PERIOD": "#7b9ec9",
+    "SUMMARY_SELECTION": "#00d4ff",
 }

@@ -157,3 +157,50 @@ QPushButton[variant="outline"] {
     padding: 10px 20px;
     font-weight: bold;
 }
+
+/* ========== МЕТКИ ИТОГОВ ========== */
+
+QLabel[variant="summary-count"] {
+    color: $SUMMARY_NEUTRAL$;
+    font-size: 13px;
+    padding: 0 4px;
+}
+
+QLabel[variant="summary-income"] {
+    color: $SUMMARY_INCOME$;
+    font-size: 13px;
+    padding: 0 4px;
+}
+
+QLabel[variant="summary-expense"] {
+    color: $SUMMARY_EXPENSE$;
+    font-size: 13px;
+    padding: 0 4px;
+}
+
+QLabel[variant="summary-return"] {
+    color: $SUMMARY_RETURN$;
+    font-weight: bold;
+    font-size: 13px;
+    padding: 0 4px;
+}
+
+QLabel[variant="summary-period"] {
+    color: $SUMMARY_PERIOD$;
+    font-style: italic;
+    font-size: 12px;
+    padding: 0 6px;
+}
+
+QLabel[variant="summary-selection"] {
+    color: $SUMMARY_SELECTION$;
+    font-weight: 600;
+    font-size: 12px;
+    padding-left: 10px;
+    border-left: 1px solid $BORDER$;
+}
+
+/* Разделитель между метками итогов */
+QFrame[variant="summary-separator"] {
+    color: $BORDER$;
+}

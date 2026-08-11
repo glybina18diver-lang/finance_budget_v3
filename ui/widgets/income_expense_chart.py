@@ -78,6 +78,7 @@ class IncomeExpenseChart(QFrame):
 
             self.refresh_btn = CompactButton("Обновить", purpose="info")
             self.refresh_btn.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Fixed)
+            self.refresh_btn.clicked.connect(self.update_chart)
             header_layout.addWidget(self.refresh_btn)
 
             main_layout.addWidget(header_widget)
