@@ -40,7 +40,7 @@ def _get_version() -> str:
     return "dev"  # fallback
 
 # ========== UI НАСТРОЙКИ ==========
-APP_NAME = "Finance Budget V3 (beta)"
+APP_NAME = "Finance Budget V3"
 APP_VERSION = _get_version()
 WINDOW_TITLE = f"{APP_NAME} (PySide6 v{APP_VERSION}) - SQLite"
 ICON_DIR = './assets/icon.ico'

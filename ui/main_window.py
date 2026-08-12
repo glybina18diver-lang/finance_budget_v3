@@ -128,12 +128,16 @@ class MainWindow(BaseDialog):
             add_op_btn.clicked.connect(self._open_operations_dialog)
             layout.addWidget(add_op_btn)
 
-            # Кнопка "Дашборд"
-            dashboard_btn = CompactButton("📊 Дашборд", "info")
-            dashboard_btn.setMaximumWidth(100)
-            dashboard_btn.setObjectName("dashboard_btn")
-            dashboard_btn.clicked.connect(self._open_dashboard)
-            layout.addWidget(dashboard_btn)
+            # # Кнопка "Дашборд"
+            # dashboard_btn = CompactButton("📊 Дашборд", "info")
+            # dashboard_btn.setMaximumWidth(100)
+            # dashboard_btn.setObjectName("dashboard_btn")
+            # dashboard_btn.clicked.connect(self._open_dashboard)
+            # layout.addWidget(dashboard_btn)
+
+            self.analytics_btn = CompactButton("📊 Аналитика", purpose="info")
+            self.analytics_btn.clicked.connect(self._on_analytics_clicked)
+            layout.addWidget(self.analytics_btn)
 
             # Растягиваем пространство
             layout.addStretch()
@@ -367,6 +371,16 @@ class MainWindow(BaseDialog):
     def _open_dashboard(self):
         """Открывает дашборд."""
         self._stub_method()
+
+    def _on_analytics_clicked(self):
+        """Открывает тестовое окно аналитики."""
+        try:
+            self.presenter.open_analytics_window()
+        except ValueError as e:
+            self.show_status(str(e), "error")  # Показываем пользователю
+        except Exception as e:
+            logger.error(f"Ошибка UI: {e}", exc_info=True)
+            self.show_status("Произошла ошибка", "error")
 
     def _update_balance_style(self, balance):
         """

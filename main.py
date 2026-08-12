@@ -49,7 +49,8 @@ def main():
     # Создаём презентер, получая сервисы ИЗ навигации
     presenter = MainWindowPresenter(
         service=nav_service.main_window_service,
-        credit_card_service=nav_service.credit_card_service
+        credit_card_service=nav_service.credit_card_service,
+        db=db
     )
 
     # 3. Передаём его в главное окно

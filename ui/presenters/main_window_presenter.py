@@ -43,7 +43,8 @@ class MainWindowPresenter:
     def __init__(
         self,
         service: MainWindowService,
-        credit_card_service: CreditCardService
+        credit_card_service: CreditCardService,
+        db
     ):
         """
         Инициализация презентера.
@@ -55,6 +56,7 @@ class MainWindowPresenter:
         try:
             self.service = service
             self.credit_card_service = credit_card_service
+            self.db_manager = db
             self.view: 'MainWindow' = None  # ← Forward reference как строка
             logger.debug(f"[{self.__class__.__name__}] Презентер инициализирован")
         except Exception as e:
@@ -108,4 +110,29 @@ class MainWindowPresenter:
         except Exception as e:
             logger.error(f"[{self.__class__.__name__}] Ошибка получения информации о кредитных картах: {e}", exc_info=True)
             self.view.show_error(f"Ошибка получения информации о кредитных картах: {e}")
+
+    # --- импорт в начале файла ---
+    
+
+    # --- в __init__ после инициализации остальных сервисов ---
+    # Замени self.view на тот атрибут, которым у тебя зовётся главное окно
+    
+
+    # --- новый метод класса MainPresenter ---
+    def open_analytics_window(self) -> None:
+        """Открывает тестовое окно аналитики.
+
+        Raises:
+            ValueError: если данные аналитики не прошли валидацию
+        """
+        from ui.presenters.analytics_presenter import AnalyticsPresenter
+        try:
+            self.analytics_presenter = AnalyticsPresenter(parent_window=self.view, db_manager=self.db_manager)
+            self.analytics_presenter.open_analytics_window()
+        except ValueError as e:
+            logger.warning(f"[{self.__class__.__name__}] Валидация: {e}")
+            raise
+        except Exception as e:
+            logger.error(f"[{self.__class__.__name__}] Ошибка: {e}", exc_info=True)
+            raise
            
