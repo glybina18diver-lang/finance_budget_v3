@@ -4,7 +4,8 @@ from decimal import Decimal
 from core.repositories.transaction_repository import TransactionRepository
 from core.repositories.account_repository import AccountRepository
 from core.repositories.category_repository import CategoryRepository
-from core.models import Transaction, Account, Category
+from core.repositories.transfer_repository import TransferRepository
+from core.models import Transaction, Account, Category, Transfer
 from typing import Tuple, List, Union, Optional, Dict
 from datetime import date, datetime
 from utils.validators import to_decimal
@@ -16,7 +17,7 @@ class TransactionService:
     """Сервис управления транзакциями: валидация, расчёты, обновление балансов."""
 
     def __init__(self, tx_repo: TransactionRepository, acc_repo: AccountRepository,
-                 cat_repo: CategoryRepository):
+                 cat_repo: CategoryRepository, tr_repo: TransferRepository): 
         """
         Инициализация сервиса.
 
@@ -27,6 +28,7 @@ class TransactionService:
         self.tx_repo = tx_repo
         self.acc_repo = acc_repo
         self.cat_repo = cat_repo
+        self.tr_repo = tr_repo
 
     # ------Работа с транзакциями------
     def create_transaction(
@@ -514,4 +516,110 @@ class TransactionService:
             raise
         except Exception as e:
             logger.error(f"[{self.__class__.__name__}] Ошибка получения отфильтрованных транзакций: {e}", exc_info=True)
+            raise
+
+    def get_bank_comparison_summary(self, start_date: datetime, end_date: datetime, account_id: int) -> dict:
+        """
+        Агрегирует транзакции и переводы за период для сверки с банковским приложением.
+
+        Args:
+            start_date: Начало периода (включительно).
+            end_date: Конец периода (включительно).
+            account_id: Идентификатор счета, по которому формируется сводка.
+
+        Returns:
+            dict: Словарь с агрегированными суммами:
+                - income (float): Общие доходы.
+                - expenses (float): Общие расходы.
+                - transfers_in (float): Поступления от переводов.
+                - transfers_out (float): Исходящие переводы.
+                - refunds (float): Возвраты средств.
+                - total_in (float): Все поступления за период.
+                - total_out (float): Все списания за период.
+
+        Raises:
+            ValueError: Если start_date > end_date или account_id некорректен.
+        """
+        try:
+            # 1. Валидация входных данных
+            if start_date > end_date:
+                raise ValueError(f"Дата начала ({start_date}) не может быть позже даты окончания ({end_date})")
+
+            if not isinstance(account_id, int) or account_id <= 0:
+                raise ValueError(f"Некорректный ID счета: {account_id}")
+
+            # 2. Фильтры периода
+            period_filters = {
+                'account_id': account_id,
+                'date_from': start_date,
+                'date_to': end_date,
+                'is_system': None # Указываем что нужный все переводы
+            }
+
+            # 3. Получение данных из репозиториев
+            transactions = self.tx_repo.get_filtered(filters=period_filters)
+            transfers = self.tr_repo.get_filtered(filters=period_filters)
+
+            # 4. Счетчики в Decimal — точность денежных расчетов
+            income = Decimal("0.00")
+            expenses = Decimal("0.00")
+            transfers_in = Decimal("0.00")
+            transfers_out = Decimal("0.00")
+            refunds = Decimal("0.00")
+            total_in = Decimal("0.00")
+            total_out = Decimal("0.00")
+
+            # 5. Агрегация транзакций (по trans_type)
+            for tx in transactions:
+                amount = abs(tx.amount)
+
+                if tx.trans_type == "refund":
+                    # Возврат — поступление на счет
+                    refunds += amount
+                    total_in += amount
+
+                elif tx.trans_type == "income":
+                    # Доход — поступление 
+                    income += amount
+                    total_in += amount
+
+                elif tx.trans_type == "expense":
+                    # Расход — списание
+                    expenses += amount
+                    total_out += amount
+
+            # 6. Агрегация переводов (направление по from/to счетам)
+            for tr in transfers:
+                amount = abs(tr.amount)
+
+                if tr.to_account_id == account_id:
+                    # Входящий перевод — поступление
+                    transfers_in += amount
+                    total_in += amount
+                elif tr.from_account_id == account_id:
+                    # Исходящий перевод — списание
+                    transfers_out += amount
+                    total_out += amount
+
+            # 7. Формирование результата
+            summary = {
+                "income": round(float(income), 2),
+                "expenses": round(float(expenses), 2),
+                "transfers_in": round(float(transfers_in), 2),
+                "transfers_out": round(float(transfers_out), 2),
+                "refunds": round(float(refunds), 2),
+                "total_in": round(float(total_in), 2),
+                "total_out": round(float(total_out), 2)
+            }
+
+            logger.debug(f"[{self.__class__.__name__}] Сводка сформирована для счета {account_id}: {summary}")
+            return summary
+
+        except ValueError as e:
+            # Ожидаемые ошибки валидации
+            logger.warning(f"[{self.__class__.__name__}] Валидация: {e}")
+            raise
+        except Exception as e:
+            # Системные ошибки
+            logger.error(f"[{self.__class__.__name__}] Ошибка: {e}", exc_info=True)
             raise

@@ -43,8 +43,8 @@ class TransferPresenter:
             transfer_data: данные формы
         """
         try:
-            self.service.create_transfer(transfer_data)
-            self.view.show_status("Перевод успешно добавлен", "success")
+            tr = self.service.create_transfer(transfer_data)
+            self.view.show_status(f"Перевод успешно добавлен на сумму: {tr.amount}", "success")
             self._load_data()
         except ValueError as e:
             self.view.show_status(str(e), "error")

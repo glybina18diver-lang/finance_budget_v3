@@ -19,6 +19,8 @@ from ui.dialogs.loan_dialog import LoanDialog
 from ui.dialogs.credit_card_dialog import CreditCardDialog
 from ui.dialogs.credit_create_dialog import CreditCreateDialog
 from ui.dialogs.credit_payment_dialog import CreditPaymentDialog
+from ui.dialogs.bank_comparison_dialog import BankComparisonDialog
+
 
 
 # Презентеры
@@ -29,6 +31,8 @@ from ui.presenters.transfer_presenter import TransferPresenter
 from ui.presenters.loan_presenter import LoanPresenter
 from ui.presenters.credit_card_presenter import CreditCardPresenter
 from ui.presenters.credit_presenter import CreditPresenter
+from ui.presenters.bank_comparison_presenter import BankComparisonPresenter
+
 
 
 
@@ -107,8 +111,8 @@ class NavigationService:
             self.tx_service = TransactionService(
                 tx_repo=self.tx_repo,
                 acc_repo=self.acc_repo,
-                cat_repo=self.cat_repo
-                # credit_card_service=.credit_card_service
+                cat_repo=self.cat_repo,
+                tr_repo=self.tr_repo
             )
             self.credit_card_service = CreditCardService(
                 self.credit_card_repo, 
@@ -305,3 +309,25 @@ class NavigationService:
             except Exception as e:
                 logger.error(f"[NavigationService] Ошибка открытия диалога: {e}", exc_info=True)
                 raise   
+
+    def open_bank_comparison_dialog(self, parent) -> Optional[LoanDialog]:
+        """
+        Открывает диалог внесения платежа по кредиту.
+
+        Args:
+            parent: родительское окно
+        """
+        try:
+            
+            # Создаём презентер и открываем диалог
+            presenter = BankComparisonPresenter(self.tx_service)
+
+            dialog = BankComparisonDialog(
+                parent=parent,
+                presenter=presenter,
+            )
+            dialog.show()
+            return dialog
+        except Exception as e:
+            logger.error(f"[NavigationService] Ошибка открытия диалога: {e}", exc_info=True)
+            raise   

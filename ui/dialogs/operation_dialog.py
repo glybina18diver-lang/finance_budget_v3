@@ -32,15 +32,17 @@ class OperationDialog(BaseDialog):
         self.parent = parent
         self.presenter = presenter
         self.navigation_service = navigation_service
+        self._is_initializing = True  # ← Флаг инициализации
+
         self.setWindowTitle("Операции")
         self.resize(1200, 600)
         self._init_ui()
+
         # Загружаем данные через презентер (если он подключен)
         if self.presenter:
             self.presenter.set_view(self)  # ← Устанавливаем связь
-        # Заполняем комбоксы фильтров
-        self.load_filter_combos()
-        
+
+        self._is_initializing = False  # ← Инициализация завершена
 
     # ================= Создание интерфейса =================
     def _init_ui(self):
@@ -70,7 +72,7 @@ class OperationDialog(BaseDialog):
             ("🏦 Счета", self._open_account_management, "accounts"),
             ("📊 Категории", self._open_category_management, "categories"),
             ("📤 Переводы", self._open_transfer_dialog, "transfers"),
-            # ("🔍 Сверка", self._stub_method, "reconciliation"),
+            ("Сверка с банком", self._open_bank_comparison_dialog, "reconciliation"),
             ("💰 Займы", self._open_loan_dialog, "loans"),
             ("💳 Кредитные карты", self._open_credit_card_dialog, "credit_cards"),
         ]
@@ -757,6 +759,13 @@ class OperationDialog(BaseDialog):
         else:
             self.show_status("Навигация недоступна", message_type="error")
 
+    def _open_bank_comparison_dialog(self):
+        """Открывает окно сверки расходов с банковским приложением."""
+        if hasattr(self.parent, 'navigation_service'):
+            dialog = self.parent.navigation_service.open_bank_comparison_dialog(self.parent)
+        else:
+            self.show_status("Навигация недоступна", message_type="error")
+
     def _on_child_dialog_closed(self):
         """
         Вызывается при закрытии любого дочернего диалога.
@@ -765,7 +774,8 @@ class OperationDialog(BaseDialog):
         if self.presenter:
             # Сохраняем текущий выбранный тип, чтобы не сбрасывать выбор пользователя
             current_type = self.type_combo.currentText()
-            self.presenter.refresh_data(current_type)
+            self.refresh_transactions()
+            # self.presenter.refresh_data(current_type)
             self.show_status("Данные успешно обновлены", message_type="success")
     
     #========== Функции (прочие) ==========
@@ -1156,6 +1166,9 @@ class OperationDialog(BaseDialog):
         Вызывается автоматически при изменении любого фильтра.
         Если все фильтры сброшены, загружает данные без ограничений.
         """
+        # Игнорируем сигналы во время инициализации
+        if getattr(self, '_is_initializing', False):
+            return
         try:
             if not self.presenter:
                 return

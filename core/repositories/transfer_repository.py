@@ -137,10 +137,9 @@ class TransferRepository:
             logger.error(f"[{self.__class__.__name__}] Ошибка получения переводов: {e}", exc_info=True)
             raise RuntimeError("Не удалось получить список переводов") from e
 
-
     def get_filtered(self, filters: Dict) -> List[Transfer]:
         """
-        Возвращает отфильтрованные переводы с именами счетов и контрагентов.
+        Возвращает отфильтрованные переводы.
         
         Args:
             filters: параметры фильтрации:
@@ -148,21 +147,26 @@ class TransferRepository:
                 - date_to: дата окончания периода (YYYY-MM-DD)
                 - search: поисковый запрос по описанию/контрагенту/именам счетов
                 - account_id: ID счёта для фильтрации (from или to)
-                
+                - is_system: 
+                    * если ключ отсутствует → только несистемные (is_system=0);
+                    * если is_system=None → все переводы;
+                    * если is_system=True/False → только системные/несистемные.
+                    
         Returns:
             Список объектов Transfer, удовлетворяющих фильтрам
             
         Raises:
-            ValueError: при некорректных параметрах фильтра
-            RuntimeError: при ошибке работы с БД
+            ValueError: при некорректных параметрах фильтра.
+            RuntimeError: при ошибке работы с БД.
         """
         try:
             if not filters:
                 raise ValueError("Параметры фильтра обязательны")
-            
+
             query = """
                 SELECT
                     t.id, t.date, t.amount, t.type, t.description, t.is_system,
+                    t.from_account_id, t.to_account_id,
                     a1.name AS from_account_name,
                     a2.name AS to_account_name,
                     CASE
@@ -173,32 +177,46 @@ class TransferRepository:
                 FROM transfers t
                 LEFT JOIN accounts a1 ON t.from_account_id = a1.id
                 LEFT JOIN accounts a2 ON t.to_account_id = a2.id
-                WHERE t.is_system = 0
+                WHERE 1=1
             """
             params = []
-            
+
+            # 🔑 Ключевая логика фильтрации по is_system
+            if 'is_system' not in filters:
+                # Поведение по умолчанию: только несистемные
+                query += " AND t.is_system = 0"
+            else:
+                is_system_val = filters['is_system']
+                if is_system_val is None:
+                    # Специальный режим: не добавляем условие → все переводы
+                    pass
+                else:
+                    # Явная фильтрация: True → 1, False → 0
+                    query += " AND t.is_system = ?"
+                    params.append(1 if is_system_val else 0)
+
             if filters.get('date_from'):
                 query += " AND t.date >= ?"
                 params.append(filters['date_from'])
-            
+
             if filters.get('date_to'):
                 query += " AND t.date <= ?"
                 params.append(filters['date_to'])
-            
+
             if filters.get('search'):
                 search_pattern = f"%{filters['search']}%"
                 query += " AND (t.description LIKE ? OR a1.name LIKE ? OR a2.name LIKE ?)"
                 params.extend([search_pattern, search_pattern, search_pattern])
-            
+
             if filters.get('account_id'):
                 query += " AND (t.from_account_id = ? OR t.to_account_id = ?)"
                 params.extend([filters['account_id'], filters['account_id']])
-            
+
             query += " ORDER BY t.date DESC"
-            
+
             rows = self.db.fetchall(query, params) if params else self.db.fetchall(query)
             return [self._row_to_transfer(row) for row in rows]
-            
+
         except ValueError as e:
             logger.warning(f"[{self.__class__.__name__}] Валидация фильтров: {e}")
             raise

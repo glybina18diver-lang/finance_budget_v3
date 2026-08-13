@@ -401,6 +401,8 @@ class TransactionPresenter:
             # 3. Загружаем категории для типа по умолчанию ("Расход") и счета (в комбокс)
             self.update_categories_for_type("Расход")
             self.view.load_accounts_combos(accounts)
+            # Заполняем комбоксы фильтров
+            self.view.load_filter_combos()
 
             # 4. Загружаем таблицу транзакций
             self.load_transactions()
