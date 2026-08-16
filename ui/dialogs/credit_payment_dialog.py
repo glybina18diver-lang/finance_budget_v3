@@ -21,6 +21,7 @@ from PySide6.QtCore import Qt, QDate, Signal
 
 from ui.presenters.credit_presenter import CreditPresenter
 from utils.validators import parse_float, try_to_decimal
+from ui.widgets.buttons import CompactButton
 
 logger = logging.getLogger(__name__)
 
@@ -120,12 +121,12 @@ class CreditPaymentDialog(QDialog):
         buttons_layout = QHBoxLayout()
         buttons_layout.addStretch()
 
-        self.pay_button = QPushButton("Внести платёж")
+        self.pay_button = CompactButton("Внести платёж", "success")
         self.pay_button.setDefault(True)
         self.pay_button.setMinimumWidth(140)
         buttons_layout.addWidget(self.pay_button)
 
-        self.cancel_button = QPushButton("Отмена")
+        self.cancel_button = CompactButton("Отмена", "neutral")
         self.cancel_button.setMinimumWidth(120)
         buttons_layout.addWidget(self.cancel_button)
 

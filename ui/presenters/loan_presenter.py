@@ -10,8 +10,8 @@ from services.loan_service import LoanService
 from services.credit_service import CreditService
 if TYPE_CHECKING:
     from ui.dialogs.loan_dialog import LoanDialog
-from ui.dialogs.add_loan_dialog import AddLoanDialog
-from ui.dialogs.add_payment_dialog import AddPaymentDialog
+from ui.dialogs.loan_create_dialog import AddLoanDialog
+from ui.dialogs.loan_payment_dialog import AddPaymentDialog
 
 logger = logging.getLogger(__name__)
 

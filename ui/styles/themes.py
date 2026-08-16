@@ -63,6 +63,7 @@ SHARED_ACCENTS = {
     "FONT_SIZE_HEADER": "16px", 
     "RADIUS_MEDIUM": "6px",
     "RADIUS_LARGE": "8px",
+    "FONT_SIZE_TOTAL": "26px",
 }
 
 LIGHT_THEME = {
@@ -130,6 +131,13 @@ LIGHT_THEME = {
     "GRADIENT_ACCENT_HOVER": "qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #00b4e8, stop:1 #9d4edd)",
     "GRADIENT_CARD": "qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #FFFFFF, stop:1 #F3E8FF)",
 
+    # Карточки сводки по счету
+    "CARD_BG": "#FFFFFF",
+    "CARD_TEXT": "#2C3E50",
+    "CARD_SUCCESS": "#2E7D32",
+    "CARD_DANGER": "#C62828",
+
+
 }
 
 DARK_THEME = {
@@ -196,6 +204,14 @@ DARK_THEME = {
     "GRADIENT_ACCENT": "qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #00d4ff, stop:1 #7b2cbf)",
     "GRADIENT_ACCENT_HOVER": "qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #00e5ff, stop:1 #9d4edd)",
     "GRADIENT_CARD": "qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #1E1E1E, stop:1 #2a1a3e)",
+
+    
+    # Карточки сводки по счету
+    "CARD_BG": "#252525",
+    "CARD_TEXT": "#E0E0E0",
+    "CARD_SUCCESS": "#66BB6A",
+    "CARD_DANGER": "#EF5350",
+
 }   
 
 NEON_THEME = {
@@ -284,4 +300,11 @@ NEON_THEME = {
     "SUMMARY_NEUTRAL": "#a0a0c0",
     "SUMMARY_PERIOD": "#7b9ec9",
     "SUMMARY_SELECTION": "#00d4ff",
+
+    
+    # Карточки сводки по счету
+    "CARD_BG": "#1a1a2e",
+    "CARD_TEXT": "#e0e0e0",
+    "CARD_SUCCESS": "#00ff88",
+    "CARD_DANGER": "#ff4466",
 }

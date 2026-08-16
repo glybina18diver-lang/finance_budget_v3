@@ -158,7 +158,7 @@ QPushButton[variant="outline"] {
     font-weight: bold;
 }
 
-/* ========== МЕТКИ ИТОГОВ ========== */
+/* ========== МЕТКИ ИТОГОВ (для диалога операций ========== */
 
 QLabel[variant="summary-count"] {
     color: $SUMMARY_NEUTRAL$;
@@ -203,4 +203,68 @@ QLabel[variant="summary-selection"] {
 /* Разделитель между метками итогов */
 QFrame[variant="summary-separator"] {
     color: $BORDER$;
+}
+
+/* ========== КАРТОЧКИ СВОДКИ (QFrame) ========== */
+
+QFrame[variant="card"] {
+    background-color: $CARD_BG$;
+    border-radius: $RADIUS_LARGE$;
+    padding: 3px;
+}
+
+QFrame[variant="card"] QLabel {
+    color: $CARD_TEXT$;
+    background: transparent;
+}
+
+QFrame[variant="card"] QLabel[variant="card-title"] {
+    font-weight: bold;
+    font-size: $FONT_SIZE_HEADER$;
+}
+
+QFrame[variant="card"] QLabel[variant="card-value"] {
+    color: $CARD_TEXT$;
+    font-weight: bold;
+}
+
+QFrame[variant="card"] QLabel[variant="value-success"] {
+    color: $CARD_SUCCESS$;
+    font-weight: bold;
+}
+
+QFrame[variant="card"] QLabel[variant="value-danger"] {
+    color: $CARD_DANGER$;
+    font-weight: bold;
+}
+
+QFrame[variant="card"] QLabel[variant="total-positive"] {
+    color: $CARD_SUCCESS$;
+    font-weight: bold;
+    font-size: $FONT_SIZE_TOTAL$;
+}
+
+QFrame[variant="card"] QLabel[variant="total-negative"] {
+    color: $CARD_DANGER$;
+    font-weight: bold;
+    font-size: $FONT_SIZE_TOTAL$;
+}
+
+/* Акцентные полосы слева */
+QFrame[variant="accent-success"] {
+    background-color: $SUCCESS$;
+    border-radius: 4px;
+}
+
+QFrame[variant="accent-danger"] {
+    background-color: $DANGER$;
+    border-radius: 4px;
+}
+
+/* Правая панель диаграммы */
+QFrame[variant="chart_card"] {
+    background-color: $BG_ELEVATED$;
+    border: 1px solid $BORDER$;
+    border-radius: $RADIUS_LARGE$;
+    padding: 5px;
 }

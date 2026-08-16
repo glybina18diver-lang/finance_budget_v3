@@ -61,7 +61,7 @@ class AddPaymentDialog(BaseDialog):
         
         self.account_combo = QComboBox()
         
-        # Добавляем их в layout, но скроем один из них в populate_data
+        # Добавляем их в layout, но скроем один из них в populateа_data
         self.form_layout.addRow("Счёт:", self.account_label)
         self.form_layout.addRow("Счёт:", self.account_combo)
         
@@ -95,6 +95,7 @@ class AddPaymentDialog(BaseDialog):
         
         # Кнопки
         button_box = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        button_box.button(QDialogButtonBox.Cancel).setText("Отмена")
         button_box.accepted.connect(self._on_accept)
         button_box.rejected.connect(self.reject)
         layout.addWidget(button_box)

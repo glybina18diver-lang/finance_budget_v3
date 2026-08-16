@@ -142,10 +142,7 @@ class TransactionPresenter:
             Exception: при системной ошибке
         """
         try:
-            # Если это корректировка и категория не передана, можно подставить системную или None
-            # (зависит от вашей бизнес-логики, здесь оставляем как есть)
-            
-            self.service.update_transaction(
+            transaction_update = self.service.update_transaction(
                 transaction_id=transaction_id,
                 raw_amount=raw_amount,
                 trans_type=trans_type,
@@ -159,6 +156,7 @@ class TransactionPresenter:
             if self.view:
                 # Предполагается, что во View есть метод refresh_transactions
                 self.view.refresh_transactions()
+                self.view.show_status(f"Транзакция ID: {transaction_update.id} - изменена", message_type="success")
 
         except ValueError as e:
             logger.warning(f"[{self.__class__.__name__}] Валидация: {e}")

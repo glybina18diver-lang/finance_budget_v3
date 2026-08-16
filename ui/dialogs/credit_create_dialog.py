@@ -22,6 +22,7 @@ from PySide6.QtGui import QDoubleValidator, QIntValidator
 
 from ui.presenters.credit_presenter import CreditPresenter
 from utils.validators import parse_float, parse_int
+from ui.widgets.buttons import CompactButton
 
 logger = logging.getLogger(__name__)
 
@@ -181,12 +182,12 @@ class CreditCreateDialog(QDialog):
         buttons_layout = QHBoxLayout()
         buttons_layout.addStretch()
 
-        self.create_button = QPushButton("Создать")
+        self.create_button = CompactButton("Создать", "success")
         self.create_button.setDefault(True)
         self.create_button.setMinimumWidth(120)
         buttons_layout.addWidget(self.create_button)
 
-        self.cancel_button = QPushButton("Отмена")
+        self.cancel_button = CompactButton("Отмена", "neutral")
         self.cancel_button.setMinimumWidth(120)
         buttons_layout.addWidget(self.cancel_button)
 

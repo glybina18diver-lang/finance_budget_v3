@@ -78,3 +78,18 @@ QPushButton[purpose="loans"]:pressed { background-color: $ENTITY_LOANS_PRESSED$;
 QPushButton[purpose="credit_cards"] { background-color: $ENTITY_CREDIT_CARDS$; }
 QPushButton[purpose="credit_cards"]:hover { background-color: $ENTITY_CREDIT_CARDS_HOVER$; }
 QPushButton[purpose="credit_cards"]:pressed { background-color: $ENTITY_CREDIT_CARDS_PRESSED$; }
+
+/* ========== QDialogButtonBox ========== */
+
+QDialogButtonBox {
+    spacing: 8px;
+}
+
+/* Единый размер всех кнопок во всех диалогах — без setMinimumWidth в Python */
+QDialogButtonBox QPushButton {
+    border-radius: 4px;
+    padding: 5px 10px;
+    font-weight: 500;
+    font-size: $FONT_SIZE_COMPACT$;
+    margin: 1px;
+}

@@ -127,3 +127,31 @@ class BaseDialog(QDialog):
         except Exception as e:
             logger.error(f"[{self.__class__.__name__}] Ошибка: {e}", exc_info=True)
             raise 
+
+    def apply_role_purposes(self, button_box):
+        """Автоматически задаёт цветовые purpose кнопкам QDialogButtonBox по ролям.
+
+        AcceptRole/YesRole -> success, RejectRole/NoRole -> neutral,
+        DestructiveRole -> danger, ActionRole -> info.
+
+        Args:
+            button_box: экземпляр QDialogButtonBox для стилизации
+        """
+        try:
+            role_purposes = (
+                (QDialogButtonBox.AcceptRole, "success"),
+                (QDialogButtonBox.YesRole, "success"),
+                (QDialogButtonBox.RejectRole, "neutral"),
+                (QDialogButtonBox.NoRole, "neutral"),
+                (QDialogButtonBox.DestructiveRole, "danger"),
+                (QDialogButtonBox.ActionRole, "info"),
+            )
+            for button in button_box.buttons():
+                role = button_box.buttonRole(button)
+                for box_role, purpose in role_purposes:
+                    if role == box_role:
+                        self.apply_button_purpose(button, purpose)
+                        break
+        except Exception as e:
+            logger.error(f"[{self.__class__.__name__}] Ошибка: {e}", exc_info=True)
+            raise

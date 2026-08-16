@@ -19,6 +19,7 @@ from PySide6.QtGui import QDoubleValidator, QIntValidator
 
 from ui.dialogs.base_dialog import BaseDialog
 from utils.validators import parse_float, parse_int  
+from ui.widgets.buttons import CompactButton
 
 logger = logging.getLogger(__name__)
 
@@ -119,7 +120,10 @@ class CreditCardSettingsDialog(BaseDialog):
         self._main_layout.addWidget(form_group)
         
         # Кнопки
-        button_box = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        button_box = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel, parent=self)
+        button_box.button(QDialogButtonBox.Ok).setText("Сохранить")     
+        button_box.button(QDialogButtonBox.Cancel).setText("Отмена")
+        self.apply_role_purposes(button_box)    
         button_box.accepted.connect(self._on_accept)
         button_box.rejected.connect(self.reject)
         self._main_layout.addWidget(button_box)
